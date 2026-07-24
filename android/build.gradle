@@ -1,0 +1,55 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+// Force all subprojects to use AndroidX instead of the legacy Support Library.
+// react-native-push-notification@8.x still references com.android.support:* which
+// conflicts with the AndroidX classes already on the classpath.
+subprojects {
+    configurations.all {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'com.android.support') {
+                // Map the most common support-lib artifacts to their AndroidX equivalents
+                switch (details.requested.name) {
+                    case 'appcompat-v7':
+                    case 'appcompat':
+                        details.useTarget('androidx.appcompat:appcompat:1.6.1')
+                        break
+                    case 'support-compat':
+                        details.useTarget('androidx.core:core:1.13.1')
+                        break
+                    case 'support-core-ui':
+                        details.useTarget('androidx.legacy:legacy-support-core-ui:1.0.0')
+                        break
+                    case 'support-core-utils':
+                        details.useTarget('androidx.legacy:legacy-support-core-utils:1.0.0')
+                        break
+                    case 'support-fragment':
+                        details.useTarget('androidx.fragment:fragment:1.6.2')
+                        break
+                    case 'support-v4':
+                        details.useTarget('androidx.legacy:legacy-support-v4:1.0.0')
+                        break
+                }
+            }
+        }
+    }
+}
