@@ -45,21 +45,6 @@ export default function PhoneNumberEntry({navigation}) {
     }
   };
 
-  async function authenticateUser() {
-  try {
-    const mobileNumber = phone;
-    const otpResponse = await generateOTP(mobileNumber);
-    console.log("OTP response:", otpResponse);
-
-    const loginResponse = await loginWithOTP(mobileNumber, "1234");
-    console.log("Login response:", loginResponse);
-
-    return loginResponse;
-  } catch (error) {
-    console.error("Authentication error:", error.message);
-  }
-}
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

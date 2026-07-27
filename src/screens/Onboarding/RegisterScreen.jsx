@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Platform, KeyboardAvoidingView, ScrollView, ActivityIndicator, Modal,
+  Platform, KeyboardAvoidingView, ScrollView, ActivityIndicator, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -12,6 +12,7 @@ import {
   PersonIcon, MailIcon, LockIcon, EyeIcon, EyeOffIcon,
   ArrowBackIcon, CalendarIcon, BloodDropIcon, ChevronDownIcon,
 } from '../../assets/icons/Icons';
+import { OTPApi } from '../../API/Api';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -68,22 +69,35 @@ export default function RegisterScreen({ navigation }) {
   const handleCreate = useCallback(async () => {
     if (!isValid || loading) return;
     setLoading(true);
+    setError('');
     try {
+      const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+
+      // Call generateOTP before navigating — registration OTP flow
+      const otpResult = await OTPApi.sendOTP(cleanPhone);
+      if (!otpResult.success) {
+        setError(otpResult.error || 'Failed to send OTP. Please try again.');
+        return;
+      }
+
       const parts = fullName.trim().split(' ');
       const userData = {
         firstName: parts[0],
         lastName: parts.slice(1).join(' ') || '',
         email: email.trim().toLowerCase(),
-        phone: phone.replace(/\D/g, ''),
+        phone: cleanPhone,
         bloodGroup,
         age,
         password,
       };
       navigation.navigate('OTPVerification', {
         mode: 'register',
-        phone: `+91 ${phone}`,
+        phone: cleanPhone,
+        displayPhone: `+91 ${phone}`,
         userData,
       });
+    } catch (e) {
+      setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,14 +1,15 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {doctors} from '../../data/mockData';
 import {useApp} from '../../context/AppContext';
+import {AppointmentApi} from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ArrowBackIcon, StarIcon} from '../../assets/icons/Icons';
 
 const VISIT_META = {
@@ -16,6 +17,31 @@ const VISIT_META = {
   video:  {label: 'Video Consult',   emoji: '📹', feeKey: 'videoFee',  savePct: 20},
   audio:  {label: 'Audio Call',      emoji: '📞', feeKey: 'audioFee',  savePct: 30},
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function pick(obj, keys, fallback = '') {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return fallback;
+}
+
+// Unwrap response from charges API (may be wrapped in many keys)
+function unwrapFirst(payload) {
+  if (!payload) return null;
+  if (!Array.isArray(payload) && typeof payload !== 'object') return payload;
+  if (Array.isArray(payload)) return payload[0] || null;
+  // Try to find first array-valued property
+  for (const k of ['data', 'list', 'result', 'records', 'items', 'details', 'charges']) {
+    if (Array.isArray(payload[k]) && payload[k].length > 0) return payload[k][0];
+  }
+  for (const v of Object.values(payload)) {
+    if (Array.isArray(v) && v.length > 0) return v[0];
+  }
+  // Otherwise return the object itself (if it's a charge details object)
+  return payload;
+}
 
 const PAYMENT_METHODS = [
   {id: 'upi',        emoji: '⚡', label: 'UPI',                 sub: 'Google Pay · PhonePe · Paytm'},
@@ -25,41 +51,162 @@ const PAYMENT_METHODS = [
 ];
 
 export default function BookingConfirmScreen({navigation, route}) {
-  const {doctorId, date, time, visitType} = route.params;
-  const {bookAppointment} = useApp();
+  const {doctorId, date, isoDate, time, slot, visitType} = route.params;
+  const {practitioners, bookAppointment} = useApp();
 
-  const d   = doctors.find(doc => doc.id === doctorId);
-  const vm  = VISIT_META[visitType] || VISIT_META.clinic;
-  const fee = d?.[vm.feeKey] ?? d?.consultationFee ?? 0;
+  const d  = practitioners.find(doc => String(doc.id) === String(doctorId));
+  const vm = VISIT_META[visitType] || VISIT_META.clinic;
 
   const [paymentMethod, setPaymentMethod] = useState(null);
+  const [fee,           setFee]           = useState(d?.[vm.feeKey] ?? d?.consultationFee ?? 0);
+  const [apptTypeData,  setApptTypeData]  = useState(null); // full appointmentTypeDetails response
+  const [loadingFee,    setLoadingFee]    = useState(false);
+  const [bookingNow,    setBookingNow]    = useState(false);
+
+  // Fetch appointmentTypeDetails
+  useEffect(() => {
+    if (!d) return;
+    async function fetchFee() {
+      setLoadingFee(true);
+      const patientId = await AsyncStorage.getItem('patientId') || '0';
+      const result = await AppointmentApi.getAppointmentCharges(patientId, d.id);
+      if (result.success) {
+        const raw = unwrapFirst(result.data);
+        setApptTypeData(raw || null);
+        // Map 10+ possible server field names for the charge
+        const serverFee = Number(pick(raw || {}, [
+          'charge', 'consultationFee', 'consultation_fee', 'fee',
+          'appointmentCharge', 'appointment_charge', 'opd_charges',
+          'opdCharge', 'price', 'amount', 'totalCharge', 'visitCharge',
+        ], null));
+        if (!isNaN(serverFee) && serverFee > 0) setFee(serverFee);
+      }
+      setLoadingFee(false);
+    }
+    fetchFee();
+  }, [d]);
 
   if (!d) return null;
 
-  const initials = d.name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
-  const hue      = (d.name.charCodeAt(4) * 37) % 360;
+  const initials = (d.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
+  const hue      = (d.name?.charCodeAt(4) || 0) * 37 % 360;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!paymentMethod) return;
-    bookAppointment({
-      id:        Date.now().toString(),
-      type:      `${d.specialty} Consultation`,
-      date,
-      time,
-      location:  visitType === 'clinic' ? d.clinic : 'Online',
-      doctor:    d.name,
-      specialty: d.specialty,
-      visitType: vm.label,
-      status:    'Upcoming',
-      fee,
-    });
-    navigation.replace('AppointmentSuccess', {
-      doctorId,
-      date,
-      time,
-      visitType,
-      fee,
-    });
+    if (bookingNow) return;
+    setBookingNow(true);
+    const patientId = await AsyncStorage.getItem('patientId') || '0';
+
+    try {
+      // Build booking payload matching website's exact structure
+      const weekNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      const bookingDate = isoDate || date;
+      const bookingWeekDay = new Date(bookingDate + 'T00:00:00').getDay();
+
+      // slot._raw contains the full server slot object; use its fields where available
+      const rawSlot = slot?._raw || {};
+
+      const apmt_as = Number(
+        pick(apptTypeData || {}, ['apmt_as', 'aptmtype', 'apmttype', 'type_id',
+                                  'appointmentTypeId', 'appointment_type_id']) || 0,
+      ) || (visitType === 'clinic' ? 1 : visitType === 'video' ? 2 : 3);
+
+      // Try 12+ common spellings for slot id
+      const apmslotid = String(pick({...rawSlot, slotObj: slot}, [
+        'apmslotid', 'apmslotId', 'slotId', 'slot_id', 'slotid',
+        'apmtSlotId', 'timeSlotId', 'timeslotid', 'id', 'slotNo',
+        'slotNumber', 'slotObj.slotId',
+      ], ''));
+      // Try 10+ keys for start time
+      const starttime = pick({...rawSlot, slotObj: slot}, [
+        'starttime', 'start_time', 'time', 'slot', 'from', 'fromtime',
+        'from_time', 'appttime', 'aptmttime', 'slotObj.raw24',
+      ]) || (typeof time === 'string' && time.match(/^\d{1,2}:\d{2}/) ? '' : '');
+
+      // Commencing: some HIS expect YYYY-MM-DD, some YYYY-MM-DDTHH:MM:SS
+      const commencingVal = pick(rawSlot, ['commencing', 'date', 'apptdate', 'visitDate'])
+                              || bookingDate;
+      const fullCommencing = commencingVal.includes('T')
+        ? commencingVal
+        : starttime ? `${commencingVal} ${starttime}` : commencingVal;
+
+      const payload = {
+        apmslotid,
+        apmt_as,
+        charge:       fee,
+        clientId:     patientId,
+        patientId,              // some servers want both keys
+        commencing:   fullCommencing,
+        appointmentDate: bookingDate,
+        diaryuserid:  d.id,
+        doctorId:     d.id,     // duplicate for servers that want this
+        practitionerId: d.id,
+        starttime,
+        slotId:       apmslotid,
+        weekfullname: pick(rawSlot, ['weekfullname', 'weekFullName', 'day', 'dayname'])
+                        || weekNames[isNaN(bookingWeekDay) ? 0 : bookingWeekDay],
+        // payment metadata
+        paymentMethod,
+        paid:         paymentMethod !== 'cash' ? fee : 0,
+        visitType,
+      };
+
+      const result = await AppointmentApi.book(patientId, payload);
+
+      if (!result.success) {
+        Alert.alert(
+          'Booking Failed',
+          (result.message || result.error || 'Server returned an error. Please try again.')
+            + (result.details ? `\n\n${result.details}` : ''),
+          [{text: 'OK'}],
+        );
+        return;
+      }
+
+      // Booking succeeded — extract the real server id
+      const resData = unwrapFirst(result.data) || result.data || {};
+      const serverApptId = String(pick(resData, [
+        'appointmentId', 'appointment_id', 'apmtid', 'aptmtid', 'id',
+        'appointmentid', 'diaryid', 'bookingId',
+      ]) || Date.now().toString());
+
+      const isoDateFinal = pick(resData, ['date', 'appointmentDate', 'commencing']) || bookingDate;
+      const dateFinal    = typeof isoDateFinal === 'string' && isoDateFinal.includes('T')
+                             ? isoDateFinal.split('T')[0]
+                             : (isoDateFinal || date);
+      const timeFinal    = pick(resData, ['starttime', 'time']) || starttime || time;
+      const statusFinal  = pick(resData, ['status', 'appointmentStatus'], 'Upcoming') || 'Upcoming';
+
+      bookAppointment({
+        id:         serverApptId,
+        type:       `${d.specialty} Consultation`,
+        date:       dateFinal,
+        time:       timeFinal,
+        location:   visitType === 'clinic' ? (d.clinic || 'In-Clinic') : 'Online consultation',
+        doctor:     d.name,
+        specialty:  d.specialty,
+        visitType:  vm.label,
+        status:     statusFinal,
+        fee,
+      });
+
+      navigation.replace('AppointmentSuccess', {
+        doctorId,
+        date: dateFinal,
+        time: timeFinal,
+        visitType,
+        fee,
+        appointmentId: serverApptId,
+      });
+    } catch (err) {
+      Alert.alert(
+        'Booking Failed',
+        err?.message || 'Something went wrong while booking. Please try again.',
+        [{text: 'OK'}],
+      );
+    } finally {
+      setBookingNow(false);
+    }
   };
 
   return (
@@ -106,16 +253,22 @@ export default function BookingConfirmScreen({navigation, route}) {
         {/* ── Price breakdown ── */}
         <SectionLabel>Price Breakdown</SectionLabel>
         <View style={s.priceCard}>
-          <PriceRow label="Consultation Fee" value={`₹${d.consultationFee}`} />
-          {vm.savePct && (
-            <PriceRow
-              label={`${vm.label} Discount (${vm.savePct}%)`}
-              value={`– ₹${d.consultationFee - fee}`}
-              green
-            />
+          {loadingFee ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{paddingVertical: 12}} />
+          ) : (
+            <>
+              <PriceRow label="Consultation Fee" value={`₹${fee}`} />
+              {vm.savePct && (
+                <PriceRow
+                  label={`${vm.label} Discount (${vm.savePct}%)`}
+                  value={`– ₹${Math.round(fee * vm.savePct / 100)}`}
+                  green
+                />
+              )}
+              <View style={s.priceDivider} />
+              <PriceRow label="Total Payable" value={`₹${fee}`} bold />
+            </>
           )}
-          <View style={s.priceDivider} />
-          <PriceRow label="Total Payable" value={`₹${fee}`} bold />
         </View>
 
         {/* ── Payment method ── */}
@@ -155,11 +308,18 @@ export default function BookingConfirmScreen({navigation, route}) {
           <Text style={s.footerAmt}>₹{fee}</Text>
         </View>
         <TouchableOpacity
-          style={[s.confirmBtn, !paymentMethod && s.confirmBtnDisabled]}
+          style={[s.confirmBtn, (!paymentMethod || bookingNow) && s.confirmBtnDisabled]}
           onPress={handleConfirm}
-          disabled={!paymentMethod}
+          disabled={!paymentMethod || bookingNow}
           activeOpacity={0.88}>
-          <Text style={s.confirmBtnText}>Confirm & Pay</Text>
+          {bookingNow ? (
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={s.confirmBtnText}>Booking…</Text>
+            </View>
+          ) : (
+            <Text style={s.confirmBtnText}>Confirm & Pay</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

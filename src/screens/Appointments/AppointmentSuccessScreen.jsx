@@ -8,7 +8,7 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {doctors} from '../../data/mockData';
+import {useApp} from '../../context/AppContext';
 
 const VISIT_META = {
   clinic: {label: 'In-Clinic Visit', emoji: '🏥'},
@@ -18,7 +18,8 @@ const VISIT_META = {
 
 export default function AppointmentSuccessScreen({navigation, route}) {
   const {doctorId, date, time, visitType, fee} = route.params;
-  const d  = doctors.find(doc => doc.id === doctorId);
+  const {practitioners} = useApp();
+  const d  = practitioners.find(doc => String(doc.id) === String(doctorId));
   const vm = VISIT_META[visitType] || VISIT_META.clinic;
 
   // ── Animations ──────────────────────────────────────────────────────────────

@@ -1,12 +1,14 @@
-import React, {useState} from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet} from 'react-native';
+import React, {useState, useEffect, useCallback} from 'react';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {medicalReports} from '../../data/mockData';
 import {useApp} from '../../context/AppContext';
+import {InvestigationApi} from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import SearchBar from '../../components/common/SearchBar';
 import StatusChip from '../../components/common/StatusChip';
 import {
@@ -16,33 +18,151 @@ import {
 
 const FILTERS = ['All', 'Blood Test', 'Urine Test', 'Imaging', 'Others'];
 
-const CATEGORY_MAP = {
-  'Blood Test': ['Complete Blood Count (CBC)', 'Liver Function Test (LFT)', 'HbA1c (Glycated Hemoglobin)'],
-  'Urine Test': ['Urine Routine Analysis'],
-  'Imaging': ['Chest X-Ray'],
-};
-
 const STATUS_ICON = {
   Approved: CheckCircleIcon,
   Pending: ClockIcon,
 };
 
+// Derive category from investigation name keywords
+function deriveCategory(name = '') {
+  const n = name.toLowerCase();
+  if (n.includes('blood') || n.includes('cbc') || n.includes('lft') || n.includes('hba1c') ||
+      n.includes('lipid') || n.includes('thyroid') || n.includes('haemoglobin')) return 'Blood Test';
+  if (n.includes('urine') || n.includes('biopsy')) return 'Urine Test';
+  if (n.includes('x-ray') || n.includes('xray') || n.includes('mri') || n.includes('ct scan') ||
+      n.includes('ultrasound') || n.includes('ecg') || n.includes('echo')) return 'Imaging';
+  return 'Others';
+}
+
+// Fetch ALL investigations from the very beginning (year 2000) to today
+const FROM_DATE = '2000-01-01';
+function getToDate() { return new Date().toISOString().split('T')[0]; }
+
+// Parse any date string to a comparable timestamp (returns 0 on failure)
+function toTimestamp(dateStr = '') {
+  if (!dateStr) return 0;
+  const t = Date.parse(dateStr);
+  return isNaN(t) ? 0 : t;
+}
+
+// ─── Robust value extraction (HIS endpoints use wildly inconsistent key names)
+function pick(obj, keys, fallback = '') {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return fallback;
+}
+
+// Split combined datetime string "2024-05-15T09:30:00" or "2024-05-15 09:30" into {date, time}
+function splitDateTime(dt = '') {
+  if (!dt) return {date: '', time: ''};
+  const s = String(dt).trim();
+  // ISO with T
+  if (s.includes('T')) {
+    const [d, t] = s.split('T');
+    return {date: d || '', time: (t || '').slice(0, 5)};
+  }
+  // Space separated
+  if (s.includes(' ')) {
+    const [d, t] = s.split(' ');
+    return {date: d || '', time: (t || '').slice(0, 5)};
+  }
+  return {date: s, time: ''};
+}
+
 export default function InvestigationsScreen({navigation}) {
   const {testRequests} = useApp();
   const [filter, setFilter] = useState('All');
   const [query, setQuery] = useState('');
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredReports = medicalReports.filter(r => {
+  const fetchReports = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    const patientId = await AsyncStorage.getItem('patientId');
+    if (!patientId) { setLoading(false); setRefreshing(false); return; }
+    const result = await InvestigationApi.getAll(patientId, FROM_DATE, getToDate());
+    if (result.success) {
+      // API might return array directly OR wrap in { reports: [...] } OR { data: [...] }
+      let raw = [];
+      if (Array.isArray(result.data)) raw = result.data;
+      else if (Array.isArray(result.data?.reports)) raw = result.data.reports;
+      else if (Array.isArray(result.data?.data)) raw = result.data.data;
+      else if (Array.isArray(result.data?.list)) raw = result.data.list;
+      else if (result.data && typeof result.data === 'object') {
+        // take first array value found
+        for (const v of Object.values(result.data)) {
+          if (Array.isArray(v)) { raw = v; break; }
+        }
+      }
+      const mapped = raw.map((r, i) => {
+        // Robust name extraction
+        const name = pick(r, [
+          'investigationName', 'investigation_name', 'testname', 'testName',
+          'servicename', 'serviceName', 'reportName', 'itemname', 'itemName',
+          'description', 'name', 'investigation', 'procedure', 'procedureName',
+        ], 'Investigation');
+        const combinedDT = pick(r, [
+          'datetime', 'dateTime', 'report_date', 'reportDate', 'resultdate',
+          'resultDate', 'approvedon', 'approvedOn', 'testdate', 'testDate',
+          'collectedon', 'collectedOn', 'createdon', 'createdOn',
+        ]);
+        const split = combinedDT ? splitDateTime(combinedDT) : {date: '', time: ''};
+        const date = split.date || pick(r, ['date', 'reportdate', 'report_date', 'testdate', 'test_date']);
+        const time = split.time || pick(r, ['time', 'reporttime', 'report_time', 'testtime', 'test_time']);
+        return {
+          id:       String(pick(r, ['id', 'investigationId', 'investigation_id', 'reportId',
+                                     'report_id', 'testId', 'test_id', 'invId']) || i),
+          name,
+          category: deriveCategory(name),
+          date,
+          time,
+          location: pick(r, ['location', 'clinicName', 'clinic', 'labName', 'lab',
+                               'centerName', 'center', 'hospital', 'hospitalName',
+                               'branchName', 'branch']),
+          status:   pick(r, ['status', 'reportStatus', 'report_status', 'resultStatus',
+                               'approvalStatus', 'approval_status', 'testStatus'], 'Normal'),
+          iconBg:   '#FEE2E2',
+          _raw:     r,
+        };
+      });
+      mapped.sort((a, b) => toTimestamp(b.date) - toTimestamp(a.date));
+      setReports(mapped);
+    }
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
+
+  useEffect(() => { fetchReports(); }, [fetchReports]);
+
+  useFocusEffect(useCallback(() => { fetchReports(true); }, [fetchReports]));
+
+  const onRefresh = () => { setRefreshing(true); fetchReports(true); };
+
+  const CATEGORY_MAP = {
+    'Blood Test':  ['Blood Test'],
+    'Urine Test':  ['Urine Test'],
+    'Imaging':     ['Imaging'],
+    'Others':      ['Others'],
+  };
+
+  const filteredReports = reports.filter(r => {
     const matchQuery = query ? r.name.toLowerCase().includes(query.toLowerCase()) : true;
     if (!matchQuery) return false;
     if (filter === 'All') return true;
-    if (filter === 'Others') return !Object.values(CATEGORY_MAP).flat().includes(r.name);
-    return (CATEGORY_MAP[filter] || []).includes(r.name);
+    return r.category === filter;
   });
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }>
 
         {/* Header */}
         <View style={styles.header}>
@@ -110,9 +230,16 @@ export default function InvestigationsScreen({navigation}) {
           ))}
         </ScrollView>
 
-        <Text style={styles.sectionTitle}>Recent Reports</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''}
+          </Text>
+          <Text style={styles.sectionSub}>Newest first · pull to refresh</Text>
+        </View>
 
-        {filteredReports.length === 0 ? (
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{marginVertical: 40}} />
+        ) : filteredReports.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No reports found for this filter.</Text>
           </View>
@@ -181,7 +308,9 @@ const styles = StyleSheet.create({
   bookBannerRight: {opacity: 0.3, marginLeft: spacing.sm},
 
   section: {marginBottom: spacing.base},
+  sectionHeader:{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, marginTop: spacing.sm},
   sectionTitle: {fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md},
+  sectionSub:   {fontSize: 11, color: colors.textMuted},
 
   requestCard: {
     flexDirection: 'row', alignItems: 'center',

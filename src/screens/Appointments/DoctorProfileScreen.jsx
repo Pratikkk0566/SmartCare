@@ -7,14 +7,27 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {doctors, specialties} from '../../data/mockData';
+import {useApp} from '../../context/AppContext';
 import {ArrowBackIcon, StarIcon} from '../../assets/icons/Icons';
 
 const {width: SW} = Dimensions.get('window');
 
+// Local specialties for colour/emoji lookup
+const SPECIALTIES = [
+  {name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF'},
+  {name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2'},
+  {name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE'},
+  {name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7'},
+  {name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7'},
+  {name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF'},
+  {name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3'},
+  {name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1'},
+];
+
 export default function DoctorProfileScreen({navigation, route}) {
   const {doctorId} = route.params;
-  const d = doctors.find(doc => doc.id === doctorId);
+  const {practitioners} = useApp();
+  const d = practitioners.find(doc => String(doc.id) === String(doctorId));
 
   if (!d) {
     return (
@@ -34,7 +47,7 @@ export default function DoctorProfileScreen({navigation, route}) {
   const avatarBg  = `hsl(${hue},55%,88%)`;
   const avatarFg  = `hsl(${hue},45%,30%)`;
   const isToday   = d.availability === 'Available Today';
-  const spec      = specialties.find(sp => sp.name === d.specialty);
+  const spec      = SPECIALTIES.find(sp => sp.name === d.specialty);
 
   return (
     <SafeAreaView style={s.safe} edges={['bottom']}>

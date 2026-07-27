@@ -11,6 +11,9 @@ const BILLING_BASE    = 'https://saas.smartcarehis.com:8443/billing/';
 const SMARTCARE_BASE  = 'https://saas.smartcarehis.com:8443/smartcaremain/';
 const IPD_BASE        = 'https://saas.smartcarehis.com:8443/ipd/';
 
+// Hardcoded clinic ID for this deployment — used as Tenant + clinicid header
+const CLINIC_ID = 'aureus';
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,38 +34,36 @@ const getItem = async (key) => {
 // Builds the HTTP headers for every request.
 // preAuth = true  → user NOT logged in yet (login/OTP screens) — skip token
 // preAuth = false → user IS logged in — include token + clinic info
-// patientId       → pass when the endpoint needs a specific patient
+// clientId       → pass when the endpoint needs a specific patient
 // ─────────────────────────────────────────────────────────────────────────────
-export const buildHeaders = async (patientId = 0, preAuth = false) => {
-  const clinicId = await getItem('CLINICID');
-  // 👆 Now dynamic — reads whichever clinic the user logged into
-  //    Website uses: localStorage.getItem('CLINICID')
-  //    App uses:     AsyncStorage.getItem('CLINICID')
+export const buildHeaders = async (clientId = 0, preAuth = false) => {
+  // Always use the hardcoded clinic ID — this server only runs one clinic
+  const clinicId = CLINIC_ID;
+  const tenant   = CLINIC_ID;
 
   const headers = {
     'Content-Type': 'application/json',
     zoneid        : 'Asia/Kolkata',
-    Tenant        : clinicId || 'aureus', // dynamic clinic, fallback to 'aureus'
-    'is-auth'     : '1',                  // website sends this on all requests
+    Tenant        : tenant,
+    'is-auth'     : '1',
+    clinicid      : clinicId,
   };
 
   if (!preAuth) {
-    const token   = await getItem('AUTHTOKEN');
-    const userId  = await getItem('UserId');
-    const branchId = await getItem('branch_id');
+    const token    = await getItem('AUTHTOKEN');
+    // Only send userid if it's a real HIS staff user ID (not the patient's own id)
+    // Patient-portal JWT has sub = mobile number, no user ID in login response
+    // We skip userid header to avoid billing server filtering by wrong user
+    const branchId = await getItem('branch_id') || await getItem('branchId');
 
     headers.Authorization = `Bearer ${token}`;
 
-    // Only add these headers if they actually have a value
-    // Sending empty strings causes 400 Bad Request on some endpoints
-    if (clinicId) headers.clinicid = clinicId;
-    if (userId)   headers.userid   = userId;
+    // userid intentionally omitted — billing server returns empty when wrong userid sent
     if (branchId) headers.branchId = branchId;
   }
 
-  if (patientId) {
-    headers.patientid = patientId;
-    // Some endpoints need the patient ID in the header, not just the URL
+  if (clientId) {
+    headers.clientId = String(clientId);
   }
 
   return headers;
@@ -75,16 +76,29 @@ export const buildHeaders = async (patientId = 0, preAuth = false) => {
 // baseUrl  : which service to hit (HISAPI_BASE, BILLING_BASE, etc.)
 // endpoint : the path after the base URL
 // options  : HTTP method + body for POST/PUT
-// patientId: the patient's ID (0 = not needed)
+// clientId: the patient's ID (0 = not needed)
 // preAuth  : true only for login/OTP (before user is logged in)
 // ─────────────────────────────────────────────────────────────────────────────
-async function apiCall(baseUrl, endpoint, options = {}, patientId = 0, preAuth = false) {
+async function apiCall(baseUrl, endpoint, options = {}, clientId = 0, preAuth = false) {
   const url     = `${baseUrl}${endpoint}`;
-  const headers = await buildHeaders(patientId, preAuth);
+  const headers = await buildHeaders(clientId, preAuth);
+
+  // Log all headers for every request (remove in production)
+  console.log('[API HEADERS]', url, JSON.stringify(headers));
 
   try {
     const response = await fetch(url, { ...options, headers });
-    const data     = await response.json();
+
+    // Safely parse JSON — server can return HTML error pages on 5xx
+    let data = null;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      // Try parsing anyway in case content-type header is wrong
+      try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+    }
 
     console.log('[API]', url, '→ status:', response.status);
 
@@ -94,12 +108,10 @@ async function apiCall(baseUrl, endpoint, options = {}, patientId = 0, preAuth =
     }
 
     return { success: true, data };
-    // ✅ Caller checks result.success === true, then uses result.data
 
   } catch (error) {
     console.log('[API ERROR]', url, error.message);
     return { success: false, error: error.message };
-    // ❌ Caller checks result.success === false, then shows result.error
   }
 }
 
@@ -162,11 +174,16 @@ export const PatientApi = {
 
   // Get patient details by mobile number (used after login to load profile)
   // Website: GET apiHost + Port + '/hisapi/patient/byMobileNo?mobileNo='
+  // preAuth = true because this is called immediately after login — token just saved,
+  // some server setups reject the new token on the very first call.
+  // Using the token IS correct here; keeping preAuth false so the token is sent.
   getByMobile: async (mobileNo) =>
     apiCall(
       HISAPI_BASE,
       `patient/byMobileNo?mobileNo=${mobileNo}`,
       { method: 'GET' },
+      0,
+      false, // token is now saved — send it
     ),
 
   // Register a new patient
@@ -185,7 +202,7 @@ export const PatientApi = {
 
   // Edit/update existing patient profile
   // Website: POST apiHost + Port + '/hisapi/patient/editPatient'
-  editProfile: async (patientId, data) =>
+  editProfile: async (clientId, data) =>
     apiCall(
       HISAPI_BASE,
       'patient/editPatient',
@@ -193,12 +210,12 @@ export const PatientApi = {
         method: 'POST',
         body  : JSON.stringify(data),
       },
-      patientId,
+      clientId,
     ),
 
   // Save/update profile (existing endpoint already in app)
   // Website: POST user/profile
-  createProfile: async (userData, patientId = 0) =>
+  createProfile: async (userData, clientId = 0) =>
     apiCall(
       HISAPI_BASE,
       'user/profile',
@@ -206,7 +223,7 @@ export const PatientApi = {
         method: 'POST',
         body  : JSON.stringify(userData),
       },
-      patientId,
+      clientId,
     ),
 };
 
@@ -218,29 +235,41 @@ export const PatientApi = {
 export const AppointmentApi = {
 
   // Get available time slots for a doctor on a date
-  // Website: GET apiHost + Port + '/hisapi/appointment/availableSlots'
-  getAvailableSlots: async (patientId, params) =>
+  // NOTE: HIS server returns HTTP 405 on GET — must use POST even for reads.
+  // Send BOTH common spellings of the field in body (practitionerId / practionerId)
+  getAvailableSlots: async (clientId, date, practitionerId) =>
     apiCall(
       HISAPI_BASE,
-      `appointment/availableSlots?${params}`,
-      // params = 'doctorId=123&date=2026-07-24' — build this string in the screen
-      { method: 'GET' },
-      patientId,
+      'appointment/availableSlots',
+      {
+        method: 'POST',
+        body  : JSON.stringify({
+          clientId,
+          date,
+          practitionerId,
+          practionerId: practitionerId, // common server typo accepted
+          doctorId:     practitionerId, // some servers use doctorId
+        }),
+      },
+      clientId,
     ),
 
   // Get the charges/fees for an appointment type
-  // Website: GET apiHost + Port + '/hisapi/appointment/appointmentTypeDetails?'
-  getAppointmentCharges: async (patientId, params) =>
+  // NOTE: HIS server returns HTTP 405 on GET — must use POST even for reads.
+  getAppointmentCharges: async (clientId, doctorId) =>
     apiCall(
       HISAPI_BASE,
-      `appointment/appointmentTypeDetails?${params}`,
-      { method: 'GET' },
-      patientId,
+      'appointment/appointmentTypeDetails',
+      {
+        method: 'POST',
+        body  : JSON.stringify({ clientId, doctorId, practitionerId: doctorId }),
+      },
+      clientId,
     ),
 
   // Book a new appointment
-  // Website: POST apiHost + Port + '/hisapi/appointment/book'
-  book: async (patientId, appointmentData) =>
+  // Website: POST hisapi/appointment/book
+  book: async (clientId, appointmentData) =>
     apiCall(
       HISAPI_BASE,
       'appointment/book',
@@ -248,22 +277,22 @@ export const AppointmentApi = {
         method: 'POST',
         body  : JSON.stringify(appointmentData),
       },
-      patientId,
+      clientId,
     ),
 
   // Fetch appointment history for a patient
-  // Website: GET apiHost + Port + '/hisapi/appointment/fetchAppointment/history/{patientId}'
-  getHistory: async (patientId) =>
+  // Website: GET apiHost + Port + '/hisapi/appointment/fetchAppointment/history/{clientId}'
+  getHistory: async (clientId) =>
     apiCall(
       HISAPI_BASE,
-      `appointment/fetchAppointment/history/${patientId}`,
+      `appointment/fetchAppointment/history/${clientId}`,
       { method: 'GET' },
-      patientId,
+      clientId,
     ),
 
   // Cancel an appointment
   // Website: POST apiHost + Port + '/hisapi/appointment/cancelAppointment'
-  cancel: async (patientId, appointmentId) =>
+  cancel: async (clientId, appointmentId) =>
     apiCall(
       HISAPI_BASE,
       'appointment/cancelAppointment',
@@ -271,13 +300,13 @@ export const AppointmentApi = {
         method: 'POST',
         body  : JSON.stringify({ appointmentId }),
       },
-      patientId,
+      clientId,
     ),
 
   // Book a video appointment
   // Website: POST apiHost + Port2 + '/smartcaremain/opd/appointment/capture/video'
   // Note: this one uses SMARTCARE_BASE, not HISAPI_BASE
-  bookVideo: async (patientId, data) =>
+  bookVideo: async (clientId, data) =>
     apiCall(
       SMARTCARE_BASE,
       'opd/appointment/capture/video',
@@ -285,7 +314,7 @@ export const AppointmentApi = {
         method: 'POST',
         body  : JSON.stringify(data),
       },
-      patientId,
+      clientId,
     ),
 };
 
@@ -297,18 +326,22 @@ export const AppointmentApi = {
 export const InvestigationApi = {
 
   // Get list of approved investigation reports for a patient
-  // Website: GET apiHost + Port + '/hisapi/investigation/approved/reports'
-  getAll: async (patientId) =>
+  // Website: POST hisapi/investigation/approved/reports  (body: clientId, fromDate, toDate)
+  // NOTE: HIS server returns HTTP 405 on GET — must use POST even for reads
+  getAll: async (clientId, fromDate = '', toDate = '') =>
     apiCall(
       HISAPI_BASE,
       'investigation/approved/reports',
-      { method: 'GET' },
-      patientId,
+      {
+        method: 'POST',
+        body  : JSON.stringify({ clientId, fromDate, toDate }),
+      },
+      clientId,
     ),
 
   // Generate and download a report PDF
   // Website: POST apiHost + Port2 + '/smartcaremain/investigation/generatepdfreport'
-  generatePDF: async (patientId, reportData) =>
+  generatePDF: async (clientId, reportData) =>
     apiCall(
       SMARTCARE_BASE,
       'investigation/generatepdfreport',
@@ -316,12 +349,12 @@ export const InvestigationApi = {
         method: 'POST',
         body  : JSON.stringify(reportData),
       },
-      patientId,
+      clientId,
     ),
 
   // Print investigation report
   // Website: POST apiHost + Port2 + '/smartcaremain/investigation/print'
-  print: async (patientId, reportData) =>
+  print: async (clientId, reportData) =>
     apiCall(
       SMARTCARE_BASE,
       'investigation/print',
@@ -329,12 +362,12 @@ export const InvestigationApi = {
         method: 'POST',
         body  : JSON.stringify(reportData),
       },
-      patientId,
+      clientId,
     ),
 
   // Generate PDF using the PDFInvReport service
   // Website: POST apiHost + Port2 + '/smartcaremain/pdfinvreport/generateinvestigationreportpdf'
-  generateInvReportPDF: async (patientId, data) =>
+  generateInvReportPDF: async (clientId, data) =>
     apiCall(
       SMARTCARE_BASE,
       'pdfinvreport/generateinvestigationreportpdf',
@@ -342,7 +375,7 @@ export const InvestigationApi = {
         method: 'POST',
         body  : JSON.stringify(data),
       },
-      patientId,
+      clientId,
     ),
 };
 
@@ -353,33 +386,38 @@ export const InvestigationApi = {
 // ─────────────────────────────────────────────────────────────────────────────
 export const InvoiceApi = {
 
-  // Fetch all invoices for a patient
-  // Website: POST apiHost + Port2 + '/billing/invoice/fetchinvoiceData'
-  getAll: async (patientId, params) =>
-    apiCall(
+  // Fetch all invoices for a patient  
+  // Exact body format that the website uses when returning data
+  getAll: async (clientId, fromDate = '', toDate = '') => {
+    const pid = String(clientId);
+    return apiCall(
       BILLING_BASE,
       'invoice/fetchinvoiceData',
       {
         method: 'POST',
-        body  : JSON.stringify(params),
-        // params = { patientId, fromDate, toDate } — check what your website sends
+        body  : JSON.stringify({
+          clientId: pid,   // string, matching website format exactly
+          fromDate:  fromDate || null,
+          toDate:    toDate   || null,
+        }),
       },
-      patientId,
-    ),
+      Number(pid),
+    );
+  },
 
   // Get invoice print details (for PDF/print view)
   // Website: GET apiHost + Port1 + '/billing/invoice/printdetails'
-  getPrintDetails: async (patientId, invoiceId) =>
+  getPrintDetails: async (clientId, invoiceId) =>
     apiCall(
       BILLING_BASE,
       `invoice/printdetails?invoiceId=${invoiceId}`,
       { method: 'GET' },
-      patientId,
+      clientId,
     ),
 
   // Capture payment for an invoice
   // Website: POST apiHost + Port1 + '/billing/payment/capture-payment'
-  capturePayment: async (patientId, paymentData) =>
+  capturePayment: async (clientId, paymentData) =>
     apiCall(
       BILLING_BASE,
       'payment/capture-payment',
@@ -387,12 +425,12 @@ export const InvoiceApi = {
         method: 'POST',
         body  : JSON.stringify(paymentData),
       },
-      patientId,
+      clientId,
     ),
 
   // Payment against OPD
   // Website: POST apiHost + Port1 + '/billing/payment/againstopd'
-  payAgainstOPD: async (patientId, paymentData) =>
+  payAgainstOPD: async (clientId, paymentData) =>
     apiCall(
       BILLING_BASE,
       'payment/againstopd',
@@ -400,7 +438,7 @@ export const InvoiceApi = {
         method: 'POST',
         body  : JSON.stringify(paymentData),
       },
-      patientId,
+      clientId,
     ),
 };
 
@@ -413,7 +451,7 @@ export const ClinicalNotesApi = {
 
   // Fetch clinical notes as HTML list
   // Website: POST apiHost + Port1 + '/smartcaremain/clinicalnotes/fetch/htmllist'
-  getAll: async (patientId, params) =>
+  getAll: async (clientId, params) =>
     apiCall(
       SMARTCARE_BASE,
       'clinicalnotes/fetch/htmllist',
@@ -421,7 +459,7 @@ export const ClinicalNotesApi = {
         method: 'POST',
         body  : JSON.stringify(params),
       },
-      patientId,
+      clientId,
     ),
 };
 
@@ -496,17 +534,17 @@ export const FeedbackApi = {
 
   // Get list of feedback questions
   // Website: GET apiHost + Port1 + '/ipd/feedback/questionsList'
-  getQuestions: async (patientId) =>
+  getQuestions: async (clientId) =>
     apiCall(
       IPD_BASE,
       'feedback/questionsList',
       { method: 'GET' },
-      patientId,
+      clientId,
     ),
 
   // Submit feedback answers
   // Website: POST apiHost + Port1 + '/ipd/feedback/submitFeedback'
-  submit: async (patientId, feedbackData) =>
+  submit: async (clientId, feedbackData) =>
     apiCall(
       IPD_BASE,
       'feedback/submitFeedback',
@@ -514,7 +552,7 @@ export const FeedbackApi = {
         method: 'POST',
         body  : JSON.stringify(feedbackData),
       },
-      patientId,
+      clientId,
     ),
 };
 
@@ -523,14 +561,24 @@ export const FeedbackApi = {
 // Saves everything the server returns to AsyncStorage so buildHeaders()
 // can automatically attach it to every future request.
 // ─────────────────────────────────────────────────────────────────────────────
-export const saveSession = async (responseData, mobile = '', clinicId = '') => {
-  // Server login response only returns: token + expirytime
-  // patientId is fetched separately after login using the mobile number
+export const saveSession = async (responseData, mobile = '') => {
+  console.log('[saveSession] full login response:', JSON.stringify(responseData));
+
+  const userId   = responseData.userId   || responseData.userid   ||
+                   responseData.user_id  || responseData.id        || '';
+  const branchId = responseData.branchId || responseData.branch_id ||
+                   responseData.branchid || responseData.branch    || '';
+
   const map = {
-    AUTHTOKEN       : responseData.token       || '',
-    SESSIONEXPIRTIME: responseData.expirytime  || '',
-    CLINICID        : clinicId                 || '',
-    mobileNumber    : mobile                   || '',
+    AUTHTOKEN       : responseData.token      || responseData.Token      || '',
+    SESSIONEXPIRTIME: responseData.expirytime || responseData.expiryTime || '',
+    CLINICID        : CLINIC_ID,   // always aureus
+    Tenant          : CLINIC_ID,   // always aureus
+    mobileNumber    : mobile       || '',
+    UserId          : String(userId),
+    userid          : String(userId),
+    branch_id       : String(branchId),
+    branchId        : String(branchId),
   };
 
   await Promise.all(
@@ -538,6 +586,26 @@ export const saveSession = async (responseData, mobile = '', clinicId = '') => {
       AsyncStorage.setItem(key, String(value)),
     ),
   );
+
+  console.log('[saveSession] saved → token:', map.AUTHTOKEN ? '✓' : '✗',
+    '| clinicId:', CLINIC_ID,
+    '| userId:', map.UserId || '(empty)',
+    '| branchId:', map.branch_id || '(empty)');
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PractitionerApi — list of doctors/practitioners at the clinic
+// ─────────────────────────────────────────────────────────────────────────────
+export const PractitionerApi = {
+
+  // Get all practitioners for the current clinic
+  // Website: GET hisapi/user/practitioner/all
+  getAll: async () =>
+    apiCall(
+      HISAPI_BASE,
+      'user/practitioner/all',
+      { method: 'GET' },
+    ),
 };
 
 export default apiCall;

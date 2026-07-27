@@ -8,8 +8,20 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {doctors, specialties} from '../../data/mockData';
+import {useApp} from '../../context/AppContext';
 import {ArrowBackIcon, SearchIcon, StarIcon} from '../../assets/icons/Icons';
+
+// Local specialties constant — no API endpoint for this
+const specialties = [
+  {id: 's1', name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF'},
+  {id: 's2', name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2'},
+  {id: 's3', name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE'},
+  {id: 's4', name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7'},
+  {id: 's5', name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7'},
+  {id: 's6', name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF'},
+  {id: 's7', name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3'},
+  {id: 's8', name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1'},
+];
 
 const SORT_OPTIONS = [
   {id: 'best',    label: 'Best Match'},
@@ -21,6 +33,7 @@ const SORT_OPTIONS = [
 
 export default function DoctorSearchScreen({navigation, route}) {
   const preSpecialtyId = route.params?.specialtyId || null;
+  const {practitioners} = useApp();
   const [query,      setQuery]      = useState('');
   const [specFilter, setSpecFilter] = useState(preSpecialtyId);
   const [sortBy,     setSortBy]     = useState('best');
@@ -30,7 +43,7 @@ export default function DoctorSearchScreen({navigation, route}) {
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 300); }, []);
 
   const filtered = useMemo(() => {
-    let list = [...doctors];
+    let list = [...practitioners];
     if (specFilter) {
       const spec = specialties.find(s => s.id === specFilter);
       if (spec) list = list.filter(d => d.specialty === spec.name);
@@ -40,7 +53,7 @@ export default function DoctorSearchScreen({navigation, route}) {
       list = list.filter(d =>
         d.name.toLowerCase().includes(q) ||
         d.specialty.toLowerCase().includes(q) ||
-        d.clinic.toLowerCase().includes(q),
+        (d.clinic || '').toLowerCase().includes(q),
       );
     }
     switch (sortBy) {
@@ -51,7 +64,7 @@ export default function DoctorSearchScreen({navigation, route}) {
       default:        list.sort((a, b) => b.rating - a.rating); break;
     }
     return list;
-  }, [query, specFilter, sortBy]);
+  }, [query, specFilter, sortBy, practitioners]);
 
   const activeSort = SORT_OPTIONS.find(o => o.id === sortBy);
   const activeSpec = specialties.find(s => s.id === specFilter);

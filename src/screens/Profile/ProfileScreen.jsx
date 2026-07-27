@@ -1,19 +1,25 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform,
+  StyleSheet, Alert, Platform, ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {useApp} from '../../context/AppContext';
+import {InvoiceApi, InvestigationApi} from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
   PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
   LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
 } from '../../assets/icons/Icons';
+
+const FROM_DATE = '2000-01-01';
+function getToDate() { return new Date().toISOString().split('T')[0]; }
 
 // ─── Reusable row inside a menu card ────────────────────────────────────────
 function MenuRow({Icon, iconColor, iconBg, label, sub, onPress, last}) {
@@ -44,21 +50,74 @@ function Section({title, children}) {
   );
 }
 
+// Try many possible keys on an object — robust field extraction
+function pick(obj, keys, fallback = '') {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return fallback;
+}
+
+// Count items inside any wrapped API response shape
+function unwrapCount(payload) {
+  if (Array.isArray(payload)) return payload.length;
+  if (!payload || typeof payload !== 'object') return 0;
+  for (const key of ['data', 'list', 'result', 'records', 'reports',
+                     'invoices', 'bills', 'items', 'appointments', 'history']) {
+    if (Array.isArray(payload[key])) return payload[key].length;
+  }
+  for (const v of Object.values(payload)) {
+    if (Array.isArray(v)) return v.length;
+  }
+  return 0;
+}
+
 export default function ProfileScreen({navigation}) {
-  const {userProfile} = useApp();
+  const {userProfile, appointments, appointmentHistory, medicines} = useApp();
 
   const initials = `${userProfile.firstName?.[0] ?? ''}${userProfile.lastName?.[0] ?? ''}`.toUpperCase();
   const fullName = `${userProfile.firstName ?? ''} ${userProfile.lastName ?? ''}`.trim() || 'Your Name';
+
+  const [reportCount, setReportCount] = useState(null);
+  const [invoiceCount, setInvoiceCount] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  const loadCounts = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const patientId = await AsyncStorage.getItem('patientId');
+      if (patientId) {
+        const [invRes, repRes] = await Promise.all([
+          InvoiceApi.getAll(patientId, FROM_DATE, getToDate()),
+          InvestigationApi.getAll(patientId, FROM_DATE, getToDate()),
+        ]);
+        if (invRes.success) setInvoiceCount(unwrapCount(invRes.data));
+        if (repRes.success) setReportCount(unwrapCount(repRes.data));
+      }
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+  useFocusEffect(useCallback(() => { loadCounts(); }, [loadCounts]));
 
   const handleAvatarPress = () => {
     Alert.alert('Change Avatar', 'Avatar selection coming soon!');
   };
 
+  const totalAppointments = appointments.length + appointmentHistory.length;
+
   const stats = [
-    {num: '12', label: 'Appointments', Icon: CalendarIcon, color: colors.primary,  bg: colors.primaryLight},
-    {num: '8',  label: 'Records',      Icon: DocumentIcon,  color: colors.success,  bg: colors.successLight},
-    {num: '6',  label: 'Prescriptions',Icon: PillIcon,      color: colors.warning,  bg: colors.warningLight},
-    {num: '3',  label: 'Invoices',     Icon: InvoiceIcon,   color: '#8B5CF6',       bg: '#F5F3FF'},
+    {num: String(totalAppointments), label: 'Appointments', Icon: CalendarIcon, color: colors.primary,  bg: colors.primaryLight,
+     onPress: () => navigation.navigate('Appointments')},
+    {num: reportCount === null ? '…' : String(reportCount), label: 'Records',      Icon: DocumentIcon,  color: colors.success,  bg: colors.successLight,
+     onPress: () => navigation.navigate('Investigations')},
+    {num: String(medicines.length), label: 'Prescriptions',Icon: PillIcon,      color: colors.warning,  bg: colors.warningLight,
+     onPress: () => navigation.navigate('Prescriptions')},
+    {num: invoiceCount === null ? '…' : String(invoiceCount), label: 'Invoices',     Icon: InvoiceIcon,   color: '#8B5CF6',       bg: '#F5F3FF',
+     onPress: () => navigation.navigate('Invoices')},
   ];
 
   const vitals = [
@@ -132,19 +191,59 @@ export default function ProfileScreen({navigation}) {
 
         {/* ── STATS STRIP ───────────────────────────────────── */}
         <View style={styles.statsCard}>
-          {stats.map(({num, label, Icon, color, bg}, i) => (
+          {stats.map(({num, label, Icon, color, bg, onPress}, i) => (
             <React.Fragment key={label}>
-              <View style={styles.statItem}>
+              <TouchableOpacity
+                style={styles.statItem}
+                activeOpacity={0.7}
+                onPress={onPress}
+                disabled={!onPress}>
                 <View style={[styles.statIcon, {backgroundColor: bg}]}>
                   <Icon size={16} color={color} />
                 </View>
-                <Text style={styles.statNum}>{num}</Text>
+                <Text style={styles.statNum}>{statsLoading && (label === 'Records' || label === 'Invoices') ? '…' : num}</Text>
                 <Text style={styles.statLabel}>{label}</Text>
-              </View>
+              </TouchableOpacity>
               {i < stats.length - 1 && <View style={styles.statDivider} />}
             </React.Fragment>
           ))}
         </View>
+
+        {/* ── UPCOMING APPOINTMENTS PREVIEW ─────────────────── */}
+        {appointments.length > 0 && (
+          <View style={styles.upcomingWrap}>
+            <View style={styles.upcomingHeader}>
+              <Text style={styles.upcomingTitle}>Upcoming Appointments</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Appointments')}
+                activeOpacity={0.7}
+                hitSlop={8}>
+                <Text style={styles.upcomingSeeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            {appointments.slice(0, 3).map(a => (
+              <TouchableOpacity
+                key={a.id}
+                style={styles.apptCard}
+                onPress={() => navigation.navigate('Appointments')}
+                activeOpacity={0.8}>
+                <View style={[styles.apptDot, {backgroundColor: colors.primary}]} />
+                <View style={styles.apptInfo}>
+                  <Text style={styles.apptDoctor} numberOfLines={1}>
+                    {a.doctor || a.type || 'Appointment'}
+                  </Text>
+                  <Text style={styles.apptMeta} numberOfLines={1}>
+                    {[a.specialty, a.visitType, a.location].filter(Boolean).slice(0, 2).join(' · ')}
+                  </Text>
+                </View>
+                <View style={styles.apptDateTime}>
+                  <Text style={styles.apptDate}>{a.date || '—'}</Text>
+                  {a.time ? <Text style={styles.apptTime}>{a.time}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* ── VITALS ROW ────────────────────────────────────── */}
         <View style={styles.vitalsCard}>
@@ -352,6 +451,55 @@ const styles = StyleSheet.create({
   statNum:   {fontSize: 16, fontWeight: '800', color: colors.textPrimary},
   statLabel: {fontSize: 10, color: colors.textMuted, textAlign: 'center'},
   statDivider: {width: 1, height: 36, backgroundColor: colors.border},
+
+  // ── Upcoming Appointments preview ─────────────────────
+  upcomingWrap: {
+    marginHorizontal: spacing.base,
+    marginTop: spacing.base,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.base,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  upcomingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  upcomingTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  upcomingSeeAll: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  apptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  apptDot: {
+    width: 8, height: 8, borderRadius: 4, marginTop: 2, alignSelf: 'flex-start',
+  },
+  apptInfo: {flex: 1},
+  apptDoctor: {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
+  apptMeta:   {fontSize: 11, color: colors.textMuted, marginTop: 2},
+  apptDateTime: {alignItems: 'flex-end'},
+  apptDate:   {fontSize: 12, fontWeight: '700', color: colors.primary},
+  apptTime:   {fontSize: 11, color: colors.textSecondary, marginTop: 2},
 
   // ── Vitals ────────────────────────────────────────────
   vitalsCard: {

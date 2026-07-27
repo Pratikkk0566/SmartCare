@@ -81,34 +81,41 @@ export default function OTPVerificationScreen({ navigation, route }) {
       // Call real verify OTP API
       const result = await OTPApi.verifyOTP(phone, otp);
 
-      if (!result.success) {
-        setError(`Server: ${result.error || 'Invalid OTP. Please try again.'}`);
+      if (!result?.success) {
+        setError(result?.error || 'Invalid OTP. Please try again.');
         return;
       }
 
-            // Save token + expiry from login response
-      // Also pass the phone number and clinic ID so they get saved too
-      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-      await saveSession(result.data, phone, clinicId);
+      // Log the full login response so we can see what fields are available
+      console.log('[LOGIN RESPONSE]', JSON.stringify(result.data));
+
+      // Save token + session data
+      await saveSession(result.data, phone);
 
       // Now fetch the patient record using mobile number
-      // Server returns an array of patients — we take the first one
-            // Strip country code — server expects exactly 10 digits, no +91 prefix
+      // Strip country code — server expects exactly 10 digits, no +91 prefix
       const cleanPhone = phone.replace(/\D/g, '').slice(-10);
       const patientResult = await PatientApi.getByMobile(cleanPhone);
-      if (patientResult.success && patientResult.data?.length > 0) {
-        const patient = patientResult.data[0];
-        // Save patientId — every API call after this needs it
-               await AsyncStorage.setItem('patientId',  String(patient.id       || ''));
-        await AsyncStorage.setItem('patientName', `${patient.firstname} ${patient.surname}`.trim());
-        await AsyncStorage.setItem('uhid',        patient.uhid || '');
-        // Save full patient details for use across the app
-        await AsyncStorage.setItem('SELCETEDPATIENTDETAILS', JSON.stringify(patient));
-        await AsyncStorage.setItem('IsRegister', 'true');
-      } else {
-        // Patient not found — new user, needs to register
-        await AsyncStorage.setItem('IsRegister', 'false');
+
+      if (patientResult.success) {
+        // Server may return array or single object
+        const raw     = patientResult.data;
+        const patient = Array.isArray(raw) ? raw[0] : (raw?.patient || raw);
+
+        if (patient && (patient.id || patient.patientId)) {
+          const pid = String(patient.id || patient.patientId || '');
+          await AsyncStorage.setItem('patientId',  pid);
+          await AsyncStorage.setItem('@patientId', pid);
+          await AsyncStorage.setItem('patientName', `${patient.firstname || ''} ${patient.surname || ''}`.trim());
+          await AsyncStorage.setItem('uhid',        patient.uhid || '');
+          await AsyncStorage.setItem('SELCETEDPATIENTDETAILS', JSON.stringify(patient));
+          await AsyncStorage.setItem('IsRegister', 'true');
+          console.log('[OTP] Saved patientId:', pid);
+        } else {
+          await AsyncStorage.setItem('IsRegister', 'false');
+        }
       }
+      // If getByMobile fails, don't block login — proceed anyway
 
       if (mode === 'register' && userData) {
         await StorageService.set('@isOnboarded', 'true');

@@ -7,7 +7,6 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {todaySchedule, appointments} from '../../data/mockData';
 import {BellIcon, PillIcon, CalendarIcon, DocumentIcon, ClipboardIcon, FlaskIcon, SunriseIcon, SunIcon, MoonIcon, ArrowRightIcon, PinIcon, InvoiceIcon} from '../../assets/icons/Icons';
 import CalendarIllustration from '../../assets/illustrations/CalendarIllustration';
 import WaterGlassIllustration from '../../assets/illustrations/WaterGlassIllustration';
@@ -26,7 +25,26 @@ const quickActions = [
 ];
 
 export default function HomeScreen({navigation}) {
-  const {userProfile, unreadCount} = useApp();
+  const {userProfile, unreadCount, medicines, appointments} = useApp();
+
+  // Derive today's schedule from medicines context (morning/afternoon/night slots for today)
+  const todaySchedule = React.useMemo(() => {
+    const slots = [];
+    medicines.forEach(med => {
+      med.schedule?.forEach(s => {
+        slots.push({
+          time:     s.time,
+          medicine: med.name,
+          dose:     s.dose,
+          period:   s.period,
+          status:   s.status,
+        });
+      });
+    });
+    const ORDER = {morning: 0, afternoon: 1, night: 2};
+    slots.sort((a, b) => (ORDER[a.period] ?? 3) - (ORDER[b.period] ?? 3));
+    return slots;
+  }, [medicines]);
    useFocusEffect(
     useCallback(() => {
       let backPressedOnce = false;
@@ -129,15 +147,24 @@ export default function HomeScreen({navigation}) {
         <TouchableOpacity style={styles.apptCard} onPress={() => navigation.navigate('Appointments')} activeOpacity={0.85}>
           <View style={styles.apptLeft}>
             <Text style={styles.apptLabel}>Upcoming Appointment</Text>
-            <Text style={styles.apptTitle}>{appointments[0].type}</Text>
-            <View style={styles.apptRow}>
-              <CalendarIcon size={14} color={colors.textSecondary} />
-              <Text style={styles.apptMeta}>{appointments[0].date} • {appointments[0].time}</Text>
-            </View>
-            <View style={styles.apptRow}>
-              <PinIcon size={14} color={colors.textSecondary} />
-              <Text style={styles.apptMeta}>{appointments[0].location}</Text>
-            </View>
+            {appointments[0] ? (
+              <>
+                <Text style={styles.apptTitle}>{appointments[0].type}</Text>
+                <View style={styles.apptRow}>
+                  <CalendarIcon size={14} color={colors.textSecondary} />
+                  <Text style={styles.apptMeta}>{appointments[0].date} • {appointments[0].time}</Text>
+                </View>
+                <View style={styles.apptRow}>
+                  <PinIcon size={14} color={colors.textSecondary} />
+                  <Text style={styles.apptMeta}>{appointments[0].location}</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.apptTitle}>No upcoming appointments</Text>
+                <Text style={styles.apptMeta}>Tap to book a consultation</Text>
+              </>
+            )}
           </View>
           <View style={styles.apptRight}>
             <CalendarIllustration width={70} height={70} />

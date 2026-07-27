@@ -6,7 +6,6 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {doctors, specialties} from '../../data/mockData';
 import {
 ArrowBackIcon,
   StethoscopeIcon,
@@ -25,6 +24,18 @@ ArrowBackIcon,
 } from '../../assets/icons/Icons';
 
 const {width: SW} = Dimensions.get('window');
+
+// ─── Local specialties constant (no API endpoint) ─────────────────────────────
+const SPECIALTIES = [
+  {id: 's1', name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's2', name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's3', name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's4', name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's5', name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's6', name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's7', name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's8', name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1', doctorCount: 0, nextAvailable: 'Today'},
+];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -155,12 +166,12 @@ const sd = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AppointmentBookingScreen({navigation, route}) {
-  const {bookAppointment} = useApp();
+  const {bookAppointment, practitioners} = useApp();
 
   // Detect if coming with a pre-selected specialty
   const preSpecialtyName = route.params?.specialty;
   const preSpecialty     = preSpecialtyName
-    ? specialties.find(s => s.name === preSpecialtyName) || specialties[0]
+    ? SPECIALTIES.find(s => s.name === preSpecialtyName) || SPECIALTIES[0]
     : null;
 
   const [step,           setStep]           = useState(preSpecialty ? 2 : 1);
@@ -178,10 +189,10 @@ export default function AppointmentBookingScreen({navigation, route}) {
     scrollRef.current?.scrollTo({y: 0, animated: true});
   }, [step]);
 
-  // Doctors filtered by specialty
+  // Practitioners filtered by specialty — from context (API-loaded)
   const filteredDoctors = selectedSpec
-    ? doctors.filter(d => d.specialty === selectedSpec.name)
-    : doctors;
+    ? practitioners.filter(d => d.specialty === selectedSpec.name)
+    : practitioners;
 
   // Fee calculation
   const baseFee       = selectedDoctor?.consultationFee ?? 0;
@@ -298,7 +309,7 @@ export default function AppointmentBookingScreen({navigation, route}) {
             <Text style={s.stepHeading}>Choose a Specialty</Text>
             <Text style={s.stepSub}>Select the type of doctor you need to consult.</Text>
             <View style={s.specGrid}>
-              {specialties.map(sp => {
+              {SPECIALTIES.map(sp => {
                 const Icon    = SPECIALTY_ICONS[sp.name] || StethoscopeIcon;
                 const selected = selectedSpec?.id === sp.id;
                 return (
@@ -311,10 +322,6 @@ export default function AppointmentBookingScreen({navigation, route}) {
                       <Icon size={26} color={sp.color} />
                     </View>
                     <Text style={[s.specCardName, {color: selected ? sp.color : colors.textPrimary}]} numberOfLines={2}>{sp.name}</Text>
-                    <Text style={s.specCardCount}>{sp.doctorCount} doctors</Text>
-                    <Text style={[s.specCardNext, {color: sp.nextAvailable === 'Today' ? colors.success : colors.warning}]}>
-                      {sp.nextAvailable === 'Today' ? '● Today' : '● ' + sp.nextAvailable}
-                    </Text>
                     {selected && <View style={[s.specSelectedBadge, {backgroundColor: sp.color}]}><Text style={s.specSelectedCheck}>✓</Text></View>}
                   </TouchableOpacity>
                 );
@@ -327,13 +334,11 @@ export default function AppointmentBookingScreen({navigation, route}) {
         {step === 2 && (
           <View>
             <Text style={s.stepHeading}>Choose a Doctor</Text>
-            <Text style={s.stepSub}>{filteredDoctors.length} doctors available for {selectedSpec?.name}</Text>
+            <Text style={s.stepSub}>{filteredDoctors.length} doctors available{selectedSpec ? ` for ${selectedSpec.name}` : ''}</Text>
             {filteredDoctors.length === 0 && (
-              <View>
-                <Text style={s.stepSub}>No doctors in this specialty. Showing all doctors.</Text>
-              </View>
+              <Text style={[s.stepSub, {color: colors.textMuted}]}>No doctors loaded yet. Pull to refresh or try again.</Text>
             )}
-            {(filteredDoctors.length > 0 ? filteredDoctors : doctors).map(d => {
+            {(filteredDoctors.length > 0 ? filteredDoctors : practitioners).map(d => {
               const selected = selectedDoctor?.id === d.id;
               return (
                 <TouchableOpacity
@@ -344,12 +349,12 @@ export default function AppointmentBookingScreen({navigation, route}) {
                   <DoctorAvatar name={d.name} size={56} />
                   <View style={s.doctorInfo}>
                     <Text style={s.doctorName}>{d.name}</Text>
-                    <Text style={s.doctorSpec}>{d.specialty} · {d.experience}+ yrs</Text>
+                    <Text style={s.doctorSpec}>{d.specialty} · {d.experience ? `${d.experience}+ yrs` : ''}</Text>
                     <View style={s.doctorMeta}>
-                      <StarRating rating={d.rating} />
-                      <Text style={s.doctorReviews}>({d.reviewCount.toLocaleString()})</Text>
-                      <View style={[s.availBadge, {backgroundColor: d.availabilityColor + '20'}]}>
-                        <Text style={[s.availText, {color: d.availabilityColor}]}>{d.availability}</Text>
+                      <StarRating rating={d.rating || 4.5} />
+                      {d.reviewCount > 0 && <Text style={s.doctorReviews}>({d.reviewCount.toLocaleString()})</Text>}
+                      <View style={[s.availBadge, {backgroundColor: colors.successLight}]}>
+                        <Text style={[s.availText, {color: colors.success}]}>{d.availability || 'Available'}</Text>
                       </View>
                     </View>
                     <Text style={s.doctorClinic}>📍 {d.clinic}</Text>
@@ -625,8 +630,6 @@ const s = StyleSheet.create({
   specCard:          {width: (SW - spacing.base * 2 - spacing.md) / 2, borderRadius: radius.lg, borderWidth: 2, padding: spacing.md, backgroundColor: colors.surface, ...shadows.sm, position: 'relative'},
   specIconWrap:      {width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm},
   specCardName:      {fontSize: 13, fontWeight: '800', color: colors.textPrimary, marginBottom: 3},
-  specCardCount:     {fontSize: 11, color: colors.textSecondary, marginBottom: 3},
-  specCardNext:      {fontSize: 11, fontWeight: '600'},
   specSelectedBadge: {position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center'},
   specSelectedCheck: {color: '#fff', fontSize: 11, fontWeight: '800'},
 
