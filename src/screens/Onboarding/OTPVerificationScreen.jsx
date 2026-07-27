@@ -11,7 +11,8 @@ import { radius } from '../../theme/radius';
 import { ArrowBackIcon } from '../../assets/icons/Icons';
 import { StorageService } from '../../services/StorageService';
 import { useApp } from '../../context/AppContext';
-import { OTPApi, saveSession } from '../../API/Api';
+import { OTPApi, PatientApi, saveSession } from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const OTP_LENGTH = 4; // API generates 4-digit OTPs
 const RESEND_SECONDS = 30;
@@ -85,8 +86,29 @@ export default function OTPVerificationScreen({ navigation, route }) {
         return;
       }
 
-      // Persist session tokens returned by the server
-      await saveSession(result.data);
+            // Save token + expiry from login response
+      // Also pass the phone number and clinic ID so they get saved too
+      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+      await saveSession(result.data, phone, clinicId);
+
+      // Now fetch the patient record using mobile number
+      // Server returns an array of patients — we take the first one
+            // Strip country code — server expects exactly 10 digits, no +91 prefix
+      const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+      const patientResult = await PatientApi.getByMobile(cleanPhone);
+      if (patientResult.success && patientResult.data?.length > 0) {
+        const patient = patientResult.data[0];
+        // Save patientId — every API call after this needs it
+               await AsyncStorage.setItem('patientId',  String(patient.id       || ''));
+        await AsyncStorage.setItem('patientName', `${patient.firstname} ${patient.surname}`.trim());
+        await AsyncStorage.setItem('uhid',        patient.uhid || '');
+        // Save full patient details for use across the app
+        await AsyncStorage.setItem('SELCETEDPATIENTDETAILS', JSON.stringify(patient));
+        await AsyncStorage.setItem('IsRegister', 'true');
+      } else {
+        // Patient not found — new user, needs to register
+        await AsyncStorage.setItem('IsRegister', 'false');
+      }
 
       if (mode === 'register' && userData) {
         await StorageService.set('@isOnboarded', 'true');

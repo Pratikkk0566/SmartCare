@@ -1,7 +1,11 @@
 import React, {createContext, useContext, useState, useEffect, useMemo} from 'react';
-import {medicines as initialMedicines, appointments as initialAppointments, appointmentHistory as initialHistory, userProfile as initialProfile} from '../data/mockData';
+import { medicines as mockMedicines, appointments as mockAppointments,
+         appointmentHistory as mockHistory, userProfile as mockProfile } 
+from '../data/mockData';
 import {StorageService} from '../services/StorageService';
 import {scheduleAllMedicineReminders, configurePushNotifications, setBadgeCount} from '../services/NotificationService';
+import { AppointmentApi, PatientApi } from '../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AppContext = createContext(null);
 
@@ -16,10 +20,10 @@ const INITIAL_NOTIFICATIONS = [
 ];
 
 export function AppProvider({children}) {
-  const [userProfile, setUserProfile] = useState(initialProfile);
-  const [medicines, setMedicines] = useState(initialMedicines);
-  const [appointments, setAppointments] = useState(initialAppointments);
-  const [appointmentHistory] = useState(initialHistory);
+  const [userProfile, setUserProfile] = useState(mockProfile);
+  const [medicines, setMedicines] = useState(mockMedicines);
+  const [appointments, setAppointments] = useState(mockAppointments);
+  const [appointmentHistory] = useState(mockHistory);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
@@ -32,42 +36,89 @@ export function AppProvider({children}) {
 
   useEffect(() => {
     async function loadData() {
-      const lang = await StorageService.get('@selectedLanguage');
-      if (lang) {
-        setSelectedLanguage(lang);
-        setIsLanguageSelected(true);
-      }
+  // Load language and onboarding status — same as before
+  const lang = await StorageService.get('@selectedLanguage');
+  if (lang) { setSelectedLanguage(lang); setIsLanguageSelected(true); }
 
-const onboarded = await StorageService.get('@isOnboarded');
-if (onboarded === true || onboarded === 'true') {
-  setIsOnboarded(true);
-}
-const loggedIn = await StorageService.get('@isLoggedIn');
-if (loggedIn === true || loggedIn === 'true') {
-  setIsLoggedIn(true);
-}
+  const onboarded = await StorageService.get('@isOnboarded');
+  if (onboarded === true || onboarded === 'true') setIsOnboarded(true);
 
-      const statuses = await StorageService.getMedicineStatuses();
-      if (statuses && Object.keys(statuses).length > 0) {
-        setMedicines(prev =>
-          prev.map(m => ({
-            ...m,
-            schedule: m.schedule.map(s => ({
-              ...s,
-              status: statuses[`${m.id}_${s.period}`] || s.status,
-            })),
-          })),
-        );
-      }
+  const loggedIn = await StorageService.get('@isLoggedIn');
+  if (loggedIn === true || loggedIn === 'true') setIsLoggedIn(true);
 
-      const savedAppts = await StorageService.getAppointments();
-      if (savedAppts && savedAppts.length > 0) setAppointments(savedAppts);
+  // Get the patientId that was saved when the user logged in
+  const patientId = await AsyncStorage.getItem('patientId');
 
-      const profile = await StorageService.getProfile();
-      if (profile) setUserProfile(profile);
+  if (patientId) {
+    // User is logged in — fetch real data from server
 
-      setAppReady(true);
+    // Load real appointments
+    const apptResult = await AppointmentApi.getHistory(patientId);
+    if (apptResult.success) {
+      setAppointments(apptResult.data?.appointments || apptResult.data || mockAppointments);
+    } else {
+      setAppointments(mockAppointments); // fallback to mock if API fails
     }
+
+    // Load real profile using saved mobile number
+    const mobileNo = await AsyncStorage.getItem('mobileNumber');
+    if (mobileNo) {
+      const profileResult = await PatientApi.getByMobile(mobileNo);
+      if (profileResult.success) {
+        // Server returns an array — take the first patient
+        const patient = Array.isArray(profileResult.data) ? profileResult.data[0] : profileResult.data?.patient;
+        if (patient) {
+          // Map server field names → app field names
+          // This is critical: server uses different names than the app expects
+          const mappedProfile = {
+            firstName:  patient.firstname   || '',   // server key: firstname
+            lastName:   patient.surname     || '',   // server key: surname (NOT lastname)
+            middleName: patient.middlename  || '',   // server key: middlename
+            email:      patient.email       || '',
+            phone:      patient.mobno       || '',   // server key: mobno
+            gender:     patient.gender      || '',
+            dob:        patient.newdob      || '',   // newdob = "1976-05-11" (clean ISO format)
+            address:    patient.address     || '',
+            city:       patient.town        || '',
+            state:      patient.county      || '',
+            uhid:       patient.uhid        || '',   // unique hospital ID e.g. SCD/250505011
+            patientId:  patient.id          || '',   // numeric ID — saved here too for easy access
+            // bloodGroup, height, weight not in this API response — keep existing values
+            bloodGroup: userProfile.bloodGroup || '',
+            height:     userProfile.height     || '',
+            weight:     userProfile.weight     || '',
+            bp:         userProfile.bp         || 'Normal',
+          };
+          setUserProfile(mappedProfile);
+        }
+      }
+    }
+
+    // Medicine statuses — keep existing logic
+    const statuses = await StorageService.getMedicineStatuses();
+    if (statuses && Object.keys(statuses).length > 0) {
+      setMedicines(prev =>
+        prev.map(m => ({
+          ...m,
+          schedule: m.schedule.map(s => ({
+            ...s,
+            status: statuses[`${m.id}_${s.period}`] || s.status,
+          })),
+        })),
+      );
+    }
+
+  } else {
+    // User not logged in yet — load from device storage as before
+    const savedAppts = await StorageService.getAppointments();
+    if (savedAppts && savedAppts.length > 0) setAppointments(savedAppts);
+
+    const profile = await StorageService.getProfile();
+    if (profile) setUserProfile(profile);
+  }
+
+  setAppReady(true);
+}
     loadData();
   }, []);
 
