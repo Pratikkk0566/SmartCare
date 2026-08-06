@@ -1,42 +1,13 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import React, {useRef, useCallback} from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Image, BackHandler, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path, Circle, Rect, Ellipse } from 'react-native-svg';
+import { useFocusEffect } from '@react-navigation/native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { radius } from '../../theme/radius';
-import { PhoneIcon, PersonIcon } from '../../assets/icons/Icons';
 
-// Hero illustration — heart with medical cross + clipboard + shield + pill
-function HeroIllustration() {
-  return (
-    <Svg width={200} height={180} viewBox="0 0 200 180" fill="none">
-      {/* Background circle */}
-      <Circle cx="100" cy="70" r="55" fill={colors.primaryLight} />
-      {/* Heart */}
-      <Path
-        d="M100 105 C100 105 65 82 65 62 C65 50 73 44 82 44 C90 44 96 50 100 55 C104 50 110 44 118 44 C127 44 135 50 135 62 C135 82 100 105 100 105Z"
-        fill={colors.primary} opacity={0.9} />
-      {/* Medical cross */}
-      <Rect x="95" y="58" width="10" height="28" rx="3" fill="white" />
-      <Rect x="87" y="66" width="26" height="10" rx="3" fill="white" />
-      {/* Clipboard left */}
-      <Rect x="28" y="60" width="32" height="42" rx="4" fill="white" opacity={0.85} />
-      <Rect x="36" y="54" width="16" height="8" rx="2" fill={colors.primaryLight} />
-      <Rect x="34" y="72" width="20" height="2.5" rx="1.2" fill={colors.border} />
-      <Rect x="34" y="79" width="16" height="2.5" rx="1.2" fill={colors.border} />
-      <Rect x="34" y="86" width="18" height="2.5" rx="1.2" fill={colors.border} />
-      {/* Shield right */}
-      <Path d="M142 58 L168 58 L168 80 C168 92 155 100 155 100 C155 100 142 92 142 80 Z"
-        fill="white" opacity={0.9} />
-      <Path d="M148 75 L153 80 L163 68" stroke={colors.success} strokeWidth="3"
-        strokeLinecap="round" strokeLinejoin="round" />
-      {/* Pill bottom */}
-      <Ellipse cx="50" cy="118" rx="18" ry="8" fill={colors.primary} opacity={0.6} />
-      <Path d="M32 118 L68 118" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    </Svg>
-  );
-}
+const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
 // Aadhaar fingerprint icon (used inside the option row)
 function AadhaarRowIcon() {
@@ -54,19 +25,33 @@ function AadhaarRowIcon() {
 }
 
 export default function WelcomeScreen({ navigation }) {
+  const backPressedOnce = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (backPressedOnce.current) {
+          BackHandler.exitApp();
+          return true;
+        }
+        backPressedOnce.current = true;
+        ToastAndroid.show('Press back again to exit', ToastAndroid.SHORT);
+        setTimeout(() => { backPressedOnce.current = false; }, 2000);
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [])
+  );
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <View style={styles.root}>
 
-        {/* Brand */}
+        {/* Logo */}
+        <Image source={appLogo} style={styles.logoImg} />
         <Text style={styles.brandName}>SmartCare PHR</Text>
         <Text style={styles.brandTagline}>Your Health, Our Priority</Text>
-
-        {/* Hero */}
-        <View style={styles.illustrationWrap}>
-          <HeroIllustration />
-        </View>
 
         {/* Welcome text */}
         <Text style={styles.title}>Your Trusted{'\n'}Health Companion</Text>
@@ -113,9 +98,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
   },
+  logoImg: { width: 260, height: 260, marginBottom: -20 },
   brandName: { fontSize: 26, fontWeight: '800', color: colors.primary, letterSpacing: 0.5 },
-  brandTagline: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  illustrationWrap: { marginVertical: spacing.base },
+  brandTagline: { fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.lg },
   title: {
     fontSize: 26, fontWeight: '800', color: colors.textPrimary,
     textAlign: 'center', lineHeight: 34, marginBottom: 8,

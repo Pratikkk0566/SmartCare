@@ -1,6 +1,8 @@
-import React, {useState, useRef, useEffect} from 'react';
-import { View,  Text, ScrollView, TouchableOpacity, StyleSheet,  FlatList, Alert,  Dimensions,} from 'react-native';
+import React, {useState, useRef, useEffect, useCallback} from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert, Dimensions, ActivityIndicator,} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {AppointmentApi} from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -66,6 +68,23 @@ const SPECIALTY_ICONS = {
   'Dermatologist':     SkinIcon,
   'Orthopedic':        BoneIcon,
 };
+
+// "14:30" → "02:30 PM"
+function to12h(t) {
+  const [hh, mm] = t.split(':');
+  let h = parseInt(hh, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${String(h).padStart(2, '0')}:${mm} ${ampm}`;
+}
+
+// Build "YYYY-MM-DD" from DATES item
+function toISODate(dateItem) {
+  const d = new Date();
+  d.setDate(d.getDate() + Number(dateItem.key));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 function getNext14Days() {
   const D_NAMES  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -188,6 +207,40 @@ export default function AppointmentBookingScreen({navigation, route}) {
   useEffect(() => {
     scrollRef.current?.scrollTo({y: 0, animated: true});
   }, [step]);
+
+  // ── Slot state (API-driven) ──────────────────────────────────────────────────
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slots,        setSlots]        = useState([]);
+  const [slotsError,   setSlotsError]   = useState('');
+
+  const fetchSlots = useCallback(async (doctor, dateItem) => {
+    const pid = doctor?.practitionerId || doctor?.id;
+    if (!pid || !dateItem) return;
+
+    setSlotsLoading(true);
+    setSlotsError('');
+    setSlots([]);
+    setSelectedTime(null);
+
+    const isoDate   = toISODate(dateItem);
+    const patientId = await AsyncStorage.getItem('patientId') || '0';
+    const res = await AppointmentApi.getAvailableSlots(patientId, isoDate, pid);
+
+    if (res.success && res.data) {
+      // Response: {availableSlotList: ["01:00", "01:10", ...]}
+      const raw = res.data.availableSlotList || res.data.slots || res.data.data || [];
+      const converted = raw.filter(s => s && /^\d{1,2}:\d{2}$/.test(s)).map(to12h);
+      setSlots(converted);
+      if (converted.length === 0) setSlotsError('No slots available for this date.');
+    } else {
+      setSlotsError('Could not load slots.');
+    }
+    setSlotsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (step === 3 && selectedDoctor) fetchSlots(selectedDoctor, selectedDate);
+  }, [step, selectedDoctor, selectedDate, fetchSlots]);
 
   // Practitioners filtered by specialty — from context (API-loaded)
   const filteredDoctors = selectedSpec
@@ -402,10 +455,36 @@ export default function AppointmentBookingScreen({navigation, route}) {
               }}
             />
 
-            {/* Time slots */}
-            <TimeGroup label="🌅 Morning" slots={MORNING} selected={selectedTime} onSelect={setSelectedTime} />
-            <TimeGroup label="☀️ Afternoon" slots={AFTERNOON} selected={selectedTime} onSelect={setSelectedTime} />
-            <TimeGroup label="🌆 Evening" slots={EVENING} selected={selectedTime} onSelect={setSelectedTime} />
+            {/* Time slots — from API in grid */}
+            {slotsLoading ? (
+              <View style={{alignItems: 'center', paddingVertical: 48}}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={{marginTop: 12, fontSize: 13, color: colors.textSecondary}}>Loading slots…</Text>
+              </View>
+            ) : slotsError ? (
+              <View style={{alignItems: 'center', paddingVertical: 48}}>
+                <Text style={{fontSize: 13, color: '#EF4444', textAlign: 'center', marginBottom: 12}}>{slotsError}</Text>
+                <TouchableOpacity onPress={() => fetchSlots(selectedDoctor, selectedDate)} style={{paddingHorizontal: 20, paddingVertical: 8, borderRadius: radius.md, backgroundColor: colors.primary}}>
+                  <Text style={{color: '#fff', fontWeight: '700', fontSize: 13}}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={tg.grid}>
+                {slots.map(t => {
+                  const sel = selectedTime === t;
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      style={[tg.slot, sel && tg.slotSelected]}
+                      onPress={() => setSelectedTime(t)}
+                      activeOpacity={0.8}>
+                      <Text style={[tg.slotText, sel && tg.slotTextSelected]}>{t}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {slots.length === 0 && <Text style={{fontSize: 13, color: colors.textMuted}}>Select a date to see available slots.</Text>}
+              </View>
+            )}
           </View>
         )}
 

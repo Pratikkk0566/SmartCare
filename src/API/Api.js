@@ -174,16 +174,13 @@ export const PatientApi = {
 
   // Get patient details by mobile number (used after login to load profile)
   // Website: GET apiHost + Port + '/hisapi/patient/byMobileNo?mobileNo='
-  // preAuth = true because this is called immediately after login — token just saved,
-  // some server setups reject the new token on the very first call.
-  // Using the token IS correct here; keeping preAuth false so the token is sent.
   getByMobile: async (mobileNo) =>
     apiCall(
       HISAPI_BASE,
       `patient/byMobileNo?mobileNo=${mobileNo}`,
       { method: 'GET' },
       0,
-      false, // token is now saved — send it
+      false,
     ),
 
   // Register a new patient
@@ -235,22 +232,12 @@ export const PatientApi = {
 export const AppointmentApi = {
 
   // Get available time slots for a doctor on a date
-  // NOTE: HIS server returns HTTP 405 on GET — must use POST even for reads.
-  // Send BOTH common spellings of the field in body (practitionerId / practionerId)
+  // Website: GET ?date=YYYY-MM-DD&practionerId=ID  (query string, NOT POST body)
   getAvailableSlots: async (clientId, date, practitionerId) =>
     apiCall(
       HISAPI_BASE,
-      'appointment/availableSlots',
-      {
-        method: 'POST',
-        body  : JSON.stringify({
-          clientId,
-          date,
-          practitionerId,
-          practionerId: practitionerId, // common server typo accepted
-          doctorId:     practitionerId, // some servers use doctorId
-        }),
-      },
+      `appointment/availableSlots?date=${date}&practionerId=${practitionerId}`,
+      { method: 'GET' },
       clientId,
     ),
 
@@ -386,22 +373,23 @@ export const InvestigationApi = {
 // ─────────────────────────────────────────────────────────────────────────────
 export const InvoiceApi = {
 
-  // Fetch all invoices for a patient  
-  // Exact body format that the website uses when returning data
+  // Fetch all invoices for a patient
+  // Body: {clientId: number, fromDate: string, toDate: string}
+  // clientId also sent as header via buildHeaders 4th param
   getAll: async (clientId, fromDate = '', toDate = '') => {
-    const pid = String(clientId);
+    const pid = Number(clientId);
     return apiCall(
       BILLING_BASE,
       'invoice/fetchinvoiceData',
       {
         method: 'POST',
         body  : JSON.stringify({
-          clientId: pid,   // string, matching website format exactly
-          fromDate:  fromDate || null,
-          toDate:    toDate   || null,
+          clientId: pid,
+          fromDate: fromDate || '2000-01-01',
+          toDate:   toDate   || new Date().toISOString().split('T')[0],
         }),
       },
-      Number(pid),
+      pid,
     );
   },
 
@@ -574,7 +562,7 @@ export const saveSession = async (responseData, mobile = '') => {
     SESSIONEXPIRTIME: responseData.expirytime || responseData.expiryTime || '',
     CLINICID        : CLINIC_ID,   // always aureus
     Tenant          : CLINIC_ID,   // always aureus
-    mobileNumber    : mobile       || '',
+    mobileNumber    : (mobile || '').replace(/\D/g, '').slice(-10),  // always store as plain 10-digit
     UserId          : String(userId),
     userid          : String(userId),
     branch_id       : String(branchId),

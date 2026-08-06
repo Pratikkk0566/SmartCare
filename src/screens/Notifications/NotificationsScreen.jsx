@@ -47,7 +47,7 @@ function NotifCard({item, onPress}) {
       {/* Text block */}
       <View style={styles.textWrap}>
         <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+          <Text style={[styles.title, item.read && styles.titleRead]} numberOfLines={1}>{item.title}</Text>
           {!item.read && <View style={[styles.dot, {backgroundColor: accent}]} />}
         </View>
         <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
@@ -260,11 +260,14 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   cardUnread: {
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.primary + '30',
+    backgroundColor: colors.surface,
   },
   cardRead: {
-    opacity: 0.72,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FAFAFA',
   },
   accentBar: {
     position: 'absolute',
@@ -296,6 +299,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  titleRead: {
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
   dot: {
     width: 8, height: 8,

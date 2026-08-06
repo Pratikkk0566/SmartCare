@@ -14,8 +14,62 @@ export const StorageService = {
   },
   remove: async key => AsyncStorage.removeItem(key),
   clear: async () => AsyncStorage.clear(),
-  saveProfile: async profile => StorageService.set('@userProfile', profile),
+  
+  // ── Profile with timestamp ──────────────────────────────────────────────────
+  saveProfile: async profile => {
+    await StorageService.set('@userProfile', profile);
+    await StorageService.set('@profileLastUpdated', Date.now());
+  },
   getProfile: async () => StorageService.get('@userProfile'),
+  getProfileLastUpdated: async () => {
+    const ts = await StorageService.get('@profileLastUpdated');
+    return ts ? Number(ts) : null;
+  },
+
+  // ── Appointments with timestamp ─────────────────────────────────────────────
+  saveAppointments: async appts => {
+    await StorageService.set('@appointments', appts);
+    await StorageService.set('@appointmentsLastUpdated', Date.now());
+  },
+  getAppointments: async () => (await StorageService.get('@appointments')) || [],
+  getAppointmentsLastUpdated: async () => {
+    const ts = await StorageService.get('@appointmentsLastUpdated');
+    return ts ? Number(ts) : null;
+  },
+
+  // ── Practitioners with timestamp ────────────────────────────────────────────
+  savePractitioners: async practitioners => {
+    await StorageService.set('@practitioners', practitioners);
+    await StorageService.set('@practitionersLastUpdated', Date.now());
+  },
+  getPractitioners: async () => (await StorageService.get('@practitioners')) || [],
+  getPractitionersLastUpdated: async () => {
+    const ts = await StorageService.get('@practitionersLastUpdated');
+    return ts ? Number(ts) : null;
+  },
+
+  // ── Invoices with timestamp ─────────────────────────────────────────────────
+  saveInvoices: async invoices => {
+    await StorageService.set('@invoices', invoices);
+    await StorageService.set('@invoicesLastUpdated', Date.now());
+  },
+  getInvoices: async () => (await StorageService.get('@invoices')) || [],
+  getInvoicesLastUpdated: async () => {
+    const ts = await StorageService.get('@invoicesLastUpdated');
+    return ts ? Number(ts) : null;
+  },
+
+  // ── Investigations with timestamp ───────────────────────────────────────────
+  saveInvestigations: async investigations => {
+    await StorageService.set('@investigations', investigations);
+    await StorageService.set('@investigationsLastUpdated', Date.now());
+  },
+  getInvestigations: async () => (await StorageService.get('@investigations')) || [],
+  getInvestigationsLastUpdated: async () => {
+    const ts = await StorageService.get('@investigationsLastUpdated');
+    return ts ? Number(ts) : null;
+  },
+
   saveLockSettings: async (enabled, type, pin) => {
     await StorageService.set('@appLockEnabled', String(enabled));
     await StorageService.set('@appLockType', type);
@@ -33,10 +87,10 @@ export const StorageService = {
     await StorageService.set(key, existing);
   },
   getMedicineStatuses: async () => (await StorageService.get('@medicineStatuses')) || {},
-  saveAppointments: async appts => StorageService.set('@appointments', appts),
-  getAppointments: async () => (await StorageService.get('@appointments')) || [],
+  
   updateLastActive: async () => StorageService.set('@lastActiveTime', Date.now().toString()),
-   getLastActive: async () => Number((await StorageService.get('@lastActiveTime')) || 0),
+  getLastActive: async () => Number((await StorageService.get('@lastActiveTime')) || 0),
+  
   saveCredentials: async (email, password) => {
     await StorageService.set('@authEmail', email.toLowerCase().trim());
     await StorageService.set('@authPassword', password);

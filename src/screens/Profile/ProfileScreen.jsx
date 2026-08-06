@@ -174,6 +174,11 @@ export default function ProfileScreen({navigation}) {
 
           {/* Name + email */}
           <Text style={styles.heroName}>{fullName}</Text>
+          {userProfile.uhid ? (
+            <View style={styles.uhidBadge}>
+              <Text style={styles.uhidText}>UHID: {userProfile.uhid}</Text>
+            </View>
+          ) : null}
           {userProfile.email ? (
             <Text style={styles.heroEmail}>{userProfile.email}</Text>
           ) : null}
@@ -343,9 +348,10 @@ const styles = StyleSheet.create({
 
   // ── Hero ──────────────────────────────────────────────
   hero: {
-    height: HERO_HEIGHT,
+    minHeight: HERO_HEIGHT,
     alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 54 : 44,
+    paddingBottom: spacing['2xl'],
     paddingHorizontal: spacing.base,
   },
   heroTopBar: {
@@ -409,6 +415,8 @@ const styles = StyleSheet.create({
   },
 
   heroName:  {fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.2},
+  uhidBadge: {marginTop: 4, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)'},
+  uhidText:  {fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.9)', letterSpacing: 0.5},
   heroEmail: {fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 3},
 
   bloodPill: {
@@ -422,7 +430,7 @@ const styles = StyleSheet.create({
   },
   bloodPillText: {fontSize: 12, fontWeight: '600', color: '#fff'},
 
-  heroCurve: {height: spacing.xl},
+  heroCurve: {height: 0},
 
   // ── Stats card ────────────────────────────────────────
   statsCard: {

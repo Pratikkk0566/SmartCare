@@ -1,15 +1,16 @@
 import React, {useState, useRef} from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {ArrowBackIcon} from '../../assets/icons/Icons';
-import AppIcon from '../../assets/illustrations/AppIcon';
 import {OTPApi} from '../../API/Api';
+
+const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
 export default function PhoneNumberEntry({navigation}) {
   const [phone, setPhone] = useState('');
@@ -27,13 +28,22 @@ export default function PhoneNumberEntry({navigation}) {
     const formattedPhone = `+91${phone}`;
 
     try {
-      const result = await OTPApi.sendOTP(formattedPhone);
+      // ── MOCK BYPASS (remove when SSL is fixed) ──────────────
+      navigation.navigate('OTPVerification', {
+        mode: 'phoneLogin',
+        phone: formattedPhone,
+        displayPhone: `+91 ${phone}`,
+      });
+      return;
+      // ────────────────────────────────────────────────────────
+
+      const result = await OTPApi.sendOTP(formattedPhone); // eslint-disable-line no-unreachable
 
       if (result.success) {
         navigation.navigate('OTPVerification', {
           mode: 'phoneLogin',
-          phone: formattedPhone,   // pass exactly what was sent to the API
-          displayPhone: `+91 ${phone}`, // for display only
+          phone: formattedPhone,
+          displayPhone: `+91 ${phone}`,
         });
       } else {
         setError(result.error || 'Failed to send OTP. Please try again.');
@@ -57,8 +67,8 @@ export default function PhoneNumberEntry({navigation}) {
 
           {/* Logo */}
           <View style={styles.logoRow}>
-            <AppIcon size={44} />
-            <Text style={styles.appName}>SmartCare</Text>
+            <Image source={appLogo} style={styles.logoImg} />
+            <Text style={styles.appName}>SmartCare PHR</Text>
           </View>
 
           <Text style={styles.title}>Enter your{'\n'}mobile number</Text>
@@ -105,6 +115,13 @@ export default function PhoneNumberEntry({navigation}) {
 
           <Text style={styles.note}>OTP will be sent to this number for verification</Text>
 
+          <Text style={styles.terms}>
+            {'By continuing, you agree to our '}
+            <Text style={styles.termsLink}>Terms & Conditions</Text>
+            {' and '}
+            <Text style={styles.termsLink}>Privacy Policy</Text>
+          </Text>
+
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -122,12 +139,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
   },
   logoRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
     marginBottom: 36,
   },
-  appName: {fontSize: 20, fontWeight: '800', color: colors.primary},
+  logoImg: {width: 260, height: 260, marginBottom: -20},
+  appName: {fontSize: 22, fontWeight: '800', color: colors.primary},
   title: {
     fontSize: 26,
     fontWeight: '800',
@@ -194,4 +210,6 @@ const styles = StyleSheet.create({
   btnDisabled: {opacity: 0.5},
   btnText: {fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3},
   note: {fontSize: 13, color: colors.textSecondary, textAlign: 'center'},
+  terms: {fontSize: 12, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginTop: spacing.sm},
+  termsLink: {color: colors.primary, fontWeight: '600'},
 });

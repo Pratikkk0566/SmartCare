@@ -78,6 +78,16 @@ export default function OTPVerificationScreen({ navigation, route }) {
     setLoading(true);
     setError('');
     try {
+      // ── MOCK BYPASS (remove when SSL is fixed) ──────────────────────────
+      const MOCK_OTP = '1234';
+      if (otp === MOCK_OTP) {
+        await StorageService.set('@isLoggedIn', true);
+        setIsLoggedIn(true);
+        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       // Call real verify OTP API
       const result = await OTPApi.verifyOTP(phone, otp);
 
@@ -204,6 +214,13 @@ export default function OTPVerificationScreen({ navigation, route }) {
           onPress={handleVerify} disabled={otp.length < OTP_LENGTH || loading} activeOpacity={0.85}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Verify OTP</Text>}
         </TouchableOpacity>
+
+        <Text style={styles.terms}>
+          {'By continuing, you agree to our '}
+          <Text style={styles.termsLink}>Terms & Conditions</Text>
+          {' and '}
+          <Text style={styles.termsLink}>Privacy Policy</Text>
+        </Text>
       </View>
      </TouchableWithoutFeedback>
     </SafeAreaView>
@@ -245,4 +262,6 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   btnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+  terms: { fontSize: 12, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginTop: spacing.xl },
+  termsLink: { color: colors.primary, fontWeight: '600' },
 });

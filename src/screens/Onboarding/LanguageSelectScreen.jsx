@@ -1,16 +1,17 @@
 import React, {useState} from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet} from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Image} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context'; 
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {languages} from '../../data/mockData';
-import AppIcon from '../../assets/illustrations/AppIcon';
 import Button from '../../components/common/Button';
 import {ShieldIcon} from '../../assets/icons/Icons';
 import {StorageService} from '../../services/StorageService';
 import {useApp} from '../../context/AppContext';
+
+const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
 export default function LanguageSelectScreen({navigation}) {
   const [selected, setSelected] = useState('en');
@@ -26,7 +27,8 @@ export default function LanguageSelectScreen({navigation}) {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <AppIcon size={80} />
+          <Image source={appLogo} style={styles.logoImg} />
+          <Text style={styles.appName}>SmartCare PHR</Text>
           <Text style={styles.title}>Choose Your Language</Text>
           <Text style={styles.subtitle}>Select the language you would like to use in the app.</Text>
         </View>
@@ -73,7 +75,9 @@ const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: colors.background},
   scroll: {padding: spacing.base, paddingTop: spacing['4xl'], paddingBottom: 40},
   header: {alignItems: 'center', paddingVertical: spacing.xl},
-  title: {fontSize: 28, fontWeight: '700', color: colors.textPrimary, marginTop: spacing.base, textAlign: 'center'},
+  logoImg: {width: 260, height: 260, marginBottom: -20},
+  appName: {fontSize: 22, fontWeight: '800', color: colors.primary, marginBottom: spacing.sm},
+  title: {fontSize: 28, fontWeight: '700', color: colors.textPrimary, textAlign: 'center'},
   subtitle: {fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, lineHeight: 20},
   list: {gap: spacing.sm, marginBottom: spacing.base},
   langCard: {

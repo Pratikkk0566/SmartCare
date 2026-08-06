@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl} from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
@@ -8,6 +8,7 @@ import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {InvestigationApi} from '../../API/Api';
+import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SearchBar from '../../components/common/SearchBar';
 import StatusChip from '../../components/common/StatusChip';
@@ -15,6 +16,7 @@ import {
   ArrowBackIcon, FilterIcon, ShieldIcon, FlaskIcon,
   PlusIcon, ClockIcon, CheckCircleIcon, ArrowRightIcon,
 } from '../../assets/icons/Icons';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
 
 const FILTERS = ['All', 'Blood Test', 'Urine Test', 'Imaging', 'Others'];
 
@@ -72,11 +74,11 @@ function splitDateTime(dt = '') {
 }
 
 export default function InvestigationsScreen({navigation}) {
-  const {testRequests} = useApp();
+  const {testRequests, investigations: cachedInvestigations, isOnline} = useApp();
   const [filter, setFilter] = useState('All');
   const [query, setQuery] = useState('');
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState(cachedInvestigations || []);
+  const [loading, setLoading] = useState(cachedInvestigations.length === 0);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchReports = useCallback(async (silent = false) => {
@@ -130,14 +132,33 @@ export default function InvestigationsScreen({navigation}) {
       });
       mapped.sort((a, b) => toTimestamp(b.date) - toTimestamp(a.date));
       setReports(mapped);
+      // Save to cache
+      await StorageService.saveInvestigations(mapped);
     }
     setLoading(false);
     setRefreshing(false);
   }, []);
 
-  useEffect(() => { fetchReports(); }, [fetchReports]);
+  // Load cached investigations on mount
+  useEffect(() => {
+    if (cachedInvestigations && cachedInvestigations.length > 0) {
+      console.log('[InvestigationsScreen] Using cached investigations:', cachedInvestigations.length);
+      setReports(cachedInvestigations);
+      setLoading(false);
+    }
+  }, [cachedInvestigations]);
 
-  useFocusEffect(useCallback(() => { fetchReports(true); }, [fetchReports]));
+  useEffect(() => { 
+    if (isOnline) {
+      fetchReports(); 
+    }
+  }, [fetchReports, isOnline]);
+
+  useFocusEffect(useCallback(() => { 
+    if (isOnline) {
+      fetchReports(true); 
+    }
+  }, [fetchReports, isOnline]));
 
   const onRefresh = () => { setRefreshing(true); fetchReports(true); };
 
@@ -238,7 +259,13 @@ export default function InvestigationsScreen({navigation}) {
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{marginVertical: 40}} />
+          <>
+            <SkeletonLoader.ReportCard />
+            <SkeletonLoader.ReportCard />
+            <SkeletonLoader.ReportCard />
+            <SkeletonLoader.ReportCard />
+            <SkeletonLoader.ReportCard />
+          </>
         ) : filteredReports.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No reports found for this filter.</Text>

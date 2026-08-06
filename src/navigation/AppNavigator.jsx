@@ -1,11 +1,11 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {colors} from '../theme/colors';
 import {shadows} from '../theme/shadows';
-import {HomeIcon, InvoiceIcon, InvestigationsIcon, ProfileIcon, PlusIcon} from '../assets/icons/Icons';
+import {HomeIcon, InvoiceIcon, InvestigationNavIcon, ProfileIcon, StethoscopeIcon} from '../assets/icons/Icons';
 import {useApp} from '../context/AppContext';
 
 // Onboarding
@@ -66,6 +66,13 @@ function TabBadge({count}) {
   );
 }
 
+const TAB_LABELS = {
+  Home:           'Home',
+  Invoices:       'Records',
+  Investigations: 'Investigation',
+  Profile:        'Profile',
+};
+
 const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navigation}) {
   const {unreadCount} = useApp();
   return (
@@ -83,13 +90,15 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
               onPress={() => navigation.navigate('Appointments')}
               activeOpacity={0.85}>
               <View style={styles.fab}>
-                <PlusIcon size={28} color="#fff" />
+                <StethoscopeIcon size={28} color="#fff" />
               </View>
+              <Text style={styles.fabLabel}>Appt</Text>
             </TouchableOpacity>
           );
         }
 
         const Icon      = options.tabBarIcon;
+        const label     = TAB_LABELS[route.name] ?? route.name;
         const showBadge = route.name === 'Home' && unreadCount > 0;
         return (
           <TouchableOpacity
@@ -98,10 +107,12 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
             onPress={() => navigation.navigate(route.name)}
             activeOpacity={0.7}>
             <View style={styles.iconWrap}>
-              {Icon && <Icon size={30} color={isFocused ? colors.primary : colors.textMuted} />}
+              {Icon && <Icon size={26} color={isFocused ? colors.primary : colors.textMuted} />}
               {showBadge && <TabBadge count={unreadCount} />}
             </View>
-            {isFocused && <View style={styles.dot} />}
+            <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>
+              {label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -115,7 +126,7 @@ function MainTabs() {
       <Tab.Screen name="Home"           component={HomeScreen}           options={{tabBarIcon: HomeIcon}} />
       <Tab.Screen name="Invoices"       component={InvoicesScreen}       options={{tabBarIcon: InvoiceIcon}} />
       <Tab.Screen name="FAB"            component={() => null}           options={{tabBarLabel: ''}} />
-      <Tab.Screen name="Investigations" component={InvestigationsScreen} options={{tabBarIcon: InvestigationsIcon}} />
+      <Tab.Screen name="Investigations" component={InvestigationsScreen} options={{tabBarIcon: InvestigationNavIcon}} />
       <Tab.Screen name="Profile"        component={ProfileScreen}        options={{tabBarIcon: ProfileIcon}} />
     </Tab.Navigator>
   );
@@ -137,15 +148,15 @@ export default function AppNavigator() {
       <Stack.Navigator screenOptions={{headerShown: false, animationDuration: 200}} initialRouteName="Splash">
 
         {/* Onboarding */}
-        <Stack.Screen name="Splash"          component={SplashScreen} />
-        <Stack.Screen name="Welcome"         component={WelcomeScreen} />
-        <Stack.Screen name="LanguageSelect"  component={LanguageSelectScreen} />
-        <Stack.Screen name="PhoneLogin"      component={PhoneLoginScreen} />
+        <Stack.Screen name="Splash"           component={SplashScreen} />
+        <Stack.Screen name="Welcome"          component={WelcomeScreen} />
+        <Stack.Screen name="LanguageSelect"   component={LanguageSelectScreen} />
+        <Stack.Screen name="PhoneLogin"       component={PhoneLoginScreen} />
         <Stack.Screen name="PhoneNumberEntry" component={PhoneNumberEntry} />
-        <Stack.Screen name="AadhaarLogin"    component={AadhaarLoginScreen} />
-        <Stack.Screen name="Register"        component={RegisterScreen} />
-        <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-        <Stack.Screen name="AccountCreated"  component={AccountCreatedScreen} />
+        <Stack.Screen name="AadhaarLogin"     component={AadhaarLoginScreen} />
+        <Stack.Screen name="Register"         component={RegisterScreen} />
+        <Stack.Screen name="OTPVerification"  component={OTPVerificationScreen} />
+        <Stack.Screen name="AccountCreated"   component={AccountCreatedScreen} />
 
         {/* App */}
         <Stack.Screen name="MainTabs"      component={MainTabs} />
@@ -194,12 +205,14 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     ...shadows.sm,
   },
-  tabItem:    {flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4},
-  iconWrap:   {position: 'relative'},
-  badge:      {position: 'absolute', top: -6, right: -8, backgroundColor: colors.error, borderRadius: 9999, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 1.5, borderColor: colors.surface},
-  badgeText:  {color: '#fff', fontSize: 10, fontWeight: '700'},
-  dot:        {width: 5, height: 5, borderRadius: 3, backgroundColor: colors.primary, marginTop: 2},
-  fabWrapper: {flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -24},
-  fab:        {width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', ...shadows.lg},
-  splash:     {flex: 1, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center'},
+  tabItem:         {flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, gap: 2},
+  iconWrap:        {position: 'relative'},
+  badge:           {position: 'absolute', top: -6, right: -8, backgroundColor: colors.error, borderRadius: 9999, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 1.5, borderColor: colors.surface},
+  badgeText:       {color: '#fff', fontSize: 10, fontWeight: '700'},
+  tabLabel:        {fontSize: 10, fontWeight: '500', color: colors.textMuted, marginTop: 2},
+  tabLabelFocused: {color: colors.primary, fontWeight: '700'},
+  fabWrapper:      {flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: -20},
+  fab:             {width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', ...shadows.lg},
+  fabLabel:        {fontSize: 10, color: colors.primary, marginTop: 4, fontWeight: '600'},
+  splash:          {flex: 1, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center'},
 });

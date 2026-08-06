@@ -1,13 +1,14 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, StatusBar} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, StatusBar, Image} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Svg, {Path, Circle} from 'react-native-svg';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import AppIcon from '../../assets/illustrations/AppIcon';
 import {PhoneIcon, PersonIcon} from '../../assets/icons/Icons';
+
+const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
 function AadhaarOptionIcon() {
   return (
@@ -62,11 +63,9 @@ export default function PhoneLoginScreen({navigation}) {
 
         {/* SmartCare Logo */}
         <View style={styles.logoRow}>
-          <AppIcon size={46} />
-          <View style={styles.logoText}>
-            <Text style={styles.appName}>SmartCare</Text>
-            <Text style={styles.appTagline}>Your Health, Our Priority</Text>
-          </View>
+          <Image source={appLogo} style={styles.logoImg} />
+          <Text style={styles.appName}>SmartCare PHR</Text>
+          <Text style={styles.appTagline}>Your Health, Our Priority</Text>
         </View>
 
         {/* Heading */}
@@ -118,14 +117,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Logo row
+  // Logo
   logoRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
     marginBottom: 36,
   },
-  logoText: {gap: 2},
+  logoImg: {width: 260, height: 260, marginBottom: -20},
   appName: {
     fontSize: 22,
     fontWeight: '800',
@@ -135,6 +132,7 @@ const styles = StyleSheet.create({
   appTagline: {
     fontSize: 12,
     color: colors.textSecondary,
+    marginTop: 2,
   },
 
   // Headings

@@ -31,6 +31,23 @@ export const InvestigationsIcon = icon((c, sw) => (
   </>
 ));
 
+export const InvestigationNavIcon = icon((c, sw) => (
+  <>
+    {/* Clipboard body */}
+    <Rect x="4" y="4" width="13" height="17" rx="1.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Clip at top */}
+    <Path d="M9 4V2.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1V4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Lines on clipboard */}
+    <Line x1="7" y1="9"  x2="13" y2="9"  stroke={c} strokeWidth={sw} strokeLinecap="round" />
+    <Line x1="7" y1="12" x2="11" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+    <Line x1="7" y1="15" x2="10" y2="15" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+    {/* Magnifying glass circle */}
+    <Circle cx="17" cy="17" r="3.5" stroke={c} strokeWidth={sw} />
+    {/* Magnifying glass handle */}
+    <Line x1="19.5" y1="19.5" x2="22" y2="22" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+  </>
+));
+
 export const ProfileIcon = icon((c, sw) => (
   <>
     <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
@@ -311,6 +328,38 @@ export const PharmacyIcon = icon((c, sw) => (
     <Path d="M5 7v14h14V7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
     <Line x1="12" y1="11" x2="12" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
     <Line x1="9" y1="14" x2="15" y2="14" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+  </>
+));
+
+export const MedicinesIcon = icon((c, sw) => (
+  <>
+    {/* Top-left capsule (diagonal, top-left to bottom-right) */}
+    <Path d="M3 8 Q3 5 5.5 5 Q8 5 8 8 L11 14 Q11 17 8.5 17 Q6 17 6 14 Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    <Line x1="4" y1="10.5" x2="10" y2="11.5" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+    {/* Round tablet in center */}
+    <Circle cx="13" cy="13" r="4" stroke={c} strokeWidth={sw} />
+    <Line x1="10" y1="13" x2="16" y2="13" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+    {/* Bottom-right capsule (horizontal) */}
+    <Path d="M13 18 Q13 16 15.5 16 L19.5 16 Q22 16 22 18 Q22 20 19.5 20 L15.5 20 Q13 20 13 18 Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    <Line x1="17.5" y1="16" x2="17.5" y2="20" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+    {/* Top-right oval pill */}
+    <Ellipse cx="18" cy="6" rx="3" ry="4.5" transform="rotate(-30 18 6)" stroke={c} strokeWidth={sw} />
+    <Line x1="15.5" y1="4.8" x2="20.5" y2="7.2" stroke={c} strokeWidth={sw} strokeLinecap="round" />
+  </>
+));
+
+export const WalletIcon = icon((c, sw) => (
+  <>
+    {/* Wallet body */}
+    <Rect x="2" y="7" width="20" height="14" rx="2.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Card 1 sticking out (left) */}
+    <Path d="M5 7 L7 3 L13 5 L11 7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Card 2 sticking out (right) */}
+    <Path d="M10 7 L13 2.5 L19 4.5 L16 7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Snap clasp on right */}
+    <Rect x="16" y="13" width="5" height="5" rx="1.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+    {/* Clasp dot */}
+    <Circle cx="18.5" cy="15.5" r="1" stroke={c} strokeWidth={sw} />
   </>
 ));
 

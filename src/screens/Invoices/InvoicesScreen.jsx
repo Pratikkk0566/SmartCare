@@ -10,6 +10,8 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {InvoiceApi} from '../../API/Api';
+import {useApp} from '../../context/AppContext';
+import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
@@ -80,9 +82,10 @@ function mapInvoice(inv) {
 }
 
 export default function InvoicesScreen({navigation}) {
+  const {invoices: cachedInvoices, isOnline, invoicesLastUpdated} = useApp();
   const [activeTab,  setActiveTab]  = useState('All');
-  const [invoices,   setInvoices]   = useState([]);
-  const [loading,    setLoading]    = useState(true);
+  const [invoices,   setInvoices]   = useState(cachedInvoices || []);
+  const [loading,    setLoading]    = useState(cachedInvoices.length === 0);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchInvoices = useCallback(async (silent = false) => {
@@ -122,13 +125,28 @@ export default function InvoicesScreen({navigation}) {
       // Sort newest first — invoiceDate is "YYYY-MM-DD" (clean ISO, directly sortable)
       mapped.sort((a, b) => toTimestamp(b._isoDate) - toTimestamp(a._isoDate));
       setInvoices(mapped);
+      // Save to cache
+      await StorageService.saveInvoices(mapped);
     }
     setLoading(false);
     setRefreshing(false);
   }, []);
 
-  // Fetch on first mount
-  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+  // Load cached invoices on mount
+  useEffect(() => {
+    if (cachedInvoices && cachedInvoices.length > 0) {
+      console.log('[InvoicesScreen] Using cached invoices:', cachedInvoices.length);
+      setInvoices(cachedInvoices);
+      setLoading(false);
+    }
+  }, [cachedInvoices]);
+
+  // Fetch on first mount (if online)
+  useEffect(() => { 
+    if (isOnline) {
+      fetchInvoices(); 
+    }
+  }, [fetchInvoices, isOnline]);
 
   // Re-fetch every time the screen comes into focus — but only after initial load
   useFocusEffect(useCallback(() => {
