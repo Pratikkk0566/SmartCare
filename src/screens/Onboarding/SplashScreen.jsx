@@ -257,6 +257,8 @@ const styles = StyleSheet.create({
     borderRadius: 90,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.35)',
+    top: -15, // Center it relative to logoWrap (180-150)/2 = 15px offset
+    alignSelf: 'center',
   },
 
   // Logo circle background

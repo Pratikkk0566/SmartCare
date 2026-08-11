@@ -1,699 +1,171 @@
+// Tabler Icons imports for SmartCare PHR
+// Using @tabler/icons-react-native package
+// All icons are MIT licensed and professionally designed
+
+import {
+  IconHome,
+  IconFile,
+  IconFileInvoice,
+  IconFlask,
+  IconClipboardCheck,
+  IconUser,
+  IconUserCircle,
+  IconPlus,
+  IconBell,
+  IconSearch,
+  IconFilter,
+  IconArrowRight,
+  IconArrowLeft,
+  IconChevronLeft,
+  IconCalendar,
+  IconPill,
+  IconCapsule,
+  IconStethoscope,
+  IconHeart,
+  IconDental,
+  IconBrain,
+  IconLungs,
+  IconBone,
+  IconMoodSmile,
+  IconDroplet,
+  IconSun,
+  IconMoon,
+  IconClock,
+  IconCircleCheck,
+  IconShield,
+  IconDownload,
+  IconCamera,
+  IconSettings,
+  IconMedicalCross,
+  IconClipboard,
+  IconInfoCircle,
+  IconLock,
+  IconBookmark,
+  IconStar,
+  IconStarFilled,
+  IconTruck,
+  IconBuildingHospital,
+  IconWallet,
+  IconDropletHalf,
+  IconHeartRateMonitor,
+  IconSyringe,
+  IconMapPin,
+  IconPhone,
+  IconMail,
+  IconEye,
+  IconEyeOff,
+  IconChevronDown,
+  IconSquare,
+  IconSquareCheck,
+  IconBabyCarriage,
+  IconEar,
+  IconMicroscope,
+  IconSend,
+  IconWifiOff,
+  IconRefresh,
+  IconEdit,
+  IconScale,
+  IconRuler,
+  IconVideo,
+  IconArrowsSort,
+  IconGridDots,
+  IconSunrise,
+  IconPackage,
+  IconMedicineSyrup,
+} from '@tabler/icons-react-native';
+
+// Re-export with app-specific names for backwards compatibility
+// This allows the rest of the app to use the same icon names as before
+
+export const HomeIcon = IconHome;
+export const InvoiceIcon = IconFileInvoice;
+export const InvestigationsIcon = IconFlask;
+export const InvestigationNavIcon = IconClipboardCheck;
+export const ProfileIcon = IconUserCircle;
+export const PlusIcon = IconPlus;
+export const BellIcon = IconBell;
+export const SearchIcon = IconSearch;
+export const FilterIcon = IconFilter;
+export const ArrowRightIcon = IconArrowRight;
+export const ArrowLeftIcon = IconArrowLeft;
+export const ArrowBackIcon = IconChevronLeft;
+export const CalendarIcon = IconCalendar;
+export const PillIcon = IconPill;
+export const CapsuleIcon = IconCapsule;
+export const FlaskIcon = IconFlask;
+export const StethoscopeIcon = IconStethoscope;
+export const HeartIcon = IconHeart;
+export const ToothIcon = IconDental;
+export const BrainIcon = IconBrain;
+export const LungsIcon = IconLungs;
+export const BoneIcon = IconBone;
+export const SkinCareIcon = IconMoodSmile; // Face icon for dermatology
+export const JointIcon = IconBone; // Alternative bone icon
+export const SkinIcon = IconDroplet; // Skin/dermatology alternative
+export const GridIcon = IconGridDots;
+export const SunriseIcon = IconSunrise;
+export const SunIcon = IconSun;
+export const MoonIcon = IconMoon;
+export const ClockIcon = IconClock;
+export const CheckCircleIcon = IconCircleCheck;
+export const ShieldIcon = IconShield;
+export const DocumentIcon = IconFile;
+export const DownloadIcon = IconDownload;
+export const CameraIcon = IconCamera;
+export const SettingsGearIcon = IconSettings;
+export const PersonIcon = IconUser;
+export const MedicalCrossIcon = IconMedicalCross;
+export const ClipboardIcon = IconClipboard;
+export const InfoIcon = IconInfoCircle;
+export const LockIcon = IconLock;
+export const BookmarkIcon = IconBookmark;
+export const StarIcon = IconStar;
+export const HomeDeliveryIcon = IconTruck;
+export const PharmacyIcon = IconBuildingHospital;
+export const MedicinesIcon = IconMedicineSyrup;
+export const WalletIcon = IconWallet;
+export const BloodDropIcon = IconDropletHalf;
+export const GlucoseIcon = IconDroplet;
+export const BeakerIcon = IconFlask;
+export const PinIcon = IconMapPin;
+export const PhoneIcon = IconPhone;
+export const MailIcon = IconMail;
+export const EyeIcon = IconEye;
+export const EyeOffIcon = IconEyeOff;
+export const ChevronDownIcon = IconChevronDown;
+export const BabyIcon = IconBabyCarriage;
+export const EarIcon = IconEar;
+export const HospitalIcon = IconBuildingHospital;
+export const MicroscopeIcon = IconMicroscope;
+export const SendIcon = IconSend;
+export const WifiOffIcon = IconWifiOff;
+export const RefreshIcon = IconRefresh;
+export const EditIcon = IconEdit;
+export const ScaleIcon = IconScale;
+export const RulerIcon = IconRuler;
+export const StarFilledIcon = IconStarFilled;
+export const HeartRateIcon = IconHeartRateMonitor;
+export const SyringeIcon = IconSyringe;
+export const VideoIcon = IconVideo;
+export const SortIcon = IconArrowsSort;
+
+// Custom CheckboxIcon component (Tabler doesn't have a pre-filled checkbox variant)
 import React from 'react';
-import Svg, {Path, Circle, Rect, Line, Polyline, Polygon, G, Ellipse} from 'react-native-svg';
+import Svg, {Rect, Polyline} from 'react-native-svg';
 
-const icon = (paths, vb = '0 0 24 24') =>
-  React.memo(({size = 24, color = '#6C63FF', strokeWidth = 2}) => (
-    <Svg width={size} height={size} viewBox={vb} fill="none">
-      {paths(color, strokeWidth)}
-    </Svg>
-  ));
-
-export const HomeIcon = icon((c, sw) => (
-  <>
-    <Path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="9,22 9,12 15,12 15,22" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const InvoiceIcon = icon((c, sw) => (
-  <>
-    <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="14,2 14,8 20,8" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="16" y1="13" x2="8" y2="13" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="16" y1="17" x2="8" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polyline points="10,9 9,9 8,9" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const InvestigationsIcon = icon((c, sw) => (
-  <>
-    <Path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0h10m-10 0 4 7m6-7-4 7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const InvestigationNavIcon = icon((c, sw) => (
-  <>
-    {/* Clipboard body */}
-    <Rect x="4" y="4" width="13" height="17" rx="1.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    {/* Clip at top */}
-    <Path d="M9 4V2.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1V4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    {/* Lines on clipboard */}
-    <Line x1="7" y1="9"  x2="13" y2="9"  stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="7" y1="12" x2="11" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="7" y1="15" x2="10" y2="15" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    {/* Magnifying glass circle */}
-    <Circle cx="17" cy="17" r="3.5" stroke={c} strokeWidth={sw} />
-    {/* Magnifying glass handle */}
-    <Line x1="19.5" y1="19.5" x2="22" y2="22" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const ProfileIcon = icon((c, sw) => (
-  <>
-    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="7" r="4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const PlusIcon = icon((c, sw) => (
-  <>
-    <Line x1="12" y1="5" x2="12" y2="19" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="5" y1="12" x2="19" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const BellIcon = icon((c, sw) => (
-  <>
-    <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M13.73 21a2 2 0 0 1-3.46 0" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const SearchIcon = icon((c, sw) => (
-  <>
-    <Circle cx="11" cy="11" r="8" stroke={c} strokeWidth={sw} />
-    <Line x1="21" y1="21" x2="16.65" y2="16.65" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const FilterIcon = icon((c, sw) => (
-  <>
-    <Polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46 22,3" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const ArrowRightIcon = icon((c, sw) => (
-  <>
-    <Line x1="5" y1="12" x2="19" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polyline points="12,5 19,12 12,19" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const ArrowLeftIcon = icon((c, sw) => (
-  <>
-    <Line x1="19" y1="12" x2="5" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polyline points="12,19 5,12 12,5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const ArrowBackIcon = icon((c, sw) => (
-  <>
-    <Polyline points="15,18 9,12 15,6" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const CalendarIcon = icon((c, sw) => (
-  <>
-    <Rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="16" y1="2" x2="16" y2="6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="8" y1="2" x2="8" y2="6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="3" y1="10" x2="21" y2="10" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const PillIcon = icon((c, sw) => (
-  <>
-    <Path d="M10.5 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M17 14a3 3 0 1 1 6 0c0 2.5-3 5-3 5s-3-2.5-3-5z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="20" cy="14" r="1" fill={c} />
-  </>
-));
-
-export const CapsuleIcon = icon((c, sw) => (
-  <>
-    <Path 
-      d="M5.5 18.5L18.5 5.5A4.95 4.95 0 0 1 25.5 12.5L12.5 25.5A4.95 4.95 0 0 1 5.5 18.5Z" 
-      stroke={c} 
-      strokeWidth={sw} 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      fill="none" 
-      transform="scale(0.75) translate(4 4)"
-    />
-    <Line 
-      x1="8" 
-      y1="16" 
-      x2="16" 
-      y2="8" 
-      stroke={c} 
-      strokeWidth={sw} 
-      strokeLinecap="round"
-    />
-  </>
-));
-
-export const FlaskIcon = icon((c, sw) => (
-  <>
-    <Path d="M9 3h6m-6 0v8L4.9 18.1A2 2 0 0 0 6.76 21h10.48a2 2 0 0 0 1.86-2.9L15 11V3" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="9" y1="3" x2="15" y2="3" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const StethoscopeIcon = icon((c, sw) => (
-  <>
-    <Path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="20" cy="10" r="2" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const HeartIcon = icon((c, sw) => (
-  <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const ToothIcon = icon((c, sw) => (
-  <Path d="M12 5.5c-1.5-2-3.5-3-5-2.5C4 4 3 7 4 10c.5 2 1 3.5 2 5 .5 1.5 1 3 2 4 .5 1 1 1 1.5 0 .5-1.5 1-3.5 2.5-3.5s2 2 2.5 3.5c.5 1 1 1 1.5 0 1-1 1.5-2.5 2-4 1-1.5 1.5-3 2-5 1-3 0-6-3-7-1.5-.5-3.5.5-5 2.5z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const BrainIcon = icon((c, sw) => (
-  <>
-    <Path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const LungsIcon = icon((c, sw) => (
-  <>
-    <Path d="M12 3v9" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M6.6 15.6c-1.5 1-3 1.3-4 .7-1-.6-1.3-2-.7-3.5L5 8.5C5.7 7 7 6 8 6.3c1 .3 1.5 1.5 1 3l-1 4c-.4 1.5 0 2.5.7 3.3.7.8 2 1.2 3 .7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M17.4 15.6c1.5 1 3 1.3 4 .7 1-.6 1.3-2 .7-3.5L19 8.5c-.7-1.5-2-2.5-3-2.2-1 .3-1.5 1.5-1 3l1 4c.4 1.5 0 2.5-.7 3.3-.7.8-2 1.2-3 .7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const BoneIcon = icon((c, sw) => (
-  <>
-    <Path 
-      d="M7.5 7.5a2.5 2.5 0 1 0-3.54-3.54A2.5 2.5 0 0 0 7.5 7.5L16.5 16.5a2.5 2.5 0 1 0 3.54 3.54A2.5 2.5 0 0 0 16.5 16.5L7.5 7.5Z" 
-      stroke={c} 
-      strokeWidth={sw} 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      fill="none"
-    />
-    <Path 
-      d="M7.5 16.5a2.5 2.5 0 1 0-3.54 3.54A2.5 2.5 0 0 0 7.5 16.5L16.5 7.5a2.5 2.5 0 1 0 3.54-3.54A2.5 2.5 0 0 0 16.5 7.5L7.5 16.5Z" 
-      stroke={c} 
-      strokeWidth={sw} 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      fill="none"
-    />
-  </>
-));
-
-// Skin / Dermatologist (face with care)
-export const SkinCareIcon = icon((c, sw) => (
-  <>
-    <Circle cx="12" cy="12" r="8" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8 10h.01M16 10h.01" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M9.5 15.5a3.5 3.5 0 0 0 5 0" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M7 7.5C7 6 8 5 9 5M17 7.5C17 6 16 5 15 5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Joint / Orthopedic (knee joint)
-export const JointIcon = icon((c, sw) => (
-  <>
-    <Path d="M12 3v5m0 8v5" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Circle cx="12" cy="12" r="4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8 8L6 6m12 2l2-2M8 16l-2 2m12-2l2 2" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M9 12h6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const SkinIcon = icon((c, sw) => (
-  <>
-    <Path d="M20 7c0 5-4 5-4 10a4 4 0 1 1-8 0c0-5-4-5-4-10a8 8 0 0 1 16 0Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M12 22v-3" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M10 15h4" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const GridIcon = icon((c, sw) => (
-  <>
-    <Rect x="3" y="3" width="7" height="7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Rect x="14" y="3" width="7" height="7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Rect x="14" y="14" width="7" height="7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Rect x="3" y="14" width="7" height="7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const SunriseIcon = icon((c, sw) => (
-  <>
-    <Path d="M17 18a5 5 0 0 0-10 0" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="12" y1="2" x2="12" y2="9" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="4.22" y1="10.22" x2="5.64" y2="11.64" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="1" y1="18" x2="3" y2="18" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="21" y1="18" x2="23" y2="18" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="18.36" y1="11.64" x2="19.78" y2="10.22" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="23" y1="22" x2="1" y2="22" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polyline points="8,6 12,2 16,6" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const SunIcon = icon((c, sw) => (
-  <>
-    <Circle cx="12" cy="12" r="5" stroke={c} strokeWidth={sw} />
-    <Line x1="12" y1="1" x2="12" y2="3" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="12" y1="21" x2="12" y2="23" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="1" y1="12" x2="3" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="21" y1="12" x2="23" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const MoonIcon = icon((c, sw) => (
-  <Path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const ClockIcon = icon((c, sw) => (
-  <>
-    <Circle cx="12" cy="12" r="10" stroke={c} strokeWidth={sw} />
-    <Polyline points="12,6 12,12 16,14" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const CheckCircleIcon = icon((c, sw) => (
-  <>
-    <Path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="22,4 12,14.01 9,11.01" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const ShieldIcon = icon((c, sw) => (
-  <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const DocumentIcon = icon((c, sw) => (
-  <>
-    <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="14,2 14,8 20,8" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="16" y1="13" x2="8" y2="13" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="16" y1="17" x2="8" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const DownloadIcon = icon((c, sw) => (
-  <>
-    <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="7,10 12,15 17,10" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="12" y1="15" x2="12" y2="3" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const CameraIcon = icon((c, sw) => (
-  <>
-    <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="13" r="4" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const SettingsGearIcon = icon((c, sw) => (
-  <>
-    <Circle cx="12" cy="12" r="3" stroke={c} strokeWidth={sw} />
-    <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const PersonIcon = icon((c, sw) => (
-  <>
-    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="7" r="4" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const MedicalCrossIcon = icon((c, sw) => (
-  <>
-    <Rect x="2" y="8" width="20" height="8" rx="2" stroke={c} strokeWidth={sw} />
-    <Rect x="8" y="2" width="8" height="20" rx="2" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const ClipboardIcon = icon((c, sw) => (
-  <>
-    <Path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Rect x="8" y="2" width="8" height="4" rx="1" ry="1" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="9" y1="12" x2="15" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="9" y1="16" x2="13" y2="16" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const InfoIcon = icon((c, sw) => (
-  <>
-    <Circle cx="12" cy="12" r="10" stroke={c} strokeWidth={sw} />
-    <Line x1="12" y1="8" x2="12" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="12" y1="16" x2="12.01" y2="16" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const LockIcon = icon((c, sw) => (
-  <>
-    <Rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M7 11V7a5 5 0 0 1 10 0v4" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const BookmarkIcon = icon((c, sw) => (
-  <Path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const StarIcon = icon((c, sw) => (
-  <Polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const HomeDeliveryIcon = icon((c, sw) => (
-  <>
-    <Path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="9,22 9,12 15,12 15,22" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const PharmacyIcon = icon((c, sw) => (
-  <>
-    <Path d="M3 3h18v4H3z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M5 7v14h14V7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="12" y1="11" x2="12" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="9" y1="14" x2="15" y2="14" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const MedicinesIcon = icon((c, sw) => (
-  <>
-    {/* Top-left capsule (diagonal, top-left to bottom-right) */}
-    <Path d="M3 8 Q3 5 5.5 5 Q8 5 8 8 L11 14 Q11 17 8.5 17 Q6 17 6 14 Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="4" y1="10.5" x2="10" y2="11.5" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    {/* Round tablet in center */}
-    <Circle cx="13" cy="13" r="4" stroke={c} strokeWidth={sw} />
-    <Line x1="10" y1="13" x2="16" y2="13" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    {/* Bottom-right capsule (horizontal) */}
-    <Path d="M13 18 Q13 16 15.5 16 L19.5 16 Q22 16 22 18 Q22 20 19.5 20 L15.5 20 Q13 20 13 18 Z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="17.5" y1="16" x2="17.5" y2="20" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    {/* Top-right oval pill */}
-    <Ellipse cx="18" cy="6" rx="3" ry="4.5" transform="rotate(-30 18 6)" stroke={c} strokeWidth={sw} />
-    <Line x1="15.5" y1="4.8" x2="20.5" y2="7.2" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const WalletIcon = icon((c, sw) => (
-  <>
-    {/* Wallet body */}
-    <Rect x="2" y="7" width="20" height="14" rx="2.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    {/* Card 1 sticking out (left) */}
-    <Path d="M5 7 L7 3 L13 5 L11 7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    {/* Card 2 sticking out (right) */}
-    <Path d="M10 7 L13 2.5 L19 4.5 L16 7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    {/* Snap clasp on right */}
-    <Rect x="16" y="13" width="5" height="5" rx="1.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    {/* Clasp dot */}
-    <Circle cx="18.5" cy="15.5" r="1" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const BloodDropIcon = icon((c, sw) => (
-  <Path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const GlucoseIcon = icon((c, sw) => (
-  <>
-    <Rect x="3" y="3" width="18" height="18" rx="2" stroke={c} strokeWidth={sw} />
-    <Path d="M9 9h6M9 12h6M9 15h4" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const BeakerIcon = icon((c, sw) => (
-  <>
-    <Path d="M4.5 3h15M6 3v8.5L2 19h20l-4-7.5V3" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const PinIcon = icon((c, sw) => (
-  <>
-    <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="10" r="3" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const PhoneIcon = icon((c, sw) => (
-  <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const MailIcon = icon((c, sw) => (
-  <>
-    <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Polyline points="22,6 12,13 2,6" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const EyeIcon = icon((c, sw) => (
-  <>
-    <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="12" r="3" stroke={c} strokeWidth={sw} />
-  </>
-));
-
-export const EyeOffIcon = icon((c, sw) => (
-  <>
-    <Path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="1" y1="1" x2="23" y2="23" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-export const ChevronDownIcon = icon((c, sw) => (
-  <Polyline points="6,9 12,15 18,9" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-export const CheckboxIcon = ({size = 24, color = '#6C63FF', checked = false}) => (
+export const CheckboxIcon = ({size = 24, color = '#6C63FF', checked = false, strokeWidth = 2}) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     {checked ? (
       <>
-        <Rect x="2" y="2" width="20" height="20" rx="4" fill={color} />
+        <Rect x="4" y="4" width="16" height="16" rx="2" fill={color} />
         <Polyline points="7,12 10,15 17,8" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
       </>
     ) : (
-      <Rect x="2" y="2" width="20" height="20" rx="4" stroke="#9CA3AF" strokeWidth={2} />
+      <Rect x="4" y="4" width="16" height="16" rx="2" stroke={color} strokeWidth={strokeWidth} />
     )}
   </Svg>
 );
-// ── Specialty icons ──────────────────────────────────────────────────────────
 
-// Baby / Pediatrician
-export const BabyIcon = icon((c, sw) => (
-  <>
-    <Circle cx="12" cy="6" r="3" stroke={c} strokeWidth={sw} />
-    <Path d="M6 20v-2a6 6 0 0 1 12 0v2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M3 9c0-1 .5-2 1.5-2S6 8 6 9s-.5 2-1.5 2S3 10 3 9z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M21 9c0-1-.5-2-1.5-2S18 8 18 9s.5 2 1.5 2S21 10 21 9z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Ear / ENT
-export const EarIcon = icon((c, sw) => (
-  <>
-    <Path d="M6 8a6 6 0 0 1 12 0c0 7-3 9-3 9H9a6.001 6.001 0 0 1-3-5.08" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M10 13a3 3 0 0 0 6 0" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M12 10v3" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Hospital / building
-export const HospitalIcon = icon((c, sw) => (
-  <>
-    <Rect x="2" y="5" width="20" height="17" rx="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M16 5V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="12" y1="11" x2="12" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="9" y1="14" x2="15" y2="14" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Microscope / lab
-export const MicroscopeIcon = icon((c, sw) => (
-  <>
-    <Path d="M6 18h8" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M3 22h18" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M14 22a7 7 0 1 0 0-14h-1" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M9 14a5 5 0 0 0 5 0" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M8 4h.01M8 8h.01" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Rect x="6" y="2" width="4" height="8" rx="1" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-export const SendIcon = icon((c, sw) => (
-  <>
-    <Path
-      d="M3 4.5L21 12L3 19.5L6.5 12L3 4.5Z"
-      stroke={c}
-      strokeWidth={sw}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Line
-      x1="6.5"
-      y1="12"
-      x2="21"
-      y2="12"
-      stroke={c}
-      strokeWidth={sw}
-      strokeLinecap="round"
-    />
-  </>
-));
-
-// ── New icons ────────────────────────────────────────────────────────────────
-
-// Wave signal / no internet
-export const WifiOffIcon = icon((c, sw) => (
-  <>
-    <Line x1="1" y1="1" x2="23" y2="23" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M10.71 5.05A16 16 0 0 1 22.56 9" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8.53 16.11a6 6 0 0 1 6.95 0" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="20" r="1" fill={c} />
-  </>
-));
-
-// Refresh / sync
-export const RefreshIcon = icon((c, sw) => (
-  <>
-    <Path d="M23 4v6h-6" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M1 20v-6h6" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Edit / pencil
-export const EditIcon = icon((c, sw) => (
-  <>
-    <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Scale / weight
-export const ScaleIcon = icon((c, sw) => (
-  <>
-    <Path d="M12 3a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M12 3v2" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Rect x="3" y="12" width="18" height="9" rx="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="8" y1="17" x2="16" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Ruler / height
-export const RulerIcon = icon((c, sw) => (
-  <>
-    <Path d="M2 2l20 20" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M6.7 6.7l4.2 4.2M9.9 3.5l4.2 4.2M3.5 9.9l4.2 4.2M13.1 13.1l4.2 4.2M16.3 9.9l4.2 4.2M9.9 16.3l4.2 4.2" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Star filled (for popular / rating display)
-export const StarFilledIcon = icon((c, sw) => (
-  <Polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" fill={c} />
-));
-
-// Heart-rate / ECG pulse
-export const HeartRateIcon = icon((c, sw) => (
-  <>
-    <Path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Syringe / injection
-export const SyringeIcon = icon((c, sw) => (
-  <>
-    <Path d="M18 2l4 4" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M17 7l-5.5 5.5" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M13.5 3.5l7 7" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M6 14l-4 4 4 4M6 14l8-8" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="2" y1="22" x2="6" y2="18" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Path d="M8 16l3-3" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Video camera
-export const VideoIcon = icon((c, sw) => (
-  <>
-    <Polygon points="23,7 16,12 23,17 23,7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Rect x="1" y="5" width="15" height="14" rx="2" ry="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Sort arrows
-export const SortIcon = icon((c, sw) => (
-  <>
-    <Line x1="8" y1="6" x2="21" y2="6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="8" y1="12" x2="21" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="8" y1="18" x2="21" y2="18" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polyline points="3,6 3,6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="3" y1="6" x2="3" y2="18" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polyline points="1,16 3,18 5,16" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Lightning bolt (UPI payment)
-export const BoltIcon = icon((c, sw) => (
-  <Polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-// Cash / banknote
-export const CashIcon = icon((c, sw) => (
-  <>
-    <Rect x="2" y="6" width="20" height="12" rx="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Circle cx="12" cy="12" r="3" stroke={c} strokeWidth={sw} />
-    <Line x1="6" y1="12" x2="6" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="18" y1="12" x2="18" y2="12" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Bank building (net banking)
-export const BankIcon = icon((c, sw) => (
-  <>
-    <Line x1="3" y1="22" x2="21" y2="22" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="6" y1="18" x2="6" y2="11" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="10" y1="18" x2="10" y2="11" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="14" y1="18" x2="14" y2="11" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="18" y1="18" x2="18" y2="11" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Polygon points="12,2 20,7 4,7" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
-
-// Wave hand / wave goodbye
-export const WaveIcon = icon((c, sw) => (
-  <>
-    <Path d="M18.4 5.6a2 2 0 0 0-2.83 0L7 14.2a2 2 0 1 0 2.83 2.83l8.57-8.57a2 2 0 0 0 0-2.83z" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M8.66 11.17l-1.42 1.42a4 4 0 1 0 5.66 5.66l5.66-5.66" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M12.17 4.83l3.54 3.54" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Check mark (for step done indicator & sort active)
-export const CheckIcon = icon((c, sw) => (
-  <Polyline points="20,6 9,17 4,12" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-));
-
-// Location/Map pin (hospital clinic)
-export const HospitalBuildingIcon = icon((c, sw) => (
-  <>
-    <Rect x="2" y="7" width="20" height="15" rx="2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="12" y1="12" x2="12" y2="17" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="9.5" y1="14.5" x2="14.5" y2="14.5" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-  </>
-));
-
-// Calendar with clock (date+time)
-export const CalendarClockIcon = icon((c, sw) => (
-  <>
-    <Path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-    <Line x1="16" y1="2" x2="16" y2="6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="8" y1="2" x2="8" y2="6" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Line x1="3" y1="10" x2="21" y2="10" stroke={c} strokeWidth={sw} strokeLinecap="round" />
-    <Circle cx="18" cy="18" r="4" stroke={c} strokeWidth={sw} />
-    <Path d="M18 16.5v1.75l1 1" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
-  </>
-));
+// Note: To use additional Tabler icons not listed above, import them directly:
+// import { IconActivity, IconAmbulance } from '@tabler/icons-react-native';
+// This approach avoids bundling all 6000+ icons and keeps the app size small.
