@@ -1,43 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
-import Svg, { Path, Rect, Circle, Ellipse, Defs, RadialGradient, Stop } from 'react-native-svg';
-import { colors } from '../../theme/colors';
+import { View, Image, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
 import { useApp } from '../../context/AppContext';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
-// Animated SVG wrapper
-const AnimatedView = Animated.createAnimatedComponent(View);
-
-function AppLogo() {
-  return (
-    <Svg width={110} height={110} viewBox="0 0 200 200" fill="none">
-      {/* Outer glow circle */}
-      <Circle cx="100" cy="100" r="90" fill="rgba(255,255,255,0.08)" />
-      <Circle cx="100" cy="100" r="72" fill="rgba(255,255,255,0.12)" />
-
-      {/* Heart */}
-      <Path
-        d="M100 148 C100 148 55 118 55 88 C55 70 67 60 80 60 C90 60 97 67 100 73 C103 67 110 60 120 60 C133 60 145 70 145 88 C145 118 100 148 100 148Z"
-        fill="white"
-        opacity={0.95}
-      />
-
-      {/* Medical cross on heart */}
-      <Rect x="93" y="80" width="14" height="38" rx="4" fill="#6C63FF" />
-      <Rect x="82" y="91" width="36" height="14" rx="4" fill="#6C63FF" />
-
-      {/* Small pulse line below heart */}
-      <Path
-        d="M62 162 L76 162 L82 152 L88 172 L94 156 L100 162 L138 162"
-        stroke="rgba(255,255,255,0.7)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
+// App logo image
+const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
 export default function SplashScreen({ navigation }) {
     const { isLoggedIn } = useApp();
@@ -174,7 +142,11 @@ export default function SplashScreen({ navigation }) {
           styles.logoWrap,
           { opacity: logoOpacity, transform: [{ scale: logoScale }] },
         ]}>
-          <AppLogo />
+          <Image 
+            source={appLogo} 
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </Animated.View>
 
         {/* App name */}
@@ -271,6 +243,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
+    overflow: 'hidden',
+  },
+
+  logoImage: {
+    width: 120,
+    height: 120,
   },
 
   appName: {

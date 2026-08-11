@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sus</string>
+	<string>SmartCare PHR</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -35,7 +35,15 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>SmartCare uses your location to find nearby hospitals and clinics.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SmartCare needs access to your camera to take profile pictures and scan documents.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SmartCare needs access to your photos to set your profile picture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>SmartCare needs permission to save images to your photo library.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>SmartCare needs access to save and read medical reports and documents.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
