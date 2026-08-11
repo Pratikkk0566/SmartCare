@@ -5,7 +5,7 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {ArrowBackIcon, FlaskIcon, ShieldIcon, CalendarIcon, BellIcon, DocumentIcon, LockIcon, SunriseIcon, SunIcon, MoonIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, FlaskIcon, ShieldIcon, CalendarIcon, BellIcon, DocumentIcon, LockIcon, SunriseIcon, SunIcon, MoonIcon, CapsuleIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 export default function AboutMedicineScreen({navigation, route}) {
@@ -26,7 +26,7 @@ export default function AboutMedicineScreen({navigation, route}) {
         {/* Medicine Header Card */}
         <View style={styles.medCard}>
           <View style={[styles.medIcon, {backgroundColor: medicine.bgColor || colors.primaryLight}]}>
-            <Text style={styles.medEmoji}>💊</Text>
+            <CapsuleIcon size={28} color={colors.primary} />
           </View>
           <View style={styles.medDetails}>
             <Text style={styles.medName}>{medicine.name}</Text>

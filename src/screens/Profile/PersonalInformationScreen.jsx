@@ -12,6 +12,7 @@ import {useApp} from '../../context/AppContext';
 import {
   ArrowBackIcon, PersonIcon, MailIcon, PhoneIcon,
   CalendarIcon, HeartIcon, PinIcon,
+  WifiOffIcon, RefreshIcon, EditIcon, LockIcon,
 } from '../../assets/icons/Icons';
 
 // ─── Read-only info row ───────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ export default function PersonalInformationScreen({navigation}) {
       {/* ── Offline/Sync Banner ────────────────────────────────── */}
       {!isOnline ? (
         <View style={s.offlineBanner}>
-          <Text style={s.offlineIcon}>📡</Text>
+          <WifiOffIcon size={18} color="#B45309" />
           <View style={s.offlineInfo}>
             <Text style={s.offlineTitle}>No Internet Connection</Text>
             <Text style={s.offlineSub}>
@@ -134,7 +135,7 @@ export default function PersonalInformationScreen({navigation}) {
         </View>
       ) : profileLastUpdated ? (
         <TouchableOpacity style={s.syncBanner} onPress={refreshAllData} activeOpacity={0.85}>
-          <Text style={s.syncIcon}>🔄</Text>
+          <RefreshIcon size={18} color={colors.primary} />
           <View style={s.syncInfo}>
             <Text style={s.syncTitle}>Last updated: {lastUpdatedText}</Text>
             <Text style={s.syncSub}>Tap to refresh now</Text>
@@ -229,14 +230,15 @@ export default function PersonalInformationScreen({navigation}) {
               />
             </View>
           </View>
-          <Text style={s.editNote}>
-            ✏️  Height and weight are stored locally on this device.
-          </Text>
+          <View style={s.editNoteRow}>
+            <EditIcon size={13} color={colors.textMuted} />
+            <Text style={s.editNote}>Height and weight are stored locally on this device.</Text>
+          </View>
         </View>
 
         {/* ── Lock notice ─────────────────────────────────────────── */}
         <View style={s.lockNotice}>
-          <Text style={s.lockIcon}>🔒</Text>
+          <LockIcon size={16} color={colors.textMuted} />
           <Text style={s.lockText}>
             All other information is pulled directly from your hospital records and cannot be edited here. Contact your healthcare provider to update it.
           </Text>
@@ -329,7 +331,8 @@ const s = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   input: {flex: 1, fontSize: 14, color: colors.textPrimary, padding: 0, fontWeight: '600'},
-  editNote: {fontSize: 11, color: colors.textMuted, marginBottom: spacing.sm},
+  editNote:  {fontSize: 11, color: colors.textMuted, marginBottom: spacing.sm},
+  editNoteRow: {flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm},
 
   // Lock notice
   lockNotice: {
@@ -358,8 +361,7 @@ const s = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
   },
   offlineIcon:  {fontSize: 18},
-  offlineInfo:  {flex: 1},
-  offlineTitle: {fontSize: 13, fontWeight: '700', color: '#B45309'},
+  offlineInfo:  {flex: 1},  offlineTitle: {fontSize: 13, fontWeight: '700', color: '#B45309'},
   offlineSub:   {fontSize: 11, color: '#92400E', marginTop: 2},
 
   syncBanner: {

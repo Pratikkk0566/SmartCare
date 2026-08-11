@@ -8,20 +8,24 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, StarIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, StarIcon, PinIcon, HospitalBuildingIcon, VideoIcon, PhoneIcon, StethoscopeIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon} from '../../assets/icons/Icons';
 
 const {width: SW} = Dimensions.get('window');
 
-// Local specialties for colour/emoji lookup
+// Local specialties for colour/icon lookup
+const SPEC_ICON_MAP = {
+  StethoscopeIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon,
+};
+
 const SPECIALTIES = [
-  {name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF'},
-  {name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2'},
-  {name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE'},
-  {name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7'},
-  {name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7'},
-  {name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF'},
-  {name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3'},
-  {name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1'},
+  {name: 'General Physician', iconKey: 'StethoscopeIcon', color: '#6C63FF', bgColor: '#EEE9FF'},
+  {name: 'Cardiologist',      iconKey: 'HeartIcon',       color: '#EF4444', bgColor: '#FEE2E2'},
+  {name: 'Dentist',           iconKey: 'ToothIcon',       color: '#3B82F6', bgColor: '#DBEAFE'},
+  {name: 'Dermatologist',     iconKey: 'SkinCareIcon',    color: '#22C55E', bgColor: '#DCFCE7'},
+  {name: 'Pediatrician',      iconKey: 'BabyIcon',        color: '#F59E0B', bgColor: '#FEF3C7'},
+  {name: 'Orthopedic',        iconKey: 'BoneIcon',        color: '#8B5CF6', bgColor: '#F5F3FF'},
+  {name: 'Neurologist',       iconKey: 'BrainIcon',       color: '#EC4899', bgColor: '#FCE7F3'},
+  {name: 'ENT Specialist',    iconKey: 'EarIcon',         color: '#14B8A6', bgColor: '#CCFBF1'},
 ];
 
 export default function DoctorProfileScreen({navigation, route}) {
@@ -65,7 +69,7 @@ export default function DoctorProfileScreen({navigation, route}) {
 
           <Text style={s.heroName}>{d.name}</Text>
           <Text style={[s.heroSpec, {color: spec?.color || colors.primary}]}>
-            {spec?.emoji || '🩺'}  {d.specialty}
+            {d.specialty}
           </Text>
           <Text style={s.heroQual}>{d.qualifications}</Text>
 
@@ -91,7 +95,7 @@ export default function DoctorProfileScreen({navigation, route}) {
         {/* ── Availability ── */}
         <View style={s.section}>
           <View style={[s.availCard, {backgroundColor: isToday ? colors.successLight : colors.warningLight}]}>
-            <Text style={{fontSize: 20}}>{isToday ? '🟢' : '🟡'}</Text>
+            <View style={[s.availDot, {backgroundColor: isToday ? colors.success : colors.warning}]} />
             <View style={{flex: 1}}>
               <Text style={[s.availTitle, {color: isToday ? colors.success : colors.warning}]}>
                 {d.availability}
@@ -114,7 +118,7 @@ export default function DoctorProfileScreen({navigation, route}) {
           <Text style={s.sectionTitle}>Clinic Information</Text>
           <View style={s.card}>
             <View style={s.clinicRow}>
-              <Text style={{fontSize: 22}}>🏥</Text>
+              <HospitalBuildingIcon size={22} color={colors.primary} />
               <View style={{flex: 1}}>
                 <Text style={s.clinicName}>{d.clinic}</Text>
                 <Text style={s.clinicAddr}>{d.clinicAddress}</Text>
@@ -139,11 +143,11 @@ export default function DoctorProfileScreen({navigation, route}) {
         <View style={s.section}>
           <Text style={s.sectionTitle}>Consultation Fees</Text>
           <View style={s.card}>
-            <FeeRow emoji="🏥" label="In-Clinic Visit"   fee={d.consultationFee} />
+            <FeeRow icon={HospitalBuildingIcon} label="In-Clinic Visit"   fee={d.consultationFee} />
             <View style={s.feeDivider} />
-            <FeeRow emoji="📹" label="Video Consult"     fee={d.videoFee} tag="20% off" />
+            <FeeRow icon={VideoIcon}           label="Video Consult"     fee={d.videoFee} tag="20% off" />
             <View style={s.feeDivider} />
-            <FeeRow emoji="📞" label="Audio Call"        fee={d.audioFee} tag="30% off" />
+            <FeeRow icon={PhoneIcon}           label="Audio Call"        fee={d.audioFee} tag="30% off" />
           </View>
         </View>
 
@@ -184,10 +188,12 @@ const sb = StyleSheet.create({
   label:     {fontSize: 11, color: colors.textSecondary, marginTop: 3, textAlign: 'center'},
 });
 
-function FeeRow({emoji, label, fee, tag}) {
+function FeeRow({icon: Icon, label, fee, tag}) {
   return (
     <View style={fr.row}>
-      <Text style={fr.emoji}>{emoji}</Text>
+      <View style={fr.iconWrap}>
+        <Icon size={18} color={colors.primary} />
+      </View>
       <Text style={fr.label}>{label}</Text>
       {tag && (
         <View style={fr.tagBadge}>
@@ -200,7 +206,7 @@ function FeeRow({emoji, label, fee, tag}) {
 }
 const fr = StyleSheet.create({
   row:      {flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.sm},
-  emoji:    {fontSize: 18, width: 28},
+  iconWrap: {width: 28, alignItems: 'center'},
   label:    {flex: 1, fontSize: 13, color: colors.textPrimary, fontWeight: '500'},
   tagBadge: {backgroundColor: colors.successLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.full},
   tagText:  {fontSize: 10, fontWeight: '700', color: colors.success},
@@ -235,6 +241,7 @@ const s = StyleSheet.create({
   card:       {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, ...shadows.sm},
 
   availCard:  {flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.base, borderRadius: radius.lg},
+  availDot:   {width: 14, height: 14, borderRadius: 7},
   availTitle: {fontSize: 14, fontWeight: '800'},
   availNext:  {fontSize: 12, color: colors.textSecondary, marginTop: 2},
 

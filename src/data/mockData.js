@@ -169,14 +169,14 @@ export const appointmentHistory = [
 // ─── Specialties ──────────────────────────────────────────────────────────────
 
 export const specialties = [
-  {id: 's1', name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF', doctorCount: 24, nextAvailable: 'Today'},
-  {id: 's2', name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2', doctorCount: 12, nextAvailable: 'Tomorrow'},
-  {id: 's3', name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE', doctorCount: 18, nextAvailable: 'Today'},
-  {id: 's4', name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7', doctorCount: 15, nextAvailable: 'Today'},
-  {id: 's5', name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7', doctorCount: 20, nextAvailable: 'Today'},
-  {id: 's6', name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF', doctorCount: 10, nextAvailable: 'Tomorrow'},
-  {id: 's7', name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3', doctorCount: 8,  nextAvailable: 'Today'},
-  {id: 's8', name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1', doctorCount: 11, nextAvailable: 'Today'},
+  {id: 's1', name: 'General Physician', iconKey: 'StethoscopeIcon', color: '#6C63FF', bgColor: '#EEE9FF', doctorCount: 24, nextAvailable: 'Today'},
+  {id: 's2', name: 'Cardiologist',      iconKey: 'HeartIcon',       color: '#EF4444', bgColor: '#FEE2E2', doctorCount: 12, nextAvailable: 'Tomorrow'},
+  {id: 's3', name: 'Dentist',           iconKey: 'ToothIcon',       color: '#3B82F6', bgColor: '#DBEAFE', doctorCount: 18, nextAvailable: 'Today'},
+  {id: 's4', name: 'Dermatologist',     iconKey: 'SkinIcon',        color: '#22C55E', bgColor: '#DCFCE7', doctorCount: 15, nextAvailable: 'Today'},
+  {id: 's5', name: 'Pediatrician',      iconKey: 'BabyIcon',        color: '#F59E0B', bgColor: '#FEF3C7', doctorCount: 20, nextAvailable: 'Today'},
+  {id: 's6', name: 'Orthopedic',        iconKey: 'BoneIcon',        color: '#8B5CF6', bgColor: '#F5F3FF', doctorCount: 10, nextAvailable: 'Tomorrow'},
+  {id: 's7', name: 'Neurologist',       iconKey: 'BrainIcon',       color: '#EC4899', bgColor: '#FCE7F3', doctorCount: 8,  nextAvailable: 'Today'},
+  {id: 's8', name: 'ENT Specialist',    iconKey: 'EarIcon',         color: '#14B8A6', bgColor: '#CCFBF1', doctorCount: 11, nextAvailable: 'Today'},
 ];
 
 // ─── Doctors ──────────────────────────────────────────────────────────────────
@@ -355,12 +355,12 @@ export const doctors = [
 // ─── Investigation Booking Data ───────────────────────────────────────────────
 
 export const testCategories = [
-  {id: 'tc1', name: 'Full Body\nCheckup',  emoji: '🏥', color: '#6C63FF', bg: '#EEE9FF'},
-  {id: 'tc2', name: 'Blood Tests',          emoji: '🩸', color: '#EF4444', bg: '#FEE2E2'},
-  {id: 'tc3', name: 'Urine &\nBiopsy',      emoji: '🧪', color: '#3B82F6', bg: '#DBEAFE'},
-  {id: 'tc4', name: 'Imaging\nTests',       emoji: '🫁', color: '#8B5CF6', bg: '#F5F3FF'},
-  {id: 'tc5', name: 'Cardiac\nTests',       emoji: '❤️', color: '#EF4444', bg: '#FEE2E2'},
-  {id: 'tc6', name: 'Popular\nPackages',    emoji: '⭐', color: '#F59E0B', bg: '#FEF3C7'},
+  {id: 'tc1', name: 'Full Body\nCheckup',  iconKey: 'HospitalBuildingIcon', color: '#6C63FF', bg: '#EEE9FF'},
+  {id: 'tc2', name: 'Blood Tests',          iconKey: 'BloodDropIcon',        color: '#EF4444', bg: '#FEE2E2'},
+  {id: 'tc3', name: 'Urine &\nBiopsy',      iconKey: 'FlaskIcon',            color: '#3B82F6', bg: '#DBEAFE'},
+  {id: 'tc4', name: 'Imaging\nTests',       iconKey: 'LungsIcon',            color: '#8B5CF6', bg: '#F5F3FF'},
+  {id: 'tc5', name: 'Cardiac\nTests',       iconKey: 'HeartRateIcon',        color: '#EF4444', bg: '#FEE2E2'},
+  {id: 'tc6', name: 'Popular\nPackages',    iconKey: 'StarFilledIcon',       color: '#F59E0B', bg: '#FEF3C7'},
 ];
 
 export const availableTests = [
@@ -370,7 +370,7 @@ export const availableTests = [
     reportTime: 'Within 24 hours', availableAt: 12,
     sampleType: 'Blood',
     sampleInstructions: 'A small blood sample will be drawn from a vein in your arm by a trained technician.',
-    emoji: '☀️', color: '#F59E0B', bg: '#FEF3C7',
+    iconKey: 'SunIcon', color: '#F59E0B', bg: '#FEF3C7',
   },
   {
     id: 't2', name: 'Complete Blood Count (CBC)', category: 'Blood Tests',
@@ -378,7 +378,7 @@ export const availableTests = [
     reportTime: 'Within 12 hours', availableAt: 15,
     sampleType: 'Blood',
     sampleInstructions: 'Blood drawn from a vein in your arm. Takes less than 5 minutes.',
-    emoji: '🩸', color: '#EF4444', bg: '#FEE2E2',
+    iconKey: 'BloodDropIcon', color: '#EF4444', bg: '#FEE2E2',
   },
   {
     id: 't3', name: 'Vitamin B12 Test', category: 'Blood Tests',
@@ -386,7 +386,7 @@ export const availableTests = [
     reportTime: 'Within 24 hours', availableAt: 10,
     sampleType: 'Blood',
     sampleInstructions: 'A blood sample will be collected from your arm vein.',
-    emoji: '💊', color: '#8B5CF6', bg: '#F5F3FF',
+    iconKey: 'CapsuleIcon', color: '#8B5CF6', bg: '#F5F3FF',
   },
   {
     id: 't4', name: 'Lipid Profile', category: 'Blood Tests',
@@ -394,7 +394,7 @@ export const availableTests = [
     reportTime: 'Within 24 hours', availableAt: 11,
     sampleType: 'Blood',
     sampleInstructions: 'Blood drawn after 9–12 hours of fasting. Water is allowed.',
-    emoji: '💉', color: '#3B82F6', bg: '#DBEAFE',
+    iconKey: 'SyringeIcon', color: '#3B82F6', bg: '#DBEAFE',
   },
   {
     id: 't5', name: 'Thyroid Profile (T3, T4, TSH)', category: 'Blood Tests',
@@ -402,7 +402,7 @@ export const availableTests = [
     reportTime: 'Within 24 hours', availableAt: 14,
     sampleType: 'Blood',
     sampleInstructions: 'Blood sample collected from arm vein. No special prep needed.',
-    emoji: '🦋', color: '#22C55E', bg: '#DCFCE7',
+    iconKey: 'LungsIcon', color: '#22C55E', bg: '#DCFCE7',
   },
   {
     id: 't6', name: 'HbA1c (Glycated Hemoglobin)', category: 'Blood Tests',
@@ -410,7 +410,7 @@ export const availableTests = [
     reportTime: 'Within 24 hours', availableAt: 12,
     sampleType: 'Blood',
     sampleInstructions: 'A small blood sample drawn from a vein. No special preparation needed.',
-    emoji: '🩺', color: '#F59E0B', bg: '#FEF3C7',
+    iconKey: 'StethoscopeIcon', color: '#F59E0B', bg: '#FEF3C7',
   },
   {
     id: 't7', name: 'Urine Routine Analysis', category: 'Urine & Biopsy',
@@ -418,7 +418,7 @@ export const availableTests = [
     reportTime: 'Within 6 hours', availableAt: 18,
     sampleType: 'Urine',
     sampleInstructions: 'Collect mid-stream morning urine in the sterile container provided at the centre.',
-    emoji: '🧪', color: '#3B82F6', bg: '#DBEAFE',
+    iconKey: 'FlaskIcon', color: '#3B82F6', bg: '#DBEAFE',
   },
   {
     id: 't8', name: 'Chest X-Ray', category: 'Imaging Tests',
@@ -426,7 +426,7 @@ export const availableTests = [
     reportTime: 'Same day', availableAt: 8,
     sampleType: 'Imaging',
     sampleInstructions: 'No sample collection needed. Visit the radiology department at your scheduled time.',
-    emoji: '🫁', color: '#6C63FF', bg: '#EEE9FF',
+    iconKey: 'LungsIcon', color: '#6C63FF', bg: '#EEE9FF',
   },
   {
     id: 't9', name: 'Full Body Checkup', category: 'Full Body Checkup',
@@ -434,7 +434,7 @@ export const availableTests = [
     reportTime: 'Within 48 hours', availableAt: 6,
     sampleType: 'Blood & Urine',
     sampleInstructions: 'Blood and urine samples collected at the centre after 10–12 hours of fasting.',
-    emoji: '🏥', color: '#6C63FF', bg: '#EEE9FF',
+    iconKey: 'HospitalBuildingIcon', color: '#6C63FF', bg: '#EEE9FF',
   },
   {
     id: 't10', name: 'ECG (Electrocardiogram)', category: 'Cardiac Tests',
@@ -442,34 +442,34 @@ export const availableTests = [
     reportTime: 'Immediate', availableAt: 10,
     sampleType: 'No Sample Needed',
     sampleInstructions: 'No sample needed. Small electrode pads placed on your chest and limbs for the reading.',
-    emoji: '❤️', color: '#EF4444', bg: '#FEE2E2',
+    iconKey: 'HeartRateIcon', color: '#EF4444', bg: '#FEE2E2',
   },
 ];
 
 export const diagnosticCenters = [
   {
-    id: 'dc1', name: 'Apollo Hospital', logo: '🏥',
+    id: 'dc1', name: 'Apollo Hospital', logoKey: 'HospitalBuildingIcon', logoColor: '#6C63FF',
     rating: 4.6, reviews: 11200, distance: '2.3 km away',
     address: '21 Greams Lane, Off Greams Road, Thousand Lights, Chennai – 600006',
     homeCollection: true, homeCollectionCharge: 50,
     nextSlot: 'Today, 10:00 AM', openHours: '07:00 AM – 09:00 PM',
   },
   {
-    id: 'dc2', name: 'XYZ Diagnostic Center', logo: '🔬',
+    id: 'dc2', name: 'XYZ Diagnostic Center', logoKey: 'MicroscopeIcon', logoColor: '#3B82F6',
     rating: 4.3, reviews: 860, distance: '1.8 km away',
     address: 'Shop 4, Sunrise Complex, MG Road, Pune – 411001',
     homeCollection: false, homeCollectionCharge: 0,
     nextSlot: 'Tomorrow, 10:00 AM', openHours: '08:00 AM – 08:00 PM',
   },
   {
-    id: 'dc3', name: 'City Care Hospital', logo: '🏨',
+    id: 'dc3', name: 'City Care Hospital', logoKey: 'HospitalIcon', logoColor: '#22C55E',
     rating: 4.2, reviews: 643, distance: '3.1 km away',
     address: 'Near Railway Station, Civil Lines, Nagpur – 440001',
     homeCollection: true, homeCollectionCharge: 80,
     nextSlot: 'Today, 06:00 PM', openHours: '06:00 AM – 10:00 PM',
   },
   {
-    id: 'dc4', name: 'Metro Labs', logo: '⚗️',
+    id: 'dc4', name: 'Metro Labs', logoKey: 'BeakerIcon', logoColor: '#8B5CF6',
     rating: 4.8, reviews: 3200, distance: '4.5 km away',
     address: 'B-14, Sector 18, Noida – 201301, Uttar Pradesh',
     homeCollection: true, homeCollectionCharge: 0,

@@ -6,7 +6,7 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, CalendarIcon, ChevronDownIcon, SunriseIcon, SunIcon, MoonIcon, InfoIcon, SearchIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, CalendarIcon, ChevronDownIcon, SunriseIcon, SunIcon, MoonIcon, InfoIcon, SearchIcon, CapsuleIcon, HeartRateIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 const PERIOD_ICONS  = {morning: SunriseIcon, afternoon: SunIcon, night: MoonIcon};
@@ -93,7 +93,10 @@ export default function MedicineScheduleScreen({navigation}) {
           </View>
           <View style={styles.streakDivider} />
           <View style={styles.streakItem}>
-            <Text style={[styles.streakNum, {color: colors.warning}]}>🔥 {streak}</Text>
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+              <HeartRateIcon size={18} color={colors.warning} />
+              <Text style={[styles.streakNum, {color: colors.warning}]}>{streak}</Text>
+            </View>
             <Text style={styles.streakLabel}>Doses Streak</Text>
           </View>
         </View>
@@ -133,7 +136,7 @@ export default function MedicineScheduleScreen({navigation}) {
             <View key={med.id} style={styles.medCard}>
               <View style={styles.medHeader}>
                 <View style={[styles.medIcon, {backgroundColor: med.bgColor}]}>
-                  <Text style={styles.medIconText}>💊</Text>
+                  <CapsuleIcon size={22} color={colors.primary} />
                 </View>
                 <View style={styles.medInfo}>
                   <Text style={styles.medName}>{med.name}</Text>
@@ -195,6 +198,7 @@ const styles = StyleSheet.create({
   },
   streakItem:    {flex: 1, alignItems: 'center', gap: 4},
   streakNum:     {fontSize: 20, fontWeight: '800', color: colors.primary},
+  streakNumText: {fontSize: 20, fontWeight: '800'},
   streakLabel:   {fontSize: 11, color: colors.textMuted, textAlign: 'center'},
   streakDivider: {width: 1, height: 36, backgroundColor: colors.border},
 

@@ -15,6 +15,9 @@ ArrowBackIcon,
   ToothIcon,
   SkinIcon,
   BoneIcon,
+  BrainIcon,
+  BabyIcon,
+  EarIcon,
   CheckCircleIcon,
   StarIcon,
   CalendarIcon,
@@ -23,20 +26,26 @@ ArrowBackIcon,
   PhoneIcon,
   CameraIcon,
   ClipboardIcon,
+  HospitalBuildingIcon,
+  VideoIcon,
+  BoltIcon,
+  BankIcon,
+  CashIcon,
+  WalletIcon,
 } from '../../assets/icons/Icons';
 
 const {width: SW} = Dimensions.get('window');
 
 // ─── Local specialties constant (no API endpoint) ─────────────────────────────
 const SPECIALTIES = [
-  {id: 's1', name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's2', name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's3', name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's4', name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's5', name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's6', name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's7', name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3', doctorCount: 0, nextAvailable: 'Today'},
-  {id: 's8', name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's1', name: 'General Physician', Icon: StethoscopeIcon, color: '#6C63FF', bgColor: '#EEE9FF', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's2', name: 'Cardiologist',      Icon: HeartIcon,       color: '#EF4444', bgColor: '#FEE2E2', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's3', name: 'Dentist',           Icon: ToothIcon,       color: '#3B82F6', bgColor: '#DBEAFE', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's4', name: 'Dermatologist',     Icon: SkinIcon,        color: '#22C55E', bgColor: '#DCFCE7', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's5', name: 'Pediatrician',      Icon: BabyIcon,        color: '#F59E0B', bgColor: '#FEF3C7', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's6', name: 'Orthopedic',        Icon: BoneIcon,        color: '#8B5CF6', bgColor: '#F5F3FF', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's7', name: 'Neurologist',       Icon: BrainIcon,       color: '#EC4899', bgColor: '#FCE7F3', doctorCount: 0, nextAvailable: 'Today'},
+  {id: 's8', name: 'ENT Specialist',    Icon: EarIcon,         color: '#14B8A6', bgColor: '#CCFBF1', doctorCount: 0, nextAvailable: 'Today'},
 ];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -45,16 +54,16 @@ const STEP_LABELS = ['Specialty', 'Doctor', 'Date & Time', 'Visit Type', 'Review
 const TOTAL_STEPS = 6;
 
 const VISIT_TYPES = [
-  {id: 'clinic',  label: 'In-Clinic',      emoji: '🏥', desc: 'Visit the doctor in person', discountPct: 0},
-  {id: 'video',   label: 'Video Consult',   emoji: '📹', desc: 'HD video call consultation',  discountPct: 20},
-  {id: 'audio',   label: 'Audio Call',      emoji: '📞', desc: 'Consult over a phone call',   discountPct: 30},
+  {id: 'clinic',  label: 'In-Clinic',      Icon: HospitalBuildingIcon, desc: 'Visit the doctor in person', discountPct: 0},
+  {id: 'video',   label: 'Video Consult',   Icon: VideoIcon,            desc: 'HD video call consultation',  discountPct: 20},
+  {id: 'audio',   label: 'Audio Call',      Icon: PhoneIcon,            desc: 'Consult over a phone call',   discountPct: 30},
 ];
 
 const PAYMENT_METHODS = [
-  {id: 'upi',        label: 'UPI',                    sub: 'Google Pay · PhonePe · Paytm', emoji: '⚡'},
-  {id: 'card',       label: 'Credit / Debit Card',    sub: 'Visa · Mastercard · RuPay',    emoji: '💳'},
-  {id: 'netbanking', label: 'Net Banking',            sub: 'All major banks supported',    emoji: '🏦'},
-  {id: 'cash',       label: 'Cash at Clinic',         sub: 'Pay when you visit',           emoji: '💵'},
+  {id: 'upi',        label: 'UPI',                    sub: 'Google Pay · PhonePe · Paytm', Icon: BoltIcon},
+  {id: 'card',       label: 'Credit / Debit Card',    sub: 'Visa · Mastercard · RuPay',    Icon: WalletIcon},
+  {id: 'netbanking', label: 'Net Banking',            sub: 'All major banks supported',    Icon: BankIcon},
+  {id: 'cash',       label: 'Cash at Clinic',         sub: 'Pay when you visit',           Icon: CashIcon},
 ];
 
 const MORNING   = ['08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM'];
@@ -363,7 +372,7 @@ export default function AppointmentBookingScreen({navigation, route}) {
             <Text style={s.stepSub}>Select the type of doctor you need to consult.</Text>
             <View style={s.specGrid}>
               {SPECIALTIES.map(sp => {
-                const Icon    = SPECIALTY_ICONS[sp.name] || StethoscopeIcon;
+                const Icon    = sp.Icon;
                 const selected = selectedSpec?.id === sp.id;
                 return (
                   <TouchableOpacity
@@ -410,7 +419,10 @@ export default function AppointmentBookingScreen({navigation, route}) {
                         <Text style={[s.availText, {color: colors.success}]}>{d.availability || 'Available'}</Text>
                       </View>
                     </View>
-                    <Text style={s.doctorClinic}>📍 {d.clinic}</Text>
+                    <View style={s.doctorClinicRow}>
+                      <PinIcon size={11} color={colors.textMuted} />
+                      <Text style={s.doctorClinic}>{d.clinic}</Text>
+                    </View>
                   </View>
                   <View style={s.doctorFeeCol}>
                     <Text style={s.doctorFee}>₹{d.consultationFee}</Text>
@@ -502,7 +514,9 @@ export default function AppointmentBookingScreen({navigation, route}) {
                   style={[s.visitCard, selected && s.visitCardSelected]}
                   onPress={() => setVisitType(vt.id)}
                   activeOpacity={0.8}>
-                  <Text style={s.visitEmoji}>{vt.emoji}</Text>
+                  <View style={[s.visitIconWrap, selected && s.visitIconWrapActive]}>
+                    <vt.Icon size={22} color={selected ? colors.primary : colors.textSecondary} />
+                  </View>
                   <View style={s.visitInfo}>
                     <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
                       <Text style={[s.visitLabel, selected && {color: colors.primary}]}>{vt.label}</Text>
@@ -541,7 +555,10 @@ export default function AppointmentBookingScreen({navigation, route}) {
                 <View style={{flex: 1}}>
                   <Text style={s.reviewDoctorName}>{doctor?.name}</Text>
                   <Text style={s.reviewDoctorSpec}>{doctor?.specialty}</Text>
-                  <Text style={s.reviewClinic}>📍 {doctor?.clinic}</Text>
+                  <View style={s.reviewClinicRow}>
+                    <PinIcon size={11} color={colors.textMuted} />
+                    <Text style={s.reviewClinic}>{doctor?.clinic}</Text>
+                  </View>
                 </View>
                 <StarRating rating={doctor?.rating || 0} />
               </View>
@@ -550,10 +567,10 @@ export default function AppointmentBookingScreen({navigation, route}) {
             {/* Appointment details */}
             <View style={s.reviewCard}>
               <Text style={s.reviewCardTitle}>Appointment Details</Text>
-              <ReviewRow icon="📅" label="Date"       value={dateObj?.fullDate} />
-              <ReviewRow icon="🕐" label="Time"       value={selectedTime} />
-              <ReviewRow icon={vt?.emoji} label="Visit Type" value={vt?.label} />
-              <ReviewRow icon="📍" label="Location"   value={vt?.id === 'clinic' ? doctor?.clinic : 'Online'} />
+              <ReviewRow icon={CalendarIcon}  label="Date"       value={dateObj?.fullDate} />
+              <ReviewRow icon={ClockIcon}     label="Time"       value={selectedTime} />
+              <ReviewRow icon={vt?.Icon}      label="Visit Type" value={vt?.label} />
+              <ReviewRow icon={PinIcon}       label="Location"   value={vt?.id === 'clinic' ? doctor?.clinic : 'Online'} />
             </View>
 
             {/* Fare breakdown */}
@@ -592,7 +609,9 @@ export default function AppointmentBookingScreen({navigation, route}) {
                   style={[s.payCard, selected && s.payCardSelected]}
                   onPress={() => setPaymentMethod(pm.id)}
                   activeOpacity={0.8}>
-                  <Text style={s.payEmoji}>{pm.emoji}</Text>
+                  <View style={[s.payIconWrap, selected && s.payIconWrapActive]}>
+                    <pm.Icon size={22} color={selected ? colors.primary : colors.textSecondary} />
+                  </View>
                   <View style={s.payInfo}>
                     <Text style={[s.payLabel, selected && {color: colors.primary}]}>{pm.label}</Text>
                     <Text style={s.paySub}>{pm.sub}</Text>
@@ -662,20 +681,22 @@ const tg = StyleSheet.create({
   slotTextSelected:{color: '#fff'},
 });
 
-function ReviewRow({icon, label, value}) {
+function ReviewRow({icon: Icon, label, value}) {
   return (
     <View style={rr.row}>
-      <Text style={rr.icon}>{icon}</Text>
+      <View style={rr.iconWrap}>
+        <Icon size={15} color={colors.textSecondary} />
+      </View>
       <Text style={rr.label}>{label}</Text>
       <Text style={rr.value}>{value}</Text>
     </View>
   );
 }
 const rr = StyleSheet.create({
-  row:   {flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: spacing.sm},
-  icon:  {fontSize: 15, width: 22},
-  label: {flex: 1, fontSize: 13, color: colors.textSecondary},
-  value: {fontSize: 13, fontWeight: '600', color: colors.textPrimary, textAlign: 'right', flex: 1},
+  row:    {flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: spacing.sm},
+  iconWrap: {width: 22, alignItems: 'center'},
+  label:  {flex: 1, fontSize: 13, color: colors.textSecondary},
+  value:  {fontSize: 13, fontWeight: '600', color: colors.textPrimary, textAlign: 'right', flex: 1},
 });
 
 function ConfirmRow({label, value, highlight}) {
@@ -722,6 +743,7 @@ const s = StyleSheet.create({
   doctorReviews:      {fontSize: 11, color: colors.textMuted},
   availBadge:         {paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.full},
   availText:          {fontSize: 10, fontWeight: '700'},
+  doctorClinicRow:    {flexDirection: 'row', alignItems: 'center', gap: 4},
   doctorClinic:       {fontSize: 11, color: colors.textMuted},
   doctorFeeCol:       {alignItems: 'flex-end', gap: 2},
   doctorFee:          {fontSize: 16, fontWeight: '800', color: colors.primary},
@@ -740,7 +762,8 @@ const s = StyleSheet.create({
   // Visit type
   visitCard:        {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.md, ...shadows.sm, borderWidth: 2, borderColor: 'transparent', gap: spacing.md, position: 'relative'},
   visitCardSelected:{borderColor: colors.primary, backgroundColor: colors.primaryLight},
-  visitEmoji:       {fontSize: 30},
+  visitIconWrap:    {width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background},
+  visitIconWrapActive:{width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22'},
   visitInfo:        {flex: 1},
   visitLabel:       {fontSize: 15, fontWeight: '800', color: colors.textPrimary, marginBottom: 3},
   visitDesc:        {fontSize: 12, color: colors.textSecondary},
@@ -756,7 +779,8 @@ const s = StyleSheet.create({
   reviewCardTitle:  {fontSize: 12, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.sm},
   reviewDoctorName: {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
   reviewDoctorSpec: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
-  reviewClinic:     {fontSize: 11, color: colors.textMuted, marginTop: 3},
+  reviewClinicRow:  {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3},
+  reviewClinic:     {fontSize: 11, color: colors.textMuted},
   fareRow:          {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6},
   fareLabel:        {fontSize: 13, color: colors.textSecondary},
   fareVal:          {fontSize: 13, fontWeight: '600', color: colors.textPrimary},
@@ -765,7 +789,8 @@ const s = StyleSheet.create({
   // Payment
   payCard:          {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.md, ...shadows.sm, borderWidth: 2, borderColor: 'transparent', gap: spacing.md},
   payCardSelected:  {borderColor: colors.primary},
-  payEmoji:         {fontSize: 26},
+  payIconWrap:      {width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background},
+  payIconWrapActive:{width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22'},
   payInfo:          {flex: 1},
   payLabel:         {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
   paySub:           {fontSize: 11, color: colors.textMuted, marginTop: 2},

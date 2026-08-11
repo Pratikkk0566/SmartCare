@@ -25,6 +25,9 @@ import InvoicesScreen       from '../screens/Invoices/InvoicesScreen';
 import InvestigationsScreen from '../screens/Investigations/InvestigationsScreen';
 import ProfileScreen        from '../screens/Profile/ProfileScreen';
 
+// Ai Assistant - Full Ai
+import AIAssistantScreen from '../screens/Assistant/AIAssistantScreen';
+
 // Appointments — full booking flow
 import AppointmentsScreen       from '../screens/Appointments/AppointmentsScreen';
 import DoctorSearchScreen       from '../screens/Appointments/DoctorSearchScreen';
@@ -161,6 +164,7 @@ export default function AppNavigator() {
         {/* App */}
         <Stack.Screen name="MainTabs"      component={MainTabs} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="AIAssistant"   component={AIAssistantScreen}/>
 
         {/* Appointment booking flow */}
         <Stack.Screen name="Appointments"       component={AppointmentsScreen} />

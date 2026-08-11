@@ -6,7 +6,18 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {testCategories, availableTests} from '../../data/mockData';
-import {ArrowBackIcon, SearchIcon, ArrowRightIcon, FlaskIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, SearchIcon, ArrowRightIcon, FlaskIcon, HospitalBuildingIcon, BloodDropIcon, LungsIcon, HeartRateIcon, StarFilledIcon, SyringeIcon, CapsuleIcon, SunIcon, StethoscopeIcon, MicroscopeIcon} from '../../assets/icons/Icons';
+
+// Maps iconKey strings from mockData to actual icon components
+const ICON_MAP = {
+  HospitalBuildingIcon, BloodDropIcon, FlaskIcon, LungsIcon,
+  HeartRateIcon, StarFilledIcon, SyringeIcon, CapsuleIcon,
+  SunIcon, StethoscopeIcon, MicroscopeIcon,
+};
+function TestIcon({iconKey, size, color}) {
+  const Comp = ICON_MAP[iconKey] || FlaskIcon;
+  return <Comp size={size} color={color} />;
+}
 
 function StepBar({current}) {
   const steps = ['Select Test', 'Hospital', 'Date & Time', 'Confirmed'];
@@ -107,7 +118,7 @@ export default function InvestigationRequestScreen({navigation}) {
               style={[styles.catCard, selectedCategory === c.name.replace('\n', ' ') && styles.catCardSelected, {borderColor: c.color + '60'}]}
               onPress={() => setSelectedCategory(prev => (prev === c.name.replace('\n', ' ') ? null : c.name.replace('\n', ' ')))}>
               <View style={[styles.catEmojiBg, {backgroundColor: c.bg}]}>
-                <Text style={styles.catEmoji}>{c.emoji}</Text>
+                <TestIcon iconKey={c.iconKey} size={20} color={c.color} />
               </View>
               <Text style={[styles.catName, {color: c.color}]} numberOfLines={2}>{c.name}</Text>
             </TouchableOpacity>
@@ -133,13 +144,13 @@ export default function InvestigationRequestScreen({navigation}) {
               onPress={() => navigation.navigate('SelectHospital', {test})}
               activeOpacity={0.85}>
               <View style={[styles.testEmojiBg, {backgroundColor: test.bg}]}>
-                <Text style={styles.testEmoji}>{test.emoji}</Text>
+                <TestIcon iconKey={test.iconKey} size={26} color={test.color} />
               </View>
               <View style={styles.testInfo}>
                 <Text style={styles.testName}>{test.name}</Text>
-                <Text style={styles.testMeta}>🧫 Sample: {test.sampleType}</Text>
-                <Text style={styles.testMeta}>📋 {test.preparation}</Text>
-                <Text style={styles.testMeta}>📄 Report: {test.reportTime}</Text>
+                <Text style={styles.testMeta}>Sample: {test.sampleType}</Text>
+                <Text style={styles.testMeta}>{test.preparation}</Text>
+                <Text style={styles.testMeta}>Report: {test.reportTime}</Text>
               </View>
               <View style={styles.testRight}>
                 <Text style={styles.testPrice}>₹{test.price}</Text>
@@ -183,7 +194,6 @@ const styles = StyleSheet.create({
   },
   catCardSelected: {borderColor: colors.primary},
   catEmojiBg: {width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: 4},
-  catEmoji: {fontSize: 20},
   catName: {fontSize: 9, fontWeight: '700', textAlign: 'center', lineHeight: 13},
   testCard: {
     flexDirection: 'row', backgroundColor: colors.surface,
@@ -192,7 +202,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   testEmojiBg: {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
-  testEmoji: {fontSize: 26},
   testInfo: {flex: 1},
   testName: {fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4},
   testMeta: {fontSize: 11, color: colors.textSecondary, marginBottom: 2},

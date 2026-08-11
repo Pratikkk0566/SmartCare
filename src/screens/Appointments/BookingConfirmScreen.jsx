@@ -10,12 +10,12 @@ import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {AppointmentApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, StarIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, StarIcon, CalendarIcon, ClockIcon, PinIcon, WalletIcon, BoltIcon, BankIcon, CashIcon, VideoIcon, PhoneIcon, HospitalBuildingIcon, LockIcon} from '../../assets/icons/Icons';
 
 const VISIT_META = {
-  clinic: {label: 'In-Clinic Visit', emoji: '🏥', feeKey: 'consultationFee'},
-  video:  {label: 'Video Consult',   emoji: '📹', feeKey: 'videoFee',  savePct: 20},
-  audio:  {label: 'Audio Call',      emoji: '📞', feeKey: 'audioFee',  savePct: 30},
+  clinic: {label: 'In-Clinic Visit', Icon: HospitalBuildingIcon, feeKey: 'consultationFee'},
+  video:  {label: 'Video Consult',   Icon: VideoIcon,            feeKey: 'videoFee',  savePct: 20},
+  audio:  {label: 'Audio Call',      Icon: PhoneIcon,            feeKey: 'audioFee',  savePct: 30},
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -44,10 +44,10 @@ function unwrapFirst(payload) {
 }
 
 const PAYMENT_METHODS = [
-  {id: 'upi',        emoji: '⚡', label: 'UPI',                 sub: 'Google Pay · PhonePe · Paytm'},
-  {id: 'card',       emoji: '💳', label: 'Credit / Debit Card', sub: 'Visa · Mastercard · RuPay'},
-  {id: 'netbanking', emoji: '🏦', label: 'Net Banking',         sub: 'All major banks supported'},
-  {id: 'cash',       emoji: '💵', label: 'Cash at Clinic',      sub: 'Pay when you arrive'},
+  {id: 'upi',        Icon: BoltIcon,   label: 'UPI',                 sub: 'Google Pay · PhonePe · Paytm'},
+  {id: 'card',       Icon: WalletIcon, label: 'Credit / Debit Card', sub: 'Visa · Mastercard · RuPay'},
+  {id: 'netbanking', Icon: BankIcon,   label: 'Net Banking',         sub: 'All major banks supported'},
+  {id: 'cash',       Icon: CashIcon,   label: 'Cash at Clinic',      sub: 'Pay when you arrive'},
 ];
 
 export default function BookingConfirmScreen({navigation, route}) {
@@ -241,13 +241,13 @@ export default function BookingConfirmScreen({navigation, route}) {
         {/* ── Appointment details ── */}
         <SectionLabel>Appointment Details</SectionLabel>
         <View style={s.detailCard}>
-          <DetailRow emoji="📅" label="Date"        value={date} />
+          <DetailRow icon={CalendarIcon} label="Date"       value={date} />
           <Divider />
-          <DetailRow emoji="🕐" label="Time"        value={time} />
+          <DetailRow icon={ClockIcon}    label="Time"       value={time} />
           <Divider />
-          <DetailRow emoji={vm.emoji} label="Visit Type" value={vm.label} tag={vm.savePct ? `${vm.savePct}% off` : null} />
+          <DetailRow icon={vm.Icon}      label="Visit Type" value={vm.label} tag={vm.savePct ? `${vm.savePct}% off` : null} />
           <Divider />
-          <DetailRow emoji="📍" label="Location"   value={visitType === 'clinic' ? d.clinic : 'Online consultation'} />
+          <DetailRow icon={PinIcon}      label="Location"   value={visitType === 'clinic' ? d.clinic : 'Online consultation'} />
         </View>
 
         {/* ── Price breakdown ── */}
@@ -281,7 +281,9 @@ export default function BookingConfirmScreen({navigation, route}) {
               style={[s.payCard, active && s.payCardActive]}
               onPress={() => setPaymentMethod(pm.id)}
               activeOpacity={0.85}>
-              <Text style={s.payEmoji}>{pm.emoji}</Text>
+              <View style={[s.payIconWrap, active && s.payIconWrapActive]}>
+                <pm.Icon size={22} color={active ? colors.primary : colors.textSecondary} />
+              </View>
               <View style={s.payInfo}>
                 <Text style={[s.payLabel, active && {color: colors.primary}]}>{pm.label}</Text>
                 <Text style={s.paySub}>{pm.sub}</Text>
@@ -294,9 +296,10 @@ export default function BookingConfirmScreen({navigation, route}) {
         })}
 
         {/* Disclaimer */}
-        <Text style={s.disclaimer}>
-          🔒  Payments are secured and encrypted. Your details are never stored.
-        </Text>
+        <View style={s.disclaimerRow}>
+          <LockIcon size={13} color={colors.textMuted} />
+          <Text style={s.disclaimer}>Payments are secured and encrypted. Your details are never stored.</Text>
+        </View>
 
         <View style={{height: 100}} />
       </ScrollView>
@@ -335,10 +338,12 @@ const sl = StyleSheet.create({
   text: {fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.7, marginTop: spacing.lg, marginBottom: spacing.sm},
 });
 
-function DetailRow({emoji, label, value, tag}) {
+function DetailRow({icon: Icon, label, value, tag}) {
   return (
     <View style={dr.row}>
-      <Text style={dr.emoji}>{emoji}</Text>
+      <View style={dr.iconWrap}>
+        <Icon size={17} color={colors.textSecondary} />
+      </View>
       <Text style={dr.label}>{label}</Text>
       <View style={dr.right}>
         {tag && (
@@ -353,7 +358,7 @@ function DetailRow({emoji, label, value, tag}) {
 }
 const dr = StyleSheet.create({
   row:      {flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm + 2, gap: spacing.sm},
-  emoji:    {fontSize: 17, width: 26},
+  iconWrap: {width: 26, alignItems: 'center'},
   label:    {flex: 1, fontSize: 13, color: colors.textSecondary},
   right:    {flexDirection: 'row', alignItems: 'center', gap: 6},
   tagBadge: {backgroundColor: colors.successLight, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.full},
@@ -410,17 +415,19 @@ const s = StyleSheet.create({
   priceDivider:{height: 1, backgroundColor: colors.border, marginVertical: spacing.sm},
 
   // Payment
-  payCard:      {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.sm, ...shadows.sm, borderWidth: 2, borderColor: 'transparent', gap: spacing.md},
-  payCardActive:{borderColor: colors.primary},
-  payEmoji:     {fontSize: 26},
-  payInfo:      {flex: 1},
-  payLabel:     {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
-  paySub:       {fontSize: 11, color: colors.textMuted, marginTop: 2},
-  radio:        {width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center'},
-  radioActive:  {borderColor: colors.primary},
-  radioDot:     {width: 11, height: 11, borderRadius: 6, backgroundColor: colors.primary},
+  payCard:         {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.sm, ...shadows.sm, borderWidth: 2, borderColor: 'transparent', gap: spacing.md},
+  payCardActive:   {borderColor: colors.primary},
+  payIconWrap:     {width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center'},
+  payIconWrapActive:{width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center'},
+  payInfo:         {flex: 1},
+  payLabel:        {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
+  paySub:          {fontSize: 11, color: colors.textMuted, marginTop: 2},
+  radio:           {width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center'},
+  radioActive:     {borderColor: colors.primary},
+  radioDot:        {width: 11, height: 11, borderRadius: 6, backgroundColor: colors.primary},
 
-  disclaimer:  {fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md, lineHeight: 18},
+  disclaimerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.md},
+  disclaimer:    {fontSize: 12, color: colors.textMuted, lineHeight: 18},
 
   // Footer
   footer:           {position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, padding: spacing.base, paddingBottom: spacing['2xl'], borderTopWidth: 1, borderTopColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: spacing.base},

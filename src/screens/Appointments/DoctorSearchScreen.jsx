@@ -9,18 +9,18 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, SearchIcon, StarIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, SearchIcon, StarIcon, PinIcon, StethoscopeIcon, HeartIcon, ToothIcon, SkinIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, CheckIcon, SortIcon} from '../../assets/icons/Icons';
 
 // Local specialties constant — no API endpoint for this
 const specialties = [
-  {id: 's1', name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF'},
-  {id: 's2', name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2'},
-  {id: 's3', name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE'},
-  {id: 's4', name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7'},
-  {id: 's5', name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7'},
-  {id: 's6', name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF'},
-  {id: 's7', name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3'},
-  {id: 's8', name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1'},
+  {id: 's1', name: 'General Physician', Icon: StethoscopeIcon, color: '#6C63FF', bgColor: '#EEE9FF'},
+  {id: 's2', name: 'Cardiologist',      Icon: HeartIcon,       color: '#EF4444', bgColor: '#FEE2E2'},
+  {id: 's3', name: 'Dentist',           Icon: ToothIcon,       color: '#3B82F6', bgColor: '#DBEAFE'},
+  {id: 's4', name: 'Dermatologist',     Icon: SkinIcon,        color: '#22C55E', bgColor: '#DCFCE7'},
+  {id: 's5', name: 'Pediatrician',      Icon: BabyIcon,        color: '#F59E0B', bgColor: '#FEF3C7'},
+  {id: 's6', name: 'Orthopedic',        Icon: BoneIcon,        color: '#8B5CF6', bgColor: '#F5F3FF'},
+  {id: 's7', name: 'Neurologist',       Icon: BrainIcon,       color: '#EC4899', bgColor: '#FCE7F3'},
+  {id: 's8', name: 'ENT Specialist',    Icon: EarIcon,         color: '#14B8A6', bgColor: '#CCFBF1'},
 ];
 
 const SORT_OPTIONS = [
@@ -102,7 +102,7 @@ export default function DoctorSearchScreen({navigation, route}) {
                 key={sp.id}
                 style={[s.specChip, active && {backgroundColor: sp.color, borderColor: sp.color}]}
                 onPress={() => setSpecFilter(active ? null : sp.id)}>
-                <Text style={s.specEmoji}>{sp.emoji}</Text>
+                <sp.Icon size={14} color={active ? '#fff' : sp.color} />
                 <Text style={[s.specChipText, active && {color: '#fff'}]}>{sp.name}</Text>
               </TouchableOpacity>
             );
@@ -114,7 +114,8 @@ export default function DoctorSearchScreen({navigation, route}) {
             {filtered.length} doctor{filtered.length !== 1 ? 's' : ''}{activeSpec ? ` · ${activeSpec.name}` : ''}
           </Text>
           <TouchableOpacity style={s.sortBtn} onPress={() => setShowSort(v => !v)}>
-            <Text style={s.sortBtnText}>⇅  {activeSort?.label}</Text>
+            <SortIcon size={13} color={colors.primary} />
+            <Text style={s.sortBtnText}>{activeSort?.label}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -127,7 +128,7 @@ export default function DoctorSearchScreen({navigation, route}) {
               style={[s.sortOption, sortBy === opt.id && s.sortOptionActive]}
               onPress={() => { setSortBy(opt.id); setShowSort(false); }}>
               <Text style={[s.sortOptionText, sortBy === opt.id && s.sortOptionTextActive]}>{opt.label}</Text>
-              {sortBy === opt.id && <Text style={{color: colors.primary}}>✓</Text>}
+              {sortBy === opt.id && <CheckIcon size={14} color={colors.primary} />}
             </TouchableOpacity>
           ))}
         </View>
@@ -169,7 +170,10 @@ function DoctorCard({doctor: d, onPress}) {
           <Text style={dc.rating}>{d.rating.toFixed(1)}</Text>
           <Text style={dc.reviews}>({d.reviewCount.toLocaleString()} reviews)</Text>
         </View>
-        <Text style={dc.clinic} numberOfLines={1}>📍 {d.clinic}</Text>
+        <View style={dc.clinicRow}>
+          <PinIcon size={12} color={colors.textMuted} />
+          <Text style={dc.clinic} numberOfLines={1}>{d.clinic}</Text>
+        </View>
         <View style={[dc.availBadge, {backgroundColor: isToday ? colors.successLight : colors.warningLight}]}>
           <Text style={[dc.availText, {color: isToday ? colors.success : colors.warning}]}>{d.nextSlot}</Text>
         </View>
@@ -188,7 +192,9 @@ function DoctorCard({doctor: d, onPress}) {
 function EmptySearch({onClear}) {
   return (
     <View style={em.wrap}>
-      <Text style={em.emoji}>🔍</Text>
+      <View style={em.iconWrap}>
+        <SearchIcon size={36} color={colors.textMuted} />
+      </View>
       <Text style={em.title}>No doctors found</Text>
       <Text style={em.sub}>Try a different name, specialty, or clear your filters.</Text>
       <TouchableOpacity style={em.btn} onPress={onClear}>
@@ -219,8 +225,8 @@ const dc = StyleSheet.create({
 });
 
 const em = StyleSheet.create({
-  wrap:    {flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, paddingTop: 80},
-  emoji:   {fontSize: 48, marginBottom: spacing.md},
+  wrap:     {flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, paddingTop: 80},
+  iconWrap: {width: 72, height: 72, borderRadius: 36, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md},
   title:   {fontSize: 17, fontWeight: '800', color: colors.textPrimary, marginBottom: spacing.sm},
   sub:     {fontSize: 13, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg},
   btn:     {backgroundColor: colors.primaryLight, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.full},
@@ -239,10 +245,9 @@ const s = StyleSheet.create({
   specChipActive:    {backgroundColor: colors.primary, borderColor: colors.primary},
   specChipText:      {fontSize: 12, fontWeight: '600', color: colors.textSecondary},
   specChipTextActive:{color: '#fff'},
-  specEmoji:         {fontSize: 13},
   sortBar:           {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
   resultCount:       {fontSize: 13, fontWeight: '600', color: colors.textSecondary},
-  sortBtn:           {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full},
+  sortBtn:           {flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full},
   sortBtnText:       {fontSize: 12, fontWeight: '700', color: colors.primary},
   sortDropdown:      {position: 'absolute', top: 168, right: spacing.base, backgroundColor: colors.surface, borderRadius: radius.lg, ...shadows.lg, zIndex: 99, minWidth: 180, borderWidth: 1, borderColor: colors.border},
   sortOption:        {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border},

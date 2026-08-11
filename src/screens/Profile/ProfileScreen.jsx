@@ -16,6 +16,7 @@ import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
   PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
   LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
+  BloodDropIcon, ScaleIcon, RulerIcon, HeartRateIcon,
 } from '../../assets/icons/Icons';
 
 const FROM_DATE = '2000-01-01';
@@ -121,10 +122,10 @@ export default function ProfileScreen({navigation}) {
   ];
 
   const vitals = [
-    {emoji: '⚖️', val: `${userProfile.weight ?? '--'} ${userProfile.weightUnit ?? 'kg'}`, label: 'Weight'},
-    {emoji: '📏', val: `${userProfile.height ?? '--'} ${userProfile.heightUnit ?? 'cm'}`, label: 'Height'},
-    {emoji: '🩸', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood'},
-    {emoji: '❤️', val: userProfile.bp ?? '--',                                              label: 'BP'},
+    {Icon: ScaleIcon,     color: '#8B5CF6', val: `${userProfile.weight ?? '--'} ${userProfile.weightUnit ?? 'kg'}`, label: 'Weight'},
+    {Icon: RulerIcon,     color: '#3B82F6', val: `${userProfile.height ?? '--'} ${userProfile.heightUnit ?? 'cm'}`, label: 'Height'},
+    {Icon: BloodDropIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood'},
+    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bp ?? '--',                                             label: 'BP'},
   ];
 
 
@@ -186,7 +187,8 @@ export default function ProfileScreen({navigation}) {
           {/* Blood group pill */}
           {userProfile.bloodGroup ? (
             <View style={styles.bloodPill}>
-              <Text style={styles.bloodPillText}>🩸  {userProfile.bloodGroup}</Text>
+              <BloodDropIcon size={12} color="#fff" />
+              <Text style={styles.bloodPillText}>{userProfile.bloodGroup}</Text>
             </View>
           ) : null}
 
@@ -254,9 +256,11 @@ export default function ProfileScreen({navigation}) {
         <View style={styles.vitalsCard}>
           <Text style={styles.vitalsTitle}>Health Summary</Text>
           <View style={styles.vitalsRow}>
-            {vitals.map(({emoji, val, label}) => (
+            {vitals.map(({Icon, color, val, label}) => (
               <View key={label} style={styles.vitalItem}>
-                <Text style={styles.vitalEmoji}>{emoji}</Text>
+                <View style={[styles.vitalIconWrap, {backgroundColor: color + '20'}]}>
+                  <Icon size={18} color={color} />
+                </View>
                 <Text style={styles.vitalVal}>{val}</Text>
                 <Text style={styles.vitalLabel}>{label}</Text>
               </View>
@@ -427,6 +431,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   bloodPillText: {fontSize: 12, fontWeight: '600', color: '#fff'},
 
@@ -531,10 +538,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   vitalsRow:  {flexDirection: 'row', justifyContent: 'space-around'},
-  vitalItem:  {alignItems: 'center', gap: 4},
-  vitalEmoji: {fontSize: 22},
-  vitalVal:   {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
-  vitalLabel: {fontSize: 11, color: colors.textMuted},
+  vitalItem:      {alignItems: 'center', gap: 4},
+  vitalIconWrap:  {width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center'},
+  vitalVal:       {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
+  vitalLabel:     {fontSize: 11, color: colors.textMuted},
 
   // ── Sections ──────────────────────────────────────────
   section:      {marginTop: spacing.base, marginHorizontal: spacing.base},

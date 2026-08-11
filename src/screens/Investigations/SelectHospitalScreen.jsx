@@ -6,7 +6,18 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {diagnosticCenters} from '../../data/mockData';
-import {ArrowBackIcon, StarIcon, PinIcon, ClockIcon, HomeDeliveryIcon, CheckCircleIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, StarIcon, PinIcon, ClockIcon, HomeDeliveryIcon, CheckCircleIcon, HospitalBuildingIcon, BloodDropIcon, FlaskIcon, LungsIcon, HeartRateIcon, StarFilledIcon, SyringeIcon, CapsuleIcon, SunIcon, StethoscopeIcon, BeakerIcon, MicroscopeIcon, HospitalIcon} from '../../assets/icons/Icons';
+
+// Maps iconKey strings from mockData to actual icon components
+const ICON_MAP = {
+  HospitalBuildingIcon, BloodDropIcon, FlaskIcon, LungsIcon,
+  HeartRateIcon, StarFilledIcon, SyringeIcon, CapsuleIcon,
+  SunIcon, StethoscopeIcon, BeakerIcon, MicroscopeIcon, HospitalIcon,
+};
+function TestIcon({iconKey, size, color}) {
+  const Comp = ICON_MAP[iconKey] || FlaskIcon;
+  return <Comp size={size} color={color} />;
+}
 
 function StepBar({current}) {
   const steps = ['Select Test', 'Hospital', 'Date & Time', 'Confirmed'];
@@ -64,11 +75,11 @@ export default function SelectHospitalScreen({navigation, route}) {
       {/* Selected Test Summary */}
       <View style={styles.testSummary}>
         <View style={[styles.testEmojiBg, {backgroundColor: test.bg}]}>
-          <Text style={styles.testEmoji}>{test.emoji}</Text>
+          <TestIcon iconKey={test.iconKey} size={22} color={test.color} />
         </View>
         <View style={styles.testSummaryInfo}>
           <Text style={styles.testSummaryName}>{test.name}</Text>
-          <Text style={styles.testSummaryMeta}>🧫 {test.sampleType} · 📄 {test.reportTime}</Text>
+          <Text style={styles.testSummaryMeta}>{test.sampleType} · {test.reportTime}</Text>
         </View>
         <Text style={styles.testSummaryPrice}>₹{test.price}</Text>
       </View>
@@ -83,7 +94,7 @@ export default function SelectHospitalScreen({navigation, route}) {
             {/* Centre Header */}
             <View style={styles.centreHeader}>
               <View style={styles.centreLogo}>
-                <Text style={styles.centreLogoEmoji}>{centre.logo}</Text>
+                <TestIcon iconKey={centre.logoKey} size={28} color={centre.logoColor || '#6C63FF'} />
               </View>
               <View style={styles.centreInfo}>
                 <Text style={styles.centreName}>{centre.name}</Text>
@@ -151,7 +162,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   testEmojiBg: {width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center'},
-  testEmoji: {fontSize: 22},
   testSummaryInfo: {flex: 1},
   testSummaryName: {fontSize: 13, fontWeight: '700', color: colors.primary},
   testSummaryMeta: {fontSize: 11, color: colors.textSecondary, marginTop: 2},
@@ -161,7 +171,6 @@ const styles = StyleSheet.create({
   centreCard: {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, ...shadows.md, marginBottom: spacing.md},
   centreHeader: {flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md},
   centreLogo: {width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border},
-  centreLogoEmoji: {fontSize: 28},
   centreInfo: {flex: 1},
   centreName: {fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 3},
   ratingRow: {flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3},

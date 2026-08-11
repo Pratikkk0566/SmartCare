@@ -11,14 +11,14 @@ import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {AppointmentApi, PatientApi, HospitalApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, HospitalBuildingIcon, VideoIcon, PhoneIcon, ClockIcon} from '../../assets/icons/Icons';
 
 const {width: SW} = Dimensions.get('window');
 
 const VISIT_TYPES = [
-  {id: 'clinic', label: 'In-Clinic', emoji: '🏥', feeKey: 'consultationFee', desc: 'Visit in person'},
-  {id: 'video',  label: 'Video',     emoji: '📹', feeKey: 'videoFee',        desc: 'HD video call',  savePct: 20},
-  {id: 'audio',  label: 'Audio',     emoji: '📞', feeKey: 'audioFee',        desc: 'Phone call',     savePct: 30},
+  {id: 'clinic', label: 'In-Clinic', Icon: HospitalBuildingIcon, feeKey: 'consultationFee', desc: 'Visit in person'},
+  {id: 'video',  label: 'Video',     Icon: VideoIcon,            feeKey: 'videoFee',        desc: 'HD video call',  savePct: 20},
+  {id: 'audio',  label: 'Audio',     Icon: PhoneIcon,            feeKey: 'audioFee',        desc: 'Phone call',     savePct: 30},
 ];
 
 const DAY_NAMES  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -294,7 +294,9 @@ export default function BookingSlotScreen({navigation, route}) {
                 style={[s.visitCard, active && s.visitCardActive]}
                 onPress={() => setSelectedVisit(vt.id)}
                 activeOpacity={0.8}>
-                <Text style={s.visitEmoji}>{vt.emoji}</Text>
+                <View style={[s.visitIconWrap, active && s.visitIconWrapActive]}>
+                  <vt.Icon size={22} color={active ? colors.primary : colors.textSecondary} />
+                </View>
                 <Text style={[s.visitLabel, active && s.visitLabelActive]}>{vt.label}</Text>
                 <Text style={[s.visitFee, active && s.visitFeeActive]}>₹{vtFee}</Text>
                 {vt.savePct && (
@@ -320,7 +322,7 @@ export default function BookingSlotScreen({navigation, route}) {
           <ActivityIndicator size="small" color={colors.primary} style={{marginVertical: 24}} />
         ) : slots.length === 0 ? (
           <View style={s.emptySlots}>
-            <Text style={s.emptySlotsEmoji}>🗓️</Text>
+            <ClockIcon size={36} color={colors.textMuted} />
             <Text style={s.emptySlotsText}>No available slots for this date.</Text>
             <Text style={s.emptySlotsHint}>Try selecting a different date.</Text>
           </View>
@@ -419,7 +421,8 @@ const s = StyleSheet.create({
   visitCard:        {flex: 1, alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg,
                      padding: spacing.md, borderWidth: 2, borderColor: colors.border, gap: 4, position: 'relative'},
   visitCardActive:  {borderColor: colors.primary, backgroundColor: colors.primaryLight},
-  visitEmoji:       {fontSize: 22},
+  visitIconWrap:     {width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background},
+  visitIconWrapActive:{width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22'},
   visitLabel:       {fontSize: 12, fontWeight: '700', color: colors.textSecondary},
   visitLabelActive: {color: colors.primary},
   visitFee:         {fontSize: 13, fontWeight: '800', color: colors.textPrimary},
@@ -428,8 +431,7 @@ const s = StyleSheet.create({
                      paddingHorizontal: 5, paddingVertical: 2, borderRadius: radius.full},
   saveBadgeText:    {fontSize: 8, fontWeight: '800', color: '#fff'},
 
-  emptySlots:     {alignItems: 'center', paddingVertical: 32},
-  emptySlotsEmoji:{fontSize: 36, marginBottom: 8},
+  emptySlots:     {alignItems: 'center', paddingVertical: 32, gap: 8},
   emptySlotsText: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
   emptySlotsHint: {fontSize: 12, color: colors.textMuted, marginTop: 4},
 

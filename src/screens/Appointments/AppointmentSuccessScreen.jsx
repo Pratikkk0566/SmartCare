@@ -9,11 +9,12 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
+import {PinIcon, CalendarIcon, ClockIcon, WalletIcon, CheckCircleIcon, VideoIcon, PhoneIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
 
 const VISIT_META = {
-  clinic: {label: 'In-Clinic Visit', emoji: '🏥'},
-  video:  {label: 'Video Consult',   emoji: '📹'},
-  audio:  {label: 'Audio Call',      emoji: '📞'},
+  clinic: {label: 'In-Clinic Visit', Icon: HospitalBuildingIcon},
+  video:  {label: 'Video Consult',   Icon: VideoIcon},
+  audio:  {label: 'Audio Call',      Icon: PhoneIcon},
 };
 
 export default function AppointmentSuccessScreen({navigation, route}) {
@@ -98,7 +99,10 @@ export default function AppointmentSuccessScreen({navigation, route}) {
           <View style={s.docInfo}>
             <Text style={s.docName}>{d.name}</Text>
             <Text style={s.docSpec}>{d.specialty}</Text>
-            <Text style={s.docClinic}>📍 {visitType === 'clinic' ? d.clinic : 'Online'}</Text>
+            <View style={[s.docClinicRow]}>
+              <PinIcon size={13} color={colors.textMuted} />
+              <Text style={s.docClinic}>{visitType === 'clinic' ? d.clinic : 'Online'}</Text>
+            </View>
           </View>
         </Animated.View>
 
@@ -106,13 +110,13 @@ export default function AppointmentSuccessScreen({navigation, route}) {
         <Animated.View style={[s.summaryCard, {opacity: opacityAnim, transform: [{translateY: slideAnim}]}]}>
           <Text style={s.summaryTitle}>Appointment Summary</Text>
 
-          <SummaryRow emoji="📅" label="Date"        value={date} />
+          <SummaryRow icon={CalendarIcon} label="Date"        value={date} />
           <SummaryDivider />
-          <SummaryRow emoji="🕐" label="Time"        value={time} />
+          <SummaryRow icon={ClockIcon}    label="Time"        value={time} />
           <SummaryDivider />
-          <SummaryRow emoji={vm.emoji} label="Visit Type" value={vm.label} />
+          <SummaryRow icon={vm.Icon}      label="Visit Type"  value={vm.label} />
           <SummaryDivider />
-          <SummaryRow emoji="💳" label="Amount Paid" value={`₹${fee}`} highlight />
+          <SummaryRow icon={WalletIcon}   label="Amount Paid" value={`₹${fee}`} highlight />
         </Animated.View>
 
         {/* ── What's next ── */}
@@ -141,20 +145,22 @@ export default function AppointmentSuccessScreen({navigation, route}) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SummaryRow({emoji, label, value, highlight}) {
+function SummaryRow({icon: Icon, label, value, highlight}) {
   return (
     <View style={sr.row}>
-      <Text style={sr.emoji}>{emoji}</Text>
+      <View style={sr.iconWrap}>
+        <Icon size={16} color={colors.textSecondary} />
+      </View>
       <Text style={sr.label}>{label}</Text>
       <Text style={[sr.value, highlight && {color: colors.primary, fontSize: 15}]}>{value}</Text>
     </View>
   );
 }
 const sr = StyleSheet.create({
-  row:   {flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm + 2, gap: spacing.sm},
-  emoji: {fontSize: 16, width: 24},
-  label: {flex: 1, fontSize: 13, color: colors.textSecondary},
-  value: {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
+  row:      {flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm + 2, gap: spacing.sm},
+  iconWrap: {width: 24, alignItems: 'center'},
+  label:    {flex: 1, fontSize: 13, color: colors.textSecondary},
+  value:    {fontSize: 13, fontWeight: '700', color: colors.textPrimary},
 });
 
 function SummaryDivider() {
@@ -200,6 +206,7 @@ const s = StyleSheet.create({
   docInfo:       {flex: 1, gap: 3},
   docName:       {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
   docSpec:       {fontSize: 12, color: colors.textSecondary},
+  docClinicRow:  {flexDirection: 'row', alignItems: 'center', gap: 4},
   docClinic:     {fontSize: 11, color: colors.textMuted},
 
   summaryCard:  {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, ...shadows.sm, marginBottom: spacing.md},

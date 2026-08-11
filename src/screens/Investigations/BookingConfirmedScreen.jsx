@@ -8,7 +8,21 @@ import {shadows} from '../../theme/shadows';
 import {
   CheckCircleIcon, CalendarIcon, ClockIcon,
   PinIcon, HomeDeliveryIcon, FlaskIcon, InfoIcon, HomeIcon,
+  LungsIcon, HeartRateIcon, BloodDropIcon, StarFilledIcon,
+  SyringeIcon, CapsuleIcon, SunIcon, StethoscopeIcon,
+  BeakerIcon, HospitalBuildingIcon,
 } from '../../assets/icons/Icons';
+
+// Maps iconKey strings stored in booking data to actual icon components
+const ICON_MAP = {
+  HospitalBuildingIcon, BloodDropIcon, FlaskIcon, LungsIcon,
+  HeartRateIcon, StarFilledIcon, SyringeIcon, CapsuleIcon,
+  SunIcon, StethoscopeIcon, BeakerIcon,
+};
+function TestIcon({iconKey, size, color}) {
+  const Comp = ICON_MAP[iconKey] || FlaskIcon;
+  return <Comp size={size} color={color} />;
+}
 
 // ─── Step Bar (all done) ──────────────────────────────────────────────────────
 function StepBar() {
@@ -84,7 +98,7 @@ export default function BookingConfirmedScreen({navigation, route}) {
           {/* Test row */}
           <View style={styles.detailRow}>
             <View style={[styles.detailEmojiBg, {backgroundColor: booking.testBg || colors.primaryLight}]}>
-              <Text style={styles.detailEmoji}>{booking.testEmoji}</Text>
+              <TestIcon iconKey={booking.testIconKey} size={24} color={booking.testColor || colors.primary} />
             </View>
             <View style={styles.detailInfo}>
               <Text style={styles.detailLabel}>Test</Text>
@@ -263,7 +277,6 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center',
   },
-  detailEmoji: {fontSize: 24},
   detailInfo:  {flex: 1},
   detailPrice: {fontSize: 18, fontWeight: '800', color: colors.primary},
 

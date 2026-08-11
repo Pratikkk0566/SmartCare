@@ -7,7 +7,7 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {BellIcon, MedicinesIcon, PillIcon, CalendarIcon, DocumentIcon, ClipboardIcon, FlaskIcon, WalletIcon, SunriseIcon, SunIcon, MoonIcon, ArrowRightIcon, PinIcon, InvoiceIcon} from '../../assets/icons/Icons';
+import {BellIcon, BrainIcon, MedicinesIcon, PillIcon, CalendarIcon, DocumentIcon, ClipboardIcon, FlaskIcon, WalletIcon, SunriseIcon, SunIcon, MoonIcon, ArrowRightIcon, PinIcon} from '../../assets/icons/Icons';
 import CalendarIllustration from '../../assets/illustrations/CalendarIllustration';
 import WaterGlassIllustration from '../../assets/illustrations/WaterGlassIllustration';
 import StatusChip from '../../components/common/StatusChip';
@@ -89,7 +89,7 @@ export default function HomeScreen({navigation}) {
             <View style={styles.onlineDot} />
           </View>
           <View style={styles.headerCenter}>
-            <Text style={styles.greeting}>Hi, {userProfile.firstName} 👋</Text>
+            <Text style={styles.greeting}>Hi, {userProfile.firstName}</Text>
             <Text style={styles.greetingSubtitle}>Let's take care of your health today.</Text>
           </View>
           <TouchableOpacity style={styles.bellWrap} onPress={() => navigation.navigate('Notifications')} activeOpacity={0.7}>
@@ -216,6 +216,19 @@ export default function HomeScreen({navigation}) {
         </View>
 
       </ScrollView>
+    {/* SmartCare AI floating assistant button */}
+<TouchableOpacity
+  style={styles.aiFab}
+  onPress={() => navigation.navigate('AIAssistant')}
+  activeOpacity={0.85}
+  accessibilityRole="button"
+  accessibilityLabel="Open SmartCare AI Assistant"
+  accessibilityHint="Ask SmartCare AI a health question">
+  <View style={styles.aiFabCircle}>
+    <BrainIcon size={27} color="#FFFFFF" />
+  </View>
+  <Text style={styles.aiFabLabel}>Ask AI</Text>
+</TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -290,4 +303,32 @@ const styles = StyleSheet.create({
   tipLabel: {fontSize: 13, fontWeight: '700', color: colors.success, marginBottom: 4},
   tipText:  {fontSize: 13, color: '#16A34A', lineHeight: 18},
   tipRight: {alignItems: 'center', gap: spacing.xs},
+  aiFab: {
+  position: 'absolute',
+  right: 18,
+  bottom: 20,
+  alignItems: 'center',
+  zIndex: 10,
+},
+
+aiFabCircle: {
+  width: 58,
+  height: 58,
+  borderRadius: 29,
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: colors.primary,
+  shadowColor: colors.primary,
+  shadowOffset: {width: 0, height: 5},
+  shadowOpacity: 0.28,
+  shadowRadius: 10,
+  elevation: 7,
+},
+
+aiFabLabel: {
+  marginTop: 4,
+  color: colors.primary,
+  fontSize: 10,
+  fontWeight: '700',
+},
 });

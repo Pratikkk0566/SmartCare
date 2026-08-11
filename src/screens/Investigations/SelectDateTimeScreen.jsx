@@ -9,7 +9,21 @@ import {useApp} from '../../context/AppContext';
 import {
   ArrowBackIcon, ArrowLeftIcon, ArrowRightIcon,
   ClockIcon, HomeDeliveryIcon, PinIcon,
+  CalendarIcon, FlaskIcon, LungsIcon, HeartRateIcon,
+  BloodDropIcon, StarFilledIcon, SyringeIcon, CapsuleIcon,
+  SunIcon, StethoscopeIcon, BeakerIcon, HospitalBuildingIcon,
 } from '../../assets/icons/Icons';
+
+// Maps iconKey strings from mockData to actual icon components
+const ICON_MAP = {
+  HospitalBuildingIcon, BloodDropIcon, FlaskIcon, LungsIcon,
+  HeartRateIcon, StarFilledIcon, SyringeIcon, CapsuleIcon,
+  SunIcon, StethoscopeIcon, BeakerIcon,
+};
+function TestIcon({iconKey, size, color}) {
+  const Comp = ICON_MAP[iconKey] || FlaskIcon;
+  return <Comp size={size} color={color} />;
+}
 
 const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -130,7 +144,8 @@ export default function SelectDateTimeScreen({navigation, route}) {
   const handleConfirm = () => {
     const bookingData = {
       testName:         test.name,
-      testEmoji:        test.emoji,
+      testIconKey:      test.iconKey,
+      testColor:        test.color,
       testPrice:        test.price,
       testBg:           test.bg,
       sampleType:       test.sampleType,
@@ -167,7 +182,7 @@ export default function SelectDateTimeScreen({navigation, route}) {
         {/* Test + Hospital Summary */}
         <View style={styles.summaryCard}>
           <View style={[styles.summaryEmoji, {backgroundColor: test.bg}]}>
-            <Text style={styles.summaryEmojiText}>{test.emoji}</Text>
+            <TestIcon iconKey={test.iconKey} size={24} color={test.color} />
           </View>
           <View style={styles.summaryInfo}>
             <Text style={styles.summaryTest}>{test.name}</Text>
@@ -340,9 +355,12 @@ export default function SelectDateTimeScreen({navigation, route}) {
       {/* ── Sticky Footer ── */}
       <View style={styles.footer}>
         {canConfirm ? (
-          <Text style={styles.footerSummary}>
-            📅 {formatSelectedDate()}  ·  ⏰ {selectedTime}
-          </Text>
+          <View style={{flexDirection:'row', alignItems:'center', gap:6, marginBottom:spacing.sm}}>
+            <CalendarIcon size={13} color={colors.textSecondary} />
+            <Text style={styles.footerSummary}>{formatSelectedDate()}</Text>
+            <ClockIcon size={13} color={colors.textSecondary} />
+            <Text style={styles.footerSummary}>{selectedTime}</Text>
+          </View>
         ) : (
           <Text style={styles.footerHint}>
             Select a date and time to continue
@@ -387,7 +405,6 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: radius.sm,
     alignItems: 'center', justifyContent: 'center',
   },
-  summaryEmojiText: {fontSize: 24},
   summaryInfo:  {flex: 1},
   summaryTest:  {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
   summaryHosp:  {fontSize: 12, color: colors.textSecondary, marginTop: 2},

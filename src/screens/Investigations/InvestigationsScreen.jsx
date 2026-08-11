@@ -15,6 +15,7 @@ import StatusChip from '../../components/common/StatusChip';
 import {
   ArrowBackIcon, FilterIcon, ShieldIcon, FlaskIcon,
   PlusIcon, ClockIcon, CheckCircleIcon, ArrowRightIcon,
+  BloodDropIcon, BeakerIcon, LungsIcon, ClipboardIcon, HomeDeliveryIcon, HospitalBuildingIcon,
 } from '../../assets/icons/Icons';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 
@@ -230,7 +231,14 @@ export default function InvestigationsScreen({navigation}) {
                   <View style={styles.requestInfo}>
                     <Text style={styles.requestName} numberOfLines={1}>{req.testName}</Text>
                     <Text style={styles.requestMeta}>{req.hospitalName} · {req.date}</Text>
-                    <Text style={styles.requestMeta}>{req.collectionType === 'home' ? '🏠 Home Collection' : '🏥 Visit Hospital'} · {req.time}</Text>
+                    <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
+                      {req.collectionType === 'home'
+                        ? <HomeDeliveryIcon size={12} color={colors.textSecondary} />
+                        : <HospitalBuildingIcon size={12} color={colors.textSecondary} />}
+                      <Text style={styles.requestMeta}>
+                        {req.collectionType === 'home' ? 'Home Collection' : 'Visit Hospital'} · {req.time}
+                      </Text>
+                    </View>
                   </View>
                   <StatusChip status={req.status === 'Approved' ? 'completed' : 'pending'} label={req.status} size="xs" />
                 </View>
@@ -274,7 +282,10 @@ export default function InvestigationsScreen({navigation}) {
           filteredReports.map(r => (
             <TouchableOpacity key={r.id} style={styles.reportCard} onPress={() => navigation.navigate('InvestigationReport', {report: r})} activeOpacity={0.8}>
               <View style={[styles.reportIcon, {backgroundColor: r.iconBg}]}>
-                <Text style={styles.reportEmoji}>{r.category === 'Blood Test' ? '🩸' : r.category === 'Urine Test' ? '🧪' : r.category === 'Imaging' ? '🫁' : '📋'}</Text>
+                {r.category === 'Blood Test' ? <BloodDropIcon size={24} color="#EF4444" />
+                  : r.category === 'Urine Test' ? <BeakerIcon size={24} color="#3B82F6" />
+                  : r.category === 'Imaging' ? <LungsIcon size={24} color="#8B5CF6" />
+                  : <ClipboardIcon size={24} color="#6B7280" />}
               </View>
               <View style={styles.reportInfo}>
                 <View style={styles.reportTopRow}>
@@ -360,7 +371,6 @@ const styles = StyleSheet.create({
   emptyText: {fontSize: 14, color: colors.textMuted},
   reportCard: {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.base, ...shadows.sm, marginBottom: spacing.sm, gap: spacing.md},
   reportIcon: {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
-  reportEmoji: {fontSize: 24},
   reportInfo: {flex: 1},
   reportTopRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2},
   reportName: {fontSize: 13, fontWeight: '700', color: colors.textPrimary, flex: 1, marginRight: spacing.sm},

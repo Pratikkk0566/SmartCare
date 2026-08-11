@@ -6,7 +6,7 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon, CapsuleIcon} from '../../assets/icons/Icons';
 
 export default function PrescriptionsScreen({navigation}) {
   const {medicines} = useApp();
@@ -63,7 +63,7 @@ export default function PrescriptionsScreen({navigation}) {
               onPress={() => navigation.navigate('AboutMedicine', {medicine: med})}
               activeOpacity={0.8}>
               <View style={[styles.medIcon, {backgroundColor: med.bgColor}]}>
-                <Text style={styles.medEmoji}>💊</Text>
+                <CapsuleIcon size={22} color={colors.primary} />
               </View>
               <View style={styles.medInfo}>
                 <Text style={styles.medName}>{med.name}</Text>

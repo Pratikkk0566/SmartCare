@@ -7,7 +7,7 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, HomeDeliveryIcon, PharmacyIcon, InfoIcon, LockIcon, CheckboxIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, HomeDeliveryIcon, PharmacyIcon, InfoIcon, LockIcon, CheckboxIcon, CapsuleIcon, DownloadIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 export default function RestockMedicineScreen({navigation}) {
@@ -44,7 +44,7 @@ export default function RestockMedicineScreen({navigation}) {
         {medicines.map(med => (
           <TouchableOpacity key={med.id} style={styles.medRow} onPress={() => toggleCheck(med.id)} activeOpacity={0.8}>
             <View style={[styles.medIcon, {backgroundColor: med.bgColor}]}>
-              <Text style={styles.medEmoji}>💊</Text>
+              <CapsuleIcon size={20} color={colors.primary} />
             </View>
             <View style={styles.medInfo}>
               <Text style={styles.medName}>{med.name}</Text>
@@ -106,7 +106,10 @@ export default function RestockMedicineScreen({navigation}) {
 
         <LinearGradient colors={anyChecked ? [colors.primary, colors.primaryDark] : ['#C4B5FD', '#A78BFA']} start={{x: 0, y: 0}} end={{x: 1, y: 0}} style={styles.sendBtn}>
           <TouchableOpacity style={styles.sendBtnInner} onPress={handleSend} disabled={!anyChecked}>
-            <Text style={styles.sendBtnText}>📤 Send Request</Text>
+            <View style={{flexDirection:'row', alignItems:'center', gap: 8}}>
+              <DownloadIcon size={18} color="#fff" />
+              <Text style={styles.sendBtnText}>Send Request</Text>
+            </View>
           </TouchableOpacity>
         </LinearGradient>
 

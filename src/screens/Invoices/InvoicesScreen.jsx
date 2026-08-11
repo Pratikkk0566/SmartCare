@@ -13,7 +13,7 @@ import {InvoiceApi} from '../../API/Api';
 import {useApp} from '../../context/AppContext';
 import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon, InvoiceIcon, WalletIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 const TABS = ['All', 'Paid', 'Pending', 'Cancelled'];
@@ -208,7 +208,9 @@ export default function InvoicesScreen({navigation}) {
           <ActivityIndicator size="large" color={colors.primary} style={{marginVertical: 48}} />
         ) : filtered.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🧾</Text>
+            <View style={{width:64, height:64, borderRadius:32, backgroundColor:colors.primaryLight, alignItems:'center', justifyContent:'center', marginBottom:spacing.md}}>
+              <InvoiceIcon size={32} color={colors.primary} />
+            </View>
             <Text style={styles.emptyTitle}>No invoices found</Text>
             <Text style={styles.emptySub}>
               {activeTab === 'All' ? 'No billing records on this account yet.' : `No ${activeTab.toLowerCase()} invoices.`}
@@ -242,7 +244,12 @@ export default function InvoicesScreen({navigation}) {
                 </View>
                 <Text style={styles.invDate}>{inv.date}{inv.time ? ` · ${inv.time}` : ''}</Text>
                 <Text style={styles.invDesc} numberOfLines={1}>{inv.description}</Text>
-                {inv.paymentMode ? <Text style={styles.invMeta}>💳 {inv.paymentMode}</Text> : null}
+                {inv.paymentMode ? (
+                  <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
+                    <WalletIcon size={11} color={colors.textMuted} />
+                    <Text style={styles.invMeta}>{inv.paymentMode}</Text>
+                  </View>
+                ) : null}
               </View>
               <View style={styles.invRight}>
                 <Text style={styles.invAmount}>{inv.amount}</Text>
@@ -331,7 +338,6 @@ const styles = StyleSheet.create({
   sectionTitle: {fontSize: 15, fontWeight: '700', color: colors.textPrimary},
   sectionSub:   {fontSize: 11, color: colors.textMuted},
   empty:        {alignItems: 'center', paddingVertical: 48},
-  emptyEmoji:   {fontSize: 48, marginBottom: spacing.md},
   emptyTitle:   {fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 6},
   emptySub:     {fontSize: 13, color: colors.textSecondary, textAlign: 'center'},
   invRow:       {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.base, ...shadows.sm, marginBottom: spacing.sm, gap: spacing.md},

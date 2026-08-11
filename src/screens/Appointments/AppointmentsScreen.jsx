@@ -8,19 +8,23 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, SearchIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, SearchIcon, CalendarIcon, ClockIcon, PinIcon, StethoscopeIcon, VideoIcon, DocumentIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 // Local specialties — no API endpoint exists for this list
+const SPEC_ICON_MAP = {
+  StethoscopeIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon,
+};
+
 const specialties = [
-  {id: 's1', name: 'General Physician', emoji: '🩺', color: '#6C63FF', bgColor: '#EEE9FF'},
-  {id: 's2', name: 'Cardiologist',      emoji: '❤️', color: '#EF4444', bgColor: '#FEE2E2'},
-  {id: 's3', name: 'Dentist',           emoji: '🦷', color: '#3B82F6', bgColor: '#DBEAFE'},
-  {id: 's4', name: 'Dermatologist',     emoji: '🧴', color: '#22C55E', bgColor: '#DCFCE7'},
-  {id: 's5', name: 'Pediatrician',      emoji: '👶', color: '#F59E0B', bgColor: '#FEF3C7'},
-  {id: 's6', name: 'Orthopedic',        emoji: '🦴', color: '#8B5CF6', bgColor: '#F5F3FF'},
-  {id: 's7', name: 'Neurologist',       emoji: '🧠', color: '#EC4899', bgColor: '#FCE7F3'},
-  {id: 's8', name: 'ENT Specialist',    emoji: '👂', color: '#14B8A6', bgColor: '#CCFBF1'},
+  {id: 's1', name: 'General Physician', iconKey: 'StethoscopeIcon', color: '#6C63FF', bgColor: '#EEE9FF'},
+  {id: 's2', name: 'Cardiologist',      iconKey: 'HeartIcon',       color: '#EF4444', bgColor: '#FEE2E2'},
+  {id: 's3', name: 'Dentist',           iconKey: 'ToothIcon',       color: '#3B82F6', bgColor: '#DBEAFE'},
+  {id: 's4', name: 'Dermatologist',     iconKey: 'SkinCareIcon',    color: '#22C55E', bgColor: '#DCFCE7'},
+  {id: 's5', name: 'Pediatrician',      iconKey: 'BabyIcon',        color: '#F59E0B', bgColor: '#FEF3C7'},
+  {id: 's6', name: 'Orthopedic',        iconKey: 'BoneIcon',        color: '#8B5CF6', bgColor: '#F5F3FF'},
+  {id: 's7', name: 'Neurologist',       iconKey: 'BrainIcon',       color: '#EC4899', bgColor: '#FCE7F3'},
+  {id: 's8', name: 'ENT Specialist',    iconKey: 'EarIcon',         color: '#14B8A6', bgColor: '#CCFBF1'},
 ];
 
 export default function AppointmentsScreen({navigation}) {
@@ -45,7 +49,7 @@ export default function AppointmentsScreen({navigation}) {
           <Text style={s.bookBannerSub}>Search from 100+ doctors near you</Text>
         </View>
         <View style={s.bookBannerIcon}>
-          <Text style={{fontSize: 26}}>🩺</Text>
+          <StethoscopeIcon size={26} color="#fff" />
         </View>
       </TouchableOpacity>
 
@@ -67,15 +71,20 @@ export default function AppointmentsScreen({navigation}) {
           showsHorizontalScrollIndicator={false}
           keyExtractor={item => item.id}
           contentContainerStyle={s.specList}
-          renderItem={({item}) => (
-            <TouchableOpacity
-              style={[s.specChip, {backgroundColor: item.bgColor}]}
-              onPress={() => navigation.navigate('DoctorSearch', {specialtyId: item.id})}
-              activeOpacity={0.8}>
-              <Text style={s.specEmoji}>{item.emoji}</Text>
-              <Text style={[s.specChipName, {color: item.color}]} numberOfLines={2}>{item.name}</Text>
-            </TouchableOpacity>
-          )}
+          renderItem={({item}) => {
+            const SpecIcon = SPEC_ICON_MAP[item.iconKey] || StethoscopeIcon;
+            return (
+              <TouchableOpacity
+                style={[s.specChip, {backgroundColor: item.bgColor}]}
+                onPress={() => navigation.navigate('DoctorSearch', {specialtyId: item.id})}
+                activeOpacity={0.8}>
+                <View style={[s.specIconWrap, {backgroundColor: item.color + '20'}]}>
+                  <SpecIcon size={22} color={item.color} />
+                </View>
+                <Text style={[s.specChipName, {color: item.color}]} numberOfLines={2}>{item.name}</Text>
+              </TouchableOpacity>
+            );
+          }}
         />
       </View>
 
@@ -94,14 +103,14 @@ export default function AppointmentsScreen({navigation}) {
         {activeTab === 'Upcoming' && (
           appointments.length > 0
             ? appointments.map(a => <AppointmentCard key={a.id} item={a} />)
-            : <EmptyState emoji="📅" title="No upcoming appointments"
+            : <EmptyState icon={CalendarIcon} title="No upcoming appointments"
                 sub="Book a consultation with a doctor that fits your schedule."
                 cta="Book Now" onCta={() => navigation.navigate('DoctorSearch', {})} />
         )}
         {activeTab === 'History' && (
           appointmentHistory.length > 0
             ? appointmentHistory.map(a => <AppointmentCard key={a.id} item={a} showStatus />)
-            : <EmptyState emoji="🗂️" title="No past appointments"
+            : <EmptyState icon={DocumentIcon} title="No past appointments"
                 sub="Your completed and cancelled appointments will appear here." />
         )}
         <View style={{height: 24}} />
@@ -127,9 +136,9 @@ function AppointmentCard({item, showStatus}) {
       </View>
       <View style={c.divider} />
       <View style={c.metaRow}>
-        <MetaItem emoji="📅" text={item.date} />
-        <MetaItem emoji="🕐" text={item.time} />
-        <MetaItem emoji={isOnline ? '💻' : '📍'} text={isOnline ? 'Online' : item.location} />
+        <MetaItem icon={CalendarIcon} text={item.date} />
+        <MetaItem icon={ClockIcon}    text={item.time} />
+        <MetaItem icon={isOnline ? VideoIcon : PinIcon} text={isOnline ? 'Online' : item.location} />
       </View>
       <View style={c.bottomRow}>
         <View style={c.visitTag}>
@@ -141,19 +150,19 @@ function AppointmentCard({item, showStatus}) {
   );
 }
 
-function MetaItem({emoji, text}) {
+function MetaItem({icon: Icon, text}) {
   return (
     <View style={c.metaItem}>
-      <Text style={c.metaEmoji}>{emoji}</Text>
+      <Icon size={12} color={colors.textSecondary} />
       <Text style={c.metaText} numberOfLines={1}>{text}</Text>
     </View>
   );
 }
 
-function EmptyState({emoji, title, sub, cta, onCta}) {
+function EmptyState({icon: Icon, title, sub, cta, onCta}) {
   return (
     <View style={e.wrap}>
-      <Text style={e.emoji}>{emoji}</Text>
+      <Icon size={48} color={colors.textMuted} />
       <Text style={e.title}>{title}</Text>
       <Text style={e.sub}>{sub}</Text>
       {cta && (
@@ -212,9 +221,9 @@ const s = StyleSheet.create({
   specHeading:       {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
   viewAll:           {fontSize: 13, color: colors.primary, fontWeight: '600'},
   specList:          {paddingHorizontal: spacing.base, gap: spacing.sm},
-  specChip:          {alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: radius.lg, minWidth: 76, gap: 6},
-  specEmoji:         {fontSize: 22},
-  specChipName:      {fontSize: 11, fontWeight: '700', textAlign: 'center', lineHeight: 15},
+  specChip:          {alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: radius.lg, minWidth: 90, gap: spacing.sm},
+  specIconWrap:      {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
+  specChipName:      {fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 13},
   tabRow:            {flexDirection: 'row', paddingHorizontal: spacing.base, gap: spacing.sm, marginBottom: spacing.sm},
   tab:               {paddingHorizontal: spacing.base, paddingVertical: spacing.sm, borderRadius: radius.full, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border},
   tabActive:         {backgroundColor: colors.primary, borderColor: colors.primary},
