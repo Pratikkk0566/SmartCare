@@ -4,7 +4,6 @@ import {
   Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -82,35 +81,52 @@ function mapInvoice(inv) {
 }
 
 export default function InvoicesScreen({navigation}) {
-  const {invoices: cachedInvoices, isOnline, invoicesLastUpdated} = useApp();
+  const {invoices: cachedInvoices, isOnline, refreshAllData, appReady} = useApp();
   const [activeTab,  setActiveTab]  = useState('All');
-  const [invoices,   setInvoices]   = useState(cachedInvoices || []);
-  const [loading,    setLoading]    = useState(cachedInvoices.length === 0);
+
+  // Map cached context invoices through the richer local normaliser
+  // Context stores a simplified shape; we need the billing-specific fields for display.
+  // On first load we use what context has; pull-to-refresh re-fetches via API.
+  const mapFromContext = useCallback((list) =>
+    list.map(inv => ({
+      ...inv,
+      // Ensure these fields exist for the UI (context shape may lack some)
+      ipdAbr:      inv.ipdAbr      || '',
+      time:        inv.time        || '',
+      invType:     inv.invType     || '',
+      paymentMode: inv.paymentMode || '',
+      rawAmount:   typeof inv.rawAmount === 'number' ? inv.rawAmount
+                    : Number(String(inv.amount || '0').replace(/[^\d.]/g, '')) || 0,
+      balance:     typeof inv.balance   === 'number' ? inv.balance   : 0,
+      paidAmount:  typeof inv.paidAmount === 'number' ? inv.paidAmount : 0,
+      _isoDate:    inv._isoDate    || inv.date || '',
+    }))
+  , []);
+
+  const [invoices,   setInvoices]   = useState(() => mapFromContext(cachedInvoices || []));
+  const [loading,    setLoading]    = useState(!appReady && cachedInvoices.length === 0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchInvoices = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  // Keep local state in sync when context updates (e.g. after login data fetch)
+  useEffect(() => {
+    if (cachedInvoices && cachedInvoices.length > 0) {
+      setInvoices(mapFromContext(cachedInvoices));
+      setLoading(false);
+    }
+  }, [cachedInvoices, mapFromContext]);
+
+  // Once app is ready, always stop the spinner — show empty state if no data
+  useEffect(() => {
+    if (appReady) setLoading(false);
+  }, [appReady]);
+
+  // Full re-fetch — only called on explicit pull-to-refresh
+  const fetchInvoices = useCallback(async () => {
+    setRefreshing(true);
     let patientId = await AsyncStorage.getItem('patientId');
-
-    // patientId may not be set yet if login just completed — wait briefly and retry once
-    if (!patientId) {
-      await new Promise(r => setTimeout(r, 1500));
-      patientId = await AsyncStorage.getItem('patientId');
-    }
-    if (!patientId) {
-      console.log('[InvoicesScreen] patientId still not available, aborting fetch');
-      setLoading(false); setRefreshing(false); return;
-    }
-
-    // Debug: log the values that will be sent as headers
-    const clinicId  = await AsyncStorage.getItem('CLINICID');
-    const userId    = await AsyncStorage.getItem('UserId') || await AsyncStorage.getItem('userid');
-    const branchId  = await AsyncStorage.getItem('branch_id') || await AsyncStorage.getItem('branchId');
-    console.log('[InvoicesScreen] fetching with patientId:', patientId,
-      '| clinicId:', clinicId, '| userId:', userId, '| branchId:', branchId);
+    if (!patientId) { setRefreshing(false); return; }
 
     const result = await InvoiceApi.getAll(patientId, FROM_DATE, getToDate());
-    console.log('[InvoicesScreen] API result success:', result.success, '| raw data keys:', result.data ? Object.keys(result.data) : 'null');
     if (result.success) {
       const serverData = result.data;
       const inner      = serverData?.data   || serverData;
@@ -119,42 +135,15 @@ export default function InvoicesScreen({navigation}) {
                       || listObj?.invoices
                       || (Array.isArray(listObj) ? listObj : []);
 
-      console.log('[InvoicesScreen] invoiceDataList length:', rawList.length);
-
       const mapped = rawList.map(mapInvoice);
-      // Sort newest first — invoiceDate is "YYYY-MM-DD" (clean ISO, directly sortable)
       mapped.sort((a, b) => toTimestamp(b._isoDate) - toTimestamp(a._isoDate));
       setInvoices(mapped);
-      // Save to cache
       await StorageService.saveInvoices(mapped);
     }
-    setLoading(false);
     setRefreshing(false);
   }, []);
 
-  // Load cached invoices on mount
-  useEffect(() => {
-    if (cachedInvoices && cachedInvoices.length > 0) {
-      console.log('[InvoicesScreen] Using cached invoices:', cachedInvoices.length);
-      setInvoices(cachedInvoices);
-      setLoading(false);
-    }
-  }, [cachedInvoices]);
-
-  // Fetch on first mount (if online)
-  useEffect(() => { 
-    if (isOnline) {
-      fetchInvoices(); 
-    }
-  }, [fetchInvoices, isOnline]);
-
-  // Re-fetch every time the screen comes into focus — but only after initial load
-  useFocusEffect(useCallback(() => {
-    // skip the very first focus (useEffect on mount already handles it)
-    fetchInvoices(true);
-  }, [fetchInvoices]));
-
-  const onRefresh = () => { setRefreshing(true); fetchInvoices(true); };
+  const onRefresh = () => fetchInvoices();
 
   const filtered = invoices.filter(inv =>
     activeTab === 'All' ? true : inv.status === activeTab,

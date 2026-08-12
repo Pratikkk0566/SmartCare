@@ -507,6 +507,17 @@ export function AppProvider({children}) {
     loadData();
   }, []);
 
+  // ── Trigger full data refresh whenever the user logs in ──────────────────
+  // loadData runs once at mount — before login — so the token guard causes an
+  // early return. This effect fires on every isLoggedIn transition to true and
+  // fetches the profile + all data with the freshly-stored token.
+  useEffect(() => {
+    if (isLoggedIn && isOnline) {
+      console.log('[AppContext] isLoggedIn → true, refreshing data');
+      refreshAllData();
+    }
+  }, [isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     configurePushNotifications(notification => {
       const newNotif = {

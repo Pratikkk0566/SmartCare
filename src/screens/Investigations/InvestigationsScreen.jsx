@@ -1,7 +1,6 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -75,33 +74,48 @@ function splitDateTime(dt = '') {
 }
 
 export default function InvestigationsScreen({navigation}) {
-  const {testRequests, investigations: cachedInvestigations, isOnline} = useApp();
+  const {testRequests, investigations: cachedInvestigations, isOnline, refreshAllData, appReady} = useApp();
   const [filter, setFilter] = useState('All');
   const [query, setQuery] = useState('');
   const [reports, setReports] = useState(cachedInvestigations || []);
-  const [loading, setLoading] = useState(cachedInvestigations.length === 0);
+  // Only show skeleton while appReady hasn't fired yet — once the app has
+  // finished its initial load sequence, we show whatever data we have (or empty state).
+  const [loading, setLoading] = useState(!appReady && cachedInvestigations.length === 0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchReports = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  // Sync from context — covers the case where AppContext finishes fetching
+  // after this screen is already mounted.
+  useEffect(() => {
+    if (cachedInvestigations.length > 0) {
+      setReports(cachedInvestigations);
+      setLoading(false);
+    }
+  }, [cachedInvestigations]);
+
+  // Once the app is ready (initial load done), always stop the skeleton —
+  // even if there are no investigations to show.
+  useEffect(() => {
+    if (appReady) setLoading(false);
+  }, [appReady]);
+
+  // Full re-fetch — only called on explicit pull-to-refresh
+  const fetchReports = useCallback(async () => {
+    setRefreshing(true);
     const patientId = await AsyncStorage.getItem('patientId');
-    if (!patientId) { setLoading(false); setRefreshing(false); return; }
+    if (!patientId) { setRefreshing(false); return; }
     const result = await InvestigationApi.getAll(patientId, FROM_DATE, getToDate());
     if (result.success) {
-      // API might return array directly OR wrap in { reports: [...] } OR { data: [...] }
       let raw = [];
       if (Array.isArray(result.data)) raw = result.data;
       else if (Array.isArray(result.data?.reports)) raw = result.data.reports;
       else if (Array.isArray(result.data?.data)) raw = result.data.data;
       else if (Array.isArray(result.data?.list)) raw = result.data.list;
       else if (result.data && typeof result.data === 'object') {
-        // take first array value found
         for (const v of Object.values(result.data)) {
           if (Array.isArray(v)) { raw = v; break; }
         }
       }
       const mapped = raw.map((r, i) => {
-        // Robust name extraction
         const name = pick(r, [
           'investigationName', 'investigation_name', 'testname', 'testName',
           'servicename', 'serviceName', 'reportName', 'itemname', 'itemName',
@@ -133,35 +147,12 @@ export default function InvestigationsScreen({navigation}) {
       });
       mapped.sort((a, b) => toTimestamp(b.date) - toTimestamp(a.date));
       setReports(mapped);
-      // Save to cache
       await StorageService.saveInvestigations(mapped);
     }
-    setLoading(false);
     setRefreshing(false);
   }, []);
 
-  // Load cached investigations on mount
-  useEffect(() => {
-    if (cachedInvestigations && cachedInvestigations.length > 0) {
-      console.log('[InvestigationsScreen] Using cached investigations:', cachedInvestigations.length);
-      setReports(cachedInvestigations);
-      setLoading(false);
-    }
-  }, [cachedInvestigations]);
-
-  useEffect(() => { 
-    if (isOnline) {
-      fetchReports(); 
-    }
-  }, [fetchReports, isOnline]);
-
-  useFocusEffect(useCallback(() => { 
-    if (isOnline) {
-      fetchReports(true); 
-    }
-  }, [fetchReports, isOnline]));
-
-  const onRefresh = () => { setRefreshing(true); fetchReports(true); };
+  const onRefresh = () => fetchReports();
 
   const CATEGORY_MAP = {
     'Blood Test':  ['Blood Test'],

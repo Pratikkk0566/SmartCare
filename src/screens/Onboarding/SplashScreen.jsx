@@ -123,10 +123,10 @@ export default function SplashScreen({ navigation }) {
       <Animated.View style={[styles.blob3, { transform: [{ scale: bgScale }] }]} />
 
       {/* Small accent circles */}
-      <View style={[styles.accent, { top: '12%', left: '8%',  width: 12, height: 12, opacity: 0.4 }]} />
-      <View style={[styles.accent, { top: '18%', right: '12%', width: 8,  height: 8,  opacity: 0.3 }]} />
-      <View style={[styles.accent, { bottom: '22%', left: '14%', width: 10, height: 10, opacity: 0.35 }]} />
-      <View style={[styles.accent, { bottom: '16%', right: '10%', width: 14, height: 14, opacity: 0.3 }]} />
+      <View style={styles.accentTopLeft} />
+      <View style={styles.accentTopRight} />
+      <View style={styles.accentBottomLeft} />
+      <View style={styles.accentBottomRight} />
 
       {/* Center content */}
       <View style={styles.center}>
@@ -215,6 +215,46 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 999,
     backgroundColor: 'white',
+  },
+  accentTopLeft: {
+    position: 'absolute',
+    top: '12%',
+    left: '8%',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'white',
+    opacity: 0.4,
+  },
+  accentTopRight: {
+    position: 'absolute',
+    top: '18%',
+    right: '12%',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'white',
+    opacity: 0.3,
+  },
+  accentBottomLeft: {
+    position: 'absolute',
+    bottom: '22%',
+    left: '14%',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'white',
+    opacity: 0.35,
+  },
+  accentBottomRight: {
+    position: 'absolute',
+    bottom: '16%',
+    right: '10%',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'white',
+    opacity: 0.3,
   },
 
   center: {

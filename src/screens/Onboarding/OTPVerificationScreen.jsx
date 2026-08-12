@@ -78,16 +78,6 @@ export default function OTPVerificationScreen({ navigation, route }) {
     setLoading(true);
     setError('');
     try {
-      // ── MOCK BYPASS (remove when SSL is fixed) ──────────────────────────
-      const MOCK_OTP = '1234';
-      if (otp === MOCK_OTP) {
-        await StorageService.set('@isLoggedIn', true);
-        setIsLoggedIn(true);
-        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
-        return;
-      }
-      // ────────────────────────────────────────────────────────────────────
-
       // Call real verify OTP API
       const result = await OTPApi.verifyOTP(phone, otp);
 

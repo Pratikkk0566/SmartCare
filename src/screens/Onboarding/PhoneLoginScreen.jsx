@@ -32,7 +32,7 @@ const OPTIONS = [
     key: 'phone',
     label: 'Login with Phone Number',
     sub: 'Login using your mobile number',
-    iconBg: colors.primaryLight,
+    iconStyle: 'primary',
     render: () => <PhoneIcon size={20} color={colors.primary} />,
     route: 'PhoneNumberEntry',
   },
@@ -40,7 +40,7 @@ const OPTIONS = [
     key: 'aadhaar',
     label: 'Login with Aadhaar',
     sub: 'Login using your Aadhaar number',
-    iconBg: '#FEF3C7',
+    iconStyle: 'warning',
     render: () => <AadhaarOptionIcon />,
     route: 'AadhaarLogin',
   },
@@ -48,7 +48,7 @@ const OPTIONS = [
     key: 'register',
     label: 'Create Account',
     sub: 'Sign up by creating a new account',
-    iconBg: colors.primaryLight,
+    iconStyle: 'primary',
     render: () => <PersonIcon size={20} color={colors.primary} />,
     route: 'Register',
   },
@@ -74,21 +74,24 @@ export default function PhoneLoginScreen({navigation}) {
 
         {/* Option Cards */}
         <View style={styles.options}>
-          {OPTIONS.map(opt => (
-            <TouchableOpacity
-              key={opt.key}
-              style={styles.card}
-              onPress={() => navigation.navigate(opt.route)}
-              activeOpacity={0.75}>
-              <View style={[styles.iconCircle, {backgroundColor: opt.iconBg}]}>
-                {opt.render()}
-              </View>
-              <View style={styles.cardText}>
-                <Text style={styles.cardLabel}>{opt.label}</Text>
-                <Text style={styles.cardSub}>{opt.sub}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {OPTIONS.map(opt => {
+            const iconCircleStyle = opt.iconStyle === 'warning' ? styles.iconCircleWarning : styles.iconCirclePrimary;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={styles.card}
+                onPress={() => navigation.navigate(opt.route)}
+                activeOpacity={0.75}>
+                <View style={iconCircleStyle}>
+                  {opt.render()}
+                </View>
+                <View style={styles.cardText}>
+                  <Text style={styles.cardLabel}>{opt.label}</Text>
+                  <Text style={styles.cardSub}>{opt.sub}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Terms */}
@@ -173,6 +176,22 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconCirclePrimary: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+  },
+  iconCircleWarning: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
   },
   cardText: {flex: 1},
   cardLabel: {

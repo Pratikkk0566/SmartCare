@@ -72,6 +72,30 @@ import {
   IconSunrise,
   IconPackage,
   IconMedicineSyrup,
+  IconFileText,
+  IconTrash,
+  IconCheck,
+  IconBottle,
+  IconEyeglass,
+  IconDeviceTablet,
+  IconSpray,
+  IconVaccine,
+  IconBandage,
+  IconToolsKitchen2,
+  IconCoffee,
+  IconApple,
+  IconBowl,
+  IconNumber,
+  IconHash,
+  IconBoxMultiple,
+  IconClock24,
+  IconClockHour8,
+  IconClockHour2,
+  IconClockHour4,
+  IconRepeat,
+  IconAlertCircle,
+  IconX,
+  IconChevronRight,
 } from '@tabler/icons-react-native';
 
 // Re-export with app-specific names for backwards compatibility
@@ -148,6 +172,31 @@ export const HeartRateIcon = IconHeartRateMonitor;
 export const SyringeIcon = IconSyringe;
 export const VideoIcon = IconVideo;
 export const SortIcon = IconArrowsSort;
+export const FileTextIcon = IconFileText;
+export const TrashIcon = IconTrash;
+export const CheckIcon = IconCheck;
+export const UserIcon = IconUser;
+export const BottleIcon = IconBottle;
+export const EyeglassIcon = IconEyeglass;
+export const TabletIcon = IconDeviceTablet;
+export const SprayIcon = IconSpray;
+export const VaccineIcon = IconVaccine;
+export const BandageIcon = IconBandage;
+export const ToolsKitchen2Icon = IconToolsKitchen2;
+export const CoffeeIcon = IconCoffee;
+export const AppleIcon = IconApple;
+export const BowlIcon = IconBowl;
+export const NumberIcon = IconNumber;
+export const HashIcon = IconHash;
+export const BoxMultipleIcon = IconBoxMultiple;
+export const Clock24Icon = IconClock24;
+export const ClockHour8Icon = IconClockHour8;
+export const ClockHour2Icon = IconClockHour2;
+export const ClockHour4Icon = IconClockHour4;
+export const RepeatIcon = IconRepeat;
+export const AlertCircleIcon = IconAlertCircle;
+export const XIcon = IconX;
+export const ChevronRightIcon = IconChevronRight;
 
 // Custom CheckboxIcon component (Tabler doesn't have a pre-filled checkbox variant)
 import React from 'react';

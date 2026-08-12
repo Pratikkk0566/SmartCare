@@ -99,27 +99,7 @@ export default function RegisterScreen({navigation}) {
     try {
       const cleanPhone = phone.replace(/\D/g, '').slice(-10);
 
-      // ── MOCK BYPASS (remove when SSL is fixed) ──────────────
-      const parts = fullName.trim().split(' ');
-      const userData = {
-        firstName: parts[0],
-        lastName: parts.slice(1).join(' ') || '',
-        email: email.trim().toLowerCase(),
-        phone: cleanPhone,
-        bloodGroup,
-        age,
-        password,
-      };
-      navigation.navigate('OTPVerification', {
-        mode: 'register',
-        phone: cleanPhone,
-        displayPhone: `+91 ${phone}`,
-        userData,
-      });
-      return;
-      // ────────────────────────────────────────────────────────
-
-      const otpResult = await OTPApi.sendOTP(cleanPhone); // eslint-disable-line no-unreachable
+      const otpResult = await OTPApi.sendOTP(cleanPhone);
       if (!otpResult.success) {
         setError(otpResult.error || 'Failed to send OTP. Please try again.');
         return;
@@ -246,7 +226,7 @@ export default function RegisterScreen({navigation}) {
             onPress={() => setShowPicker(true)}
             activeOpacity={0.8}>
             <BloodDropIcon size={17} color={bloodGroup ? colors.primary : colors.textMuted} />
-            <Text style={[styles.input, styles.pickerText, !bloodGroup && {color: colors.textMuted}]}>
+            <Text style={[styles.input, styles.pickerText, !bloodGroup && styles.pickerPlaceholder]}>
               {bloodGroup || 'Blood Group'}
             </Text>
             <ChevronDownIcon size={16} color={colors.textMuted} />
@@ -419,8 +399,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   inputRowFocused: {borderColor: colors.primary},
+  inputRowError: {borderColor: colors.error},
   input: {flex: 1, fontSize: 15, color: colors.textPrimary, padding: 0},
   pickerText: {paddingVertical: 1},
+  pickerPlaceholder: {color: colors.textMuted},
 
   // Country badge (+91)
   countryBadge: {

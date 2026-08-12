@@ -1,26 +1,20 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform, ActivityIndicator,
+  StyleSheet, Alert, Platform,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useFocusEffect} from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {useApp} from '../../context/AppContext';
-import {InvoiceApi, InvestigationApi} from '../../API/Api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
   PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
   LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
   BloodDropIcon, ScaleIcon, RulerIcon, HeartRateIcon,
 } from '../../assets/icons/Icons';
-
-const FROM_DATE = '2000-01-01';
-function getToDate() { return new Date().toISOString().split('T')[0]; }
 
 // ─── Reusable row inside a menu card ────────────────────────────────────────
 function MenuRow({Icon, iconColor, iconBg, label, sub, onPress, last}) {
@@ -51,73 +45,26 @@ function Section({title, children}) {
   );
 }
 
-// Try many possible keys on an object — robust field extraction
-function pick(obj, keys, fallback = '') {
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
-  }
-  return fallback;
-}
-
-// Count items inside any wrapped API response shape
-function unwrapCount(payload) {
-  if (Array.isArray(payload)) return payload.length;
-  if (!payload || typeof payload !== 'object') return 0;
-  for (const key of ['data', 'list', 'result', 'records', 'reports',
-                     'invoices', 'bills', 'items', 'appointments', 'history']) {
-    if (Array.isArray(payload[key])) return payload[key].length;
-  }
-  for (const v of Object.values(payload)) {
-    if (Array.isArray(v)) return v.length;
-  }
-  return 0;
-}
-
 export default function ProfileScreen({navigation}) {
-  const {userProfile, appointments, appointmentHistory, medicines} = useApp();
+  const {userProfile, appointments, appointmentHistory, medicines, invoices, investigations} = useApp();
 
   const initials = `${userProfile.firstName?.[0] ?? ''}${userProfile.lastName?.[0] ?? ''}`.toUpperCase();
   const fullName = `${userProfile.firstName ?? ''} ${userProfile.lastName ?? ''}`.trim() || 'Your Name';
 
-  const [reportCount, setReportCount] = useState(null);
-  const [invoiceCount, setInvoiceCount] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
-
-  const loadCounts = useCallback(async () => {
-    setStatsLoading(true);
-    try {
-      const patientId = await AsyncStorage.getItem('patientId');
-      if (patientId) {
-        const [invRes, repRes] = await Promise.all([
-          InvoiceApi.getAll(patientId, FROM_DATE, getToDate()),
-          InvestigationApi.getAll(patientId, FROM_DATE, getToDate()),
-        ]);
-        if (invRes.success) setInvoiceCount(unwrapCount(invRes.data));
-        if (repRes.success) setReportCount(unwrapCount(repRes.data));
-      }
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadCounts(); }, [loadCounts]);
-  useFocusEffect(useCallback(() => { loadCounts(); }, [loadCounts]));
+  const totalAppointments = appointments.length + appointmentHistory.length;
 
   const handleAvatarPress = () => {
     Alert.alert('Change Avatar', 'Avatar selection coming soon!');
   };
 
-  const totalAppointments = appointments.length + appointmentHistory.length;
-
   const stats = [
-    {num: String(totalAppointments), label: 'Appointments', Icon: CalendarIcon, color: colors.primary,  bg: colors.primaryLight,
+    {num: String(totalAppointments),   label: 'Appointments', Icon: CalendarIcon, color: colors.primary, bg: colors.primaryLight,
      onPress: () => navigation.navigate('Appointments')},
-    {num: reportCount === null ? '…' : String(reportCount), label: 'Records',      Icon: DocumentIcon,  color: colors.success,  bg: colors.successLight,
+    {num: String(investigations.length), label: 'Records',    Icon: DocumentIcon,  color: colors.success, bg: colors.successLight,
      onPress: () => navigation.navigate('Investigations')},
-    {num: String(medicines.length), label: 'Prescriptions',Icon: PillIcon,      color: colors.warning,  bg: colors.warningLight,
+    {num: String(medicines.length),    label: 'Prescriptions',Icon: PillIcon,      color: colors.warning, bg: colors.warningLight,
      onPress: () => navigation.navigate('Prescriptions')},
-    {num: invoiceCount === null ? '…' : String(invoiceCount), label: 'Invoices',     Icon: InvoiceIcon,   color: '#8B5CF6',       bg: '#F5F3FF',
+    {num: String(invoices.length),     label: 'Invoices',     Icon: InvoiceIcon,   color: '#8B5CF6',      bg: '#F5F3FF',
      onPress: () => navigation.navigate('Invoices')},
   ];
 
@@ -208,7 +155,7 @@ export default function ProfileScreen({navigation}) {
                 <View style={[styles.statIcon, {backgroundColor: bg}]}>
                   <Icon size={16} color={color} />
                 </View>
-                <Text style={styles.statNum}>{statsLoading && (label === 'Records' || label === 'Invoices') ? '…' : num}</Text>
+                <Text style={styles.statNum}>{num}</Text>
                 <Text style={styles.statLabel}>{label}</Text>
               </TouchableOpacity>
               {i < stats.length - 1 && <View style={styles.statDivider} />}

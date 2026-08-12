@@ -596,4 +596,42 @@ export const PractitionerApi = {
     ),
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MedicineApi — local medicine search (same WiFi network)
+// Endpoint: POST http://192.168.1.32:8080/api/medicines/search
+// Body: { "name": "<query>" }
+// Called only after the user types 3+ characters in the medicine name field.
+// ─────────────────────────────────────────────────────────────────────────────
+const MEDICINE_SEARCH_BASE = 'http://192.168.1.32:8080/api/medicines/';
+
+export const MedicineApi = {
+
+  // Search medicines by name — sends query as JSON body
+  search: async (name) => {
+    const url = `${MEDICINE_SEARCH_BASE}search`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name }),
+      });
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = []; }
+      }
+      if (!response.ok) return { success: false, error: `HTTP ${response.status}`, data: [] };
+      return { success: true, data: Array.isArray(data) ? data : (data?.data ?? []) };
+    } catch (error) {
+      console.log('[MedicineApi] search error:', error.message);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
+};
+
 export default apiCall;

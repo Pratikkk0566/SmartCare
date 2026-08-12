@@ -6,7 +6,8 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, CalendarIcon, ChevronDownIcon, SunriseIcon, SunIcon, MoonIcon, InfoIcon, SearchIcon, CapsuleIcon, HeartRateIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, CalendarIcon, ChevronDownIcon, SunriseIcon, SunIcon, MoonIcon, InfoIcon, SearchIcon, CapsuleIcon, HeartRateIcon, TrashIcon} from '../../assets/icons/Icons';
+import {MedicineDB} from '../../services/MedicationDatabaseService';
 import StatusChip from '../../components/common/StatusChip';
 
 const PERIOD_ICONS  = {morning: SunriseIcon, afternoon: SunIcon, night: MoonIcon};
@@ -64,6 +65,31 @@ export default function MedicineScheduleScreen({navigation}) {
       {text: 'Cancel', style: 'cancel'},
       {text: 'Mark as Taken', onPress: () => updateMedicineStatus(medicine.id, schedItem.period, 'taken')},
     ]);
+  };
+
+  const handleDeleteMedicine = (medicine) => {
+    Alert.alert(
+      'Delete Medicine',
+      `Are you sure you want to remove "${medicine.name}" from your schedule? This will delete all scheduled doses.`,
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await MedicineDB.delete(medicine.id);
+              Alert.alert('✓ Deleted', `${medicine.name} has been removed from your schedule.`);
+              // Reload medicines via context if available, otherwise navigate back
+              if (navigation.canGoBack()) navigation.goBack();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete medicine. Please try again.');
+              console.error('[MedicineSchedule] Delete error:', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -145,6 +171,9 @@ export default function MedicineScheduleScreen({navigation}) {
                 <View style={[styles.qtyChip, {backgroundColor: colors.primaryLight}]}>
                   <Text style={[styles.qtyText, {color: colors.primary}]}>1 {med.type}</Text>
                 </View>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteMedicine(med)} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                  <TrashIcon size={18} color={colors.error} />
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.detailBtn} onPress={() => navigation.navigate('AboutMedicine', {medicine: med})}>
                   <Text style={styles.detailBtnText}>Details</Text>
                 </TouchableOpacity>
@@ -228,6 +257,7 @@ const styles = StyleSheet.create({
   medCat:     {fontSize: 12, color: colors.textSecondary},
   qtyChip:    {paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.full},
   qtyText:    {fontSize: 11, fontWeight: '700'},
+  deleteBtn:  {padding: 6, borderRadius: radius.xs, backgroundColor: colors.error + '15'},
   detailBtn:  {borderWidth: 1, borderColor: colors.primary, borderRadius: radius.xs, paddingHorizontal: spacing.sm, paddingVertical: 4},
   detailBtnText: {fontSize: 11, color: colors.primary, fontWeight: '600'},
 

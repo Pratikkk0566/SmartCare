@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Platform, Alert,
+  TextInput, Platform, Modal, Animated,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
@@ -14,6 +14,97 @@ import {
   CalendarIcon, HeartIcon, PinIcon,
   WifiOffIcon, RefreshIcon, EditIcon, LockIcon,
 } from '../../assets/icons/Icons';
+
+// ─── Custom toast/modal for feedback ─────────────────────────────────────────
+function FeedbackModal({visible, type, title, message, onClose}) {
+  // type: 'success' | 'error'
+  const isSuccess = type === 'success';
+  const emoji     = isSuccess ? '✅' : '⚠️';
+  const iconBg    = isSuccess ? '#ECFDF5' : '#FEF3C7';
+  const titleColor= isSuccess ? '#065F46' : '#92400E';
+  const btnColor  = isSuccess ? colors.primary : '#F59E0B';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}>
+      <TouchableOpacity
+        style={fm.backdrop}
+        activeOpacity={1}
+        onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <View style={fm.sheet}>
+            {/* Icon circle */}
+            <View style={[fm.iconCircle, {backgroundColor: iconBg}]}>
+              <Text style={fm.emoji}>{emoji}</Text>
+            </View>
+
+            <Text style={[fm.title, {color: titleColor}]}>{title}</Text>
+            <Text style={fm.message}>{message}</Text>
+
+            <TouchableOpacity
+              style={[fm.btn, {backgroundColor: btnColor}]}
+              onPress={onClose}
+              activeOpacity={0.85}>
+              <Text style={fm.btnText}>{isSuccess ? 'Done' : 'Got it'}</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const fm = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.50)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: radius['2xl'],
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl + 4,
+    paddingBottom: spacing.xl,
+    alignItems: 'center',
+    width: '100%',
+    ...shadows.lg,
+  },
+  iconCircle: {
+    width: 80, height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.base + 4,
+  },
+  emoji:   {fontSize: 38},
+  title:   {fontSize: 22, fontWeight: '800', marginBottom: spacing.xs + 2, textAlign: 'center'},
+  message: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.xl + 4,
+  },
+  btn: {
+    alignSelf: 'stretch',
+    paddingVertical: 20,
+    borderRadius: radius.xl,
+    alignItems: 'center',
+    shadowColor: '#6C63FF',
+    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 0.30,
+    shadowRadius: 12,
+    elevation: 7,
+  },
+  btnText: {fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 0.4},
+});
 
 // ─── Read-only info row ───────────────────────────────────────────────────────
 function InfoRow({label, value, icon: Icon}) {
@@ -71,6 +162,15 @@ export default function PersonalInformationScreen({navigation}) {
   const [height, setHeight] = useState(String(userProfile.height || ''));
   const [weight, setWeight] = useState(String(userProfile.weight || ''));
 
+  // Feedback modal state
+  const [modal, setModal] = useState({visible: false, type: 'success', title: '', message: ''});
+  const showModal = (type, title, message) => setModal({visible: true, type, title, message});
+  const closeModal = () => {
+    const wasSuccess = modal.type === 'success';
+    setModal(m => ({...m, visible: false}));
+    if (wasSuccess) navigation.goBack();
+  };
+
   // Format last updated time
   const lastUpdatedText = profileLastUpdated
     ? new Date(profileLastUpdated).toLocaleString('en-IN', {
@@ -86,15 +186,15 @@ export default function PersonalInformationScreen({navigation}) {
     const h = height.trim();
     const w = weight.trim();
     if (h && (isNaN(Number(h)) || Number(h) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid height in cm.');
+      showModal('error', 'Invalid Height', 'Please enter a valid height in cm (e.g. 175).');
       return;
     }
     if (w && (isNaN(Number(w)) || Number(w) <= 0)) {
-      Alert.alert('Invalid', 'Please enter a valid weight in kg.');
+      showModal('error', 'Invalid Weight', 'Please enter a valid weight in kg (e.g. 72).');
       return;
     }
     await updateProfile({height: h, weight: w});
-    Alert.alert('Saved', 'Height and weight updated.');
+    showModal('success', 'Changes Saved', 'Your height and weight have been updated successfully.');
   };
 
   // Build display name
@@ -117,9 +217,8 @@ export default function PersonalInformationScreen({navigation}) {
           <ArrowBackIcon size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Personal Information</Text>
-        <TouchableOpacity onPress={handleSave} style={s.saveBtn} activeOpacity={0.85}>
-          <Text style={s.saveBtnText}>Save</Text>
-        </TouchableOpacity>
+        {/* Spacer to keep title centered */}
+        <View style={s.headerSpacer} />
       </View>
 
       {/* ── Offline/Sync Banner ────────────────────────────────── */}
@@ -246,11 +345,20 @@ export default function PersonalInformationScreen({navigation}) {
 
         {/* ── Save button ─────────────────────────────────────────── */}
         <TouchableOpacity style={s.saveBlock} onPress={handleSave} activeOpacity={0.85}>
-          <Text style={s.saveBlockText}>Save Height &amp; Weight</Text>
+          <Text style={s.saveBlockText}>Update</Text>
         </TouchableOpacity>
 
         <View style={{height: 40}} />
       </ScrollView>
+
+      {/* ── Feedback Modal ───────────────────────────────────────── */}
+      <FeedbackModal
+        visible={modal.visible}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onClose={closeModal}
+      />
     </SafeAreaView>
   );
 }
@@ -277,8 +385,7 @@ const s = StyleSheet.create({
   },
   backBtn:     {padding: 4, marginRight: spacing.sm},
   headerTitle: {flex: 1, fontSize: 17, fontWeight: '700', color: colors.textPrimary},
-  saveBtn:     {paddingVertical: 6, paddingHorizontal: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full},
-  saveBtnText: {fontSize: 13, fontWeight: '700', color: '#fff'},
+  headerSpacer: {width: 36},
 
   scroll: {padding: spacing.base, paddingBottom: 40},
 
@@ -380,6 +487,17 @@ const s = StyleSheet.create({
   syncSub:   {fontSize: 11, color: colors.primary, marginTop: 2, opacity: 0.8},
 
   // Save block
-  saveBlock:     {backgroundColor: colors.primary, borderRadius: radius.base, paddingVertical: spacing.base + 2, alignItems: 'center', ...shadows.md},
-  saveBlockText: {fontSize: 15, fontWeight: '700', color: '#fff'},
+  saveBlock: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.xl,
+    paddingVertical: 20,
+    marginHorizontal: -spacing.base, // break out of ScrollView padding to go edge-to-edge
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  saveBlockText: {fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 0.4},
 });

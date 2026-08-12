@@ -28,16 +28,7 @@ export default function PhoneNumberEntry({navigation}) {
     const formattedPhone = `+91${phone}`;
 
     try {
-      // ── MOCK BYPASS (remove when SSL is fixed) ──────────────
-      navigation.navigate('OTPVerification', {
-        mode: 'phoneLogin',
-        phone: formattedPhone,
-        displayPhone: `+91 ${phone}`,
-      });
-      return;
-      // ────────────────────────────────────────────────────────
-
-      const result = await OTPApi.sendOTP(formattedPhone); // eslint-disable-line no-unreachable
+      const result = await OTPApi.sendOTP(formattedPhone);
 
       if (result.success) {
         navigation.navigate('OTPVerification', {

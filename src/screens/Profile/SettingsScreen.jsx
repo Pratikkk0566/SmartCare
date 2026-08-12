@@ -10,7 +10,7 @@ import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {
   ArrowBackIcon, ArrowRightIcon, BellIcon, LockIcon,
-  ShieldIcon, PersonIcon, DocumentIcon, SettingsGearIcon, WaveIcon,
+  ShieldIcon, PersonIcon, DocumentIcon, SettingsGearIcon,
 } from '../../assets/icons/Icons';
 import {useApp} from '../../context/AppContext';
 import {StorageService} from '../../services/StorageService';
@@ -215,7 +215,7 @@ const confirmLogout = async () => {
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.modalIconWrap}>
-              <WaveIcon size={36} color={colors.error} />
+              <ShieldIcon size={36} color={colors.error} />
             </View>
             <Text style={styles.modalTitle}>Logging out?</Text>
             <Text style={styles.modalSub}>
