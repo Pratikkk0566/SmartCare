@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useContext} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Pdf from 'react-native-pdf';
@@ -6,16 +6,56 @@ import RNBlobUtil from 'react-native-blob-util';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {shadows} from '../../theme/shadows';
-import {ArrowBackIcon, DownloadIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, DownloadIcon, FileTextIcon} from '../../assets/icons/Icons';
+import usePDFGenerator from '../../hooks/usePDFGenerator';
+import { AppContext } from '../../context/AppContext';
 
 export default function InvestigationReportScreen({navigation, route}) {
   const {report} = route.params;
+  const { user } = useContext(AppContext);
+  const { isGenerating, generateInvestigationReportPDF } = usePDFGenerator();
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(false);
 
   // Replace report.pdfUrl with your API URL when ready
   const pdfUrl = report.pdfUrl || 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf';
+
+  const handleGeneratePDF = async () => {
+    try {
+      // Convert report data to match expected format
+      const investigationData = {
+        id: report.id,
+        reportDate: report.date,
+        date: report.date,
+        investigationType: report.category,
+        type: report.category,
+        labName: report.location,
+        hospitalName: report.location,
+        requestedBy: 'Dr. SmartCare',
+        doctorName: 'Dr. SmartCare',
+        collectionDate: report.date,
+        sampleDate: report.date,
+        results: [
+          {
+            testName: report.name,
+            name: report.name,
+            value: 'Normal',
+            result: 'Normal',
+            normalRange: 'Within Normal Limits',
+            range: 'Within Normal Limits',
+            status: report.status || 'Normal'
+          }
+        ],
+        interpretation: `${report.name} results are within normal limits. Please consult with your healthcare provider for detailed interpretation.`,
+        comments: `This is an auto-generated report for ${report.name}. For detailed results and interpretation, please refer to the original laboratory report.`
+      };
+
+      await generateInvestigationReportPDF(investigationData, user);
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+    }
+  };
 
   const handleDownload = async () => {
     try {
@@ -85,17 +125,30 @@ export default function InvestigationReportScreen({navigation, route}) {
         )}
       </View>
 
-      {/* Download Bar */}
+      {/* Action Buttons */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.downloadBtn, downloading && styles.downloadBtnDisabled]}
+          style={[styles.actionBtn, styles.generateBtn]}
+          onPress={handleGeneratePDF}
+          disabled={isGenerating}
+          activeOpacity={0.85}>
+          {isGenerating
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <FileTextIcon size={18} color={colors.primary} />}
+          <Text style={[styles.actionText, styles.generateText]}>
+            {isGenerating ? 'Generating...' : 'Generate PDF'}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.downloadBtn, downloading && styles.downloadBtnDisabled]}
           onPress={handleDownload}
           disabled={downloading || error}
           activeOpacity={0.85}>
           {downloading
             ? <ActivityIndicator size="small" color="#fff" />
             : <DownloadIcon size={18} color="#fff" />}
-          <Text style={styles.downloadText}>
+          <Text style={[styles.actionText, styles.downloadText]}>
             {downloading ? 'Downloading...' : 'Download PDF'}
           </Text>
         </TouchableOpacity>
@@ -130,13 +183,32 @@ const styles = StyleSheet.create({
   footer: {
     padding: spacing.base, backgroundColor: colors.surface,
     borderTopWidth: 1, borderTopColor: colors.border,
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
-  downloadBtn: {
-    backgroundColor: colors.primary, flexDirection: 'row',
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center',
     gap: spacing.sm, paddingVertical: spacing.md,
     borderRadius: 14, ...shadows.md,
   },
+  generateBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  downloadBtn: {
+    backgroundColor: colors.primary,
+  },
   downloadBtnDisabled: {backgroundColor: colors.textMuted},
-  downloadText: {fontSize: 15, fontWeight: '700', color: '#fff'},
+  actionText: {
+    fontSize: 15, fontWeight: '700',
+  },
+  generateText: {
+    color: colors.primary,
+  },
+  downloadText: {
+    color: '#fff',
+  },
 });

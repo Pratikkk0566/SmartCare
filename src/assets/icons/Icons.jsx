@@ -48,7 +48,8 @@ import {
   IconWallet,
   IconDropletHalf,
   IconHeartRateMonitor,
-  IconSyringe,
+  // IconSyringe might not exist, using IconVaccine as fallback
+  IconVaccine,
   IconMapPin,
   IconPhone,
   IconMail,
@@ -79,7 +80,7 @@ import {
   IconEyeglass,
   IconDeviceTablet,
   IconSpray,
-  IconVaccine,
+  // IconVaccine already imported above
   IconBandage,
   IconToolsKitchen2,
   IconCoffee,
@@ -169,7 +170,8 @@ export const ScaleIcon = IconScale;
 export const RulerIcon = IconRuler;
 export const StarFilledIcon = IconStarFilled;
 export const HeartRateIcon = IconHeartRateMonitor;
-export const SyringeIcon = IconSyringe;
+export const SyringeIcon = IconVaccine; // Using IconVaccine as fallback since IconSyringe may not exist
+export const InjectionIcon = IconVaccine; // Alternative name for injection
 export const VideoIcon = IconVideo;
 export const SortIcon = IconArrowsSort;
 export const FileTextIcon = IconFileText;

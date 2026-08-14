@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, Alert} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
@@ -27,6 +27,10 @@ import ProfileScreen        from '../screens/Profile/ProfileScreen';
 
 // Ai Assistant - Full Ai
 import AIAssistantScreen from '../screens/Assistant/AIAssistantScreen';
+
+// Clinical Notes
+import ClinicalNotesScreen from '../screens/ClinicalNotes/ClinicalNotesScreen';
+import ClinicalNoteDetailScreen from '../screens/ClinicalNotes/ClinicalNoteDetailScreen';
 
 // Appointments — full booking flow
 import AppointmentsScreen       from '../screens/Appointments/AppointmentsScreen';
@@ -126,12 +130,15 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
   );
 });
 
+// FAB Component
+const FABComponent = () => null;
+
 function MainTabs() {
   return (
     <Tab.Navigator tabBar={props => <CustomTabBar {...props} />} screenOptions={{headerShown: false}}>
       <Tab.Screen name="Home"           component={HomeScreen}           options={{tabBarIcon: HomeIcon}} />
       <Tab.Screen name="Invoices"       component={InvoicesScreen}       options={{tabBarIcon: InvoiceIcon}} />
-      <Tab.Screen name="FAB"            component={() => null}           options={{tabBarLabel: ''}} />
+      <Tab.Screen name="FAB"            component={FABComponent}          options={{tabBarLabel: ''}} />
       <Tab.Screen name="Investigations" component={InvestigationsScreen} options={{tabBarIcon: InvestigationNavIcon}} />
       <Tab.Screen name="Profile"        component={ProfileScreen}        options={{tabBarIcon: ProfileIcon}} />
     </Tab.Navigator>
@@ -139,7 +146,7 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const {appReady, isLoggedIn} = useApp();
+  const {appReady} = useApp();
 
   if (!appReady) {
     return (
@@ -168,6 +175,10 @@ export default function AppNavigator() {
         <Stack.Screen name="MainTabs"      component={MainTabs} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="AIAssistant"   component={AIAssistantScreen}/>
+
+        {/* Clinical Notes */}
+        <Stack.Screen name="ClinicalNotes" component={ClinicalNotesScreen} />
+        <Stack.Screen name="ClinicalNoteDetail" component={ClinicalNoteDetailScreen} />
 
         {/* Appointment booking flow */}
         <Stack.Screen name="Appointments"       component={AppointmentsScreen} />

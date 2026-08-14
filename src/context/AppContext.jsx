@@ -323,7 +323,8 @@ export function AppProvider({children}) {
           if (Array.isArray(payload)) {
             invoiceList = payload;
           } else if (payload && typeof payload === 'object') {
-            invoiceList = payload.invoices || payload.data || payload.list || [];
+            const candidate = payload.invoices || payload.data || payload.list || payload.invoiceList || [];
+            invoiceList = Array.isArray(candidate) ? candidate : [];
           }
           
           const normalizedInvoices = invoiceList.map(inv => ({
@@ -343,7 +344,7 @@ export function AppProvider({children}) {
           setInvoicesLastUpdated(Date.now());
         }
       } catch (err) {
-        console.log('[AppContext] Invoices refresh failed:', err.message);
+        console.log('[AppContext] Invoices refresh failed:', err?.message || String(err));
       }
 
       // ── 5) Refresh investigations ────────────────────────────────────────────

@@ -431,24 +431,140 @@ export const InvoiceApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // ClinicalNotesApi — doctor's clinical notes for a patient
-// Website: ClinicalNotesPrint
-// Uses SMARTCARE_BASE (Port 9090 /smartcaremain/)
+// List Endpoint: POST https://saas.smartcarehis.com:8443/smartcaremain/clinicalnotes/notes/list
+// Detail Endpoint: GET https://saas.smartcarehis.com:8443/smartcaremain/clinicalnotes/clinical/notes/{id}
 // ─────────────────────────────────────────────────────────────────────────────
 export const ClinicalNotesApi = {
 
-  // Fetch clinical notes as HTML list
-  // Website: POST apiHost + Port1 + '/smartcaremain/clinicalnotes/fetch/htmllist'
-  getAll: async (clientId, params) =>
-    apiCall(
-      SMARTCARE_BASE,
-      'clinicalnotes/fetch/htmllist',
-      {
-        method: 'POST',
-        body  : JSON.stringify(params),
-      },
-      clientId,
-    ),
+  // Fetch all clinical notes for a patient
+  getAll: async (patientId, fromDate = '', toDate = '') => {
+    const headers = await buildHeaders(0, false);
+
+    const fromdate = fromDate || '2025-01-01';
+    const todate   = toDate   || new Date().toISOString().split('T')[0];
+    const pid      = Number(patientId);
+
+    try {
+      const url = `${SMARTCARE_BASE}clinicalnotes/notes/list`;
+      console.log('[ClinicalNotes API] Fetching list:', url, { patientid: pid, fromdate, todate });
+
+      const response = await fetch(url, {
+        method : 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ patientid: pid, fromdate, todate }),
+      });
+
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[ClinicalNotes API] List response status:', response.status, '| records:', Array.isArray(data) ? data.length : typeof data);
+
+      if (!response.ok) {
+        const msg = data?.message || data?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      return { success: true, data };
+
+    } catch (error) {
+      console.log('[ClinicalNotes API ERROR]', error.message);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
+
+  // Fetch individual clinical note details by ID
+  getById: async (noteId) => {
+    const headers = await buildHeaders(0, false);
+
+    try {
+      const url = `${SMARTCARE_BASE}clinicalnotes/clinical/notes/${noteId}`;
+      console.log('[ClinicalNotes API] Fetching detail:', url);
+
+      const response = await fetch(url, {
+        method : 'GET',
+        headers: headers,
+      });
+
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[ClinicalNotes API] Detail response status:', response.status);
+
+      if (!response.ok) {
+        const msg = data?.message || data?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      return { success: true, data };
+
+    } catch (error) {
+      console.log('[ClinicalNotes API Detail ERROR]', error.message);
+      return { success: false, error: error.message, data: null };
+    }
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PrescriptionMasterApi — search medicines from prescription master
+// Endpoint: POST http://saas.smartcarehis.com:8443/smartcaremain/priscriptionmaster/medicinelist
+// ─────────────────────────────────────────────────────────────────────────────
+export const PrescriptionMasterApi = {
+
+  // Search medicine list from prescription master
+  searchMedicines: async (searchText) => {
+    const headers = await buildHeaders(0, false);
+
+    try {
+      const url = `${SMARTCARE_BASE}priscriptionmaster/medicinelist`;
+      console.log('[PrescriptionMaster API] Searching medicines:', url, { text: searchText });
+
+      const response = await fetch(url, {
+        method : 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ 
+          text: searchText,
+          flag: false,
+          fromNewInventory: true
+        }),
+      });
+
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[PrescriptionMaster API] Response status:', response.status, '| results:', Array.isArray(data) ? data.length : typeof data);
+
+      if (!response.ok) {
+        const msg = data?.message || data?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      return { success: true, data };
+
+    } catch (error) {
+      console.log('[PrescriptionMaster API ERROR]', error.message);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

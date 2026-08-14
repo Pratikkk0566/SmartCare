@@ -24,7 +24,7 @@ const quickActions = [
   {label: 'Book Appointment', Icon: CalendarIcon, color: '#6C63FF', bg: '#F0EEFF', nav: 'Appointments'},
   {label: 'Health Records',   Icon: DocumentIcon,  color: '#22C55E', bg: '#F0FDF4', nav: null},
   {label: 'Prescription',     Icon: PillIcon,       color: '#F59E0B', bg: '#FFFBEB', nav: 'Prescriptions'},
-  {label: 'Clinical Notes',   Icon: ClipboardIcon,  color: '#3B82F6', bg: '#EFF6FF', nav: null},
+  {label: 'Clinical Notes',   Icon: ClipboardIcon,  color: '#3B82F6', bg: '#EFF6FF', nav: 'ClinicalNotes'},
   {label: 'Investigations',   Icon: FlaskIcon,      color: '#EF4444', bg: '#FFF1F1', nav: 'Investigations'},
   {label: 'Payments',         Icon: WalletIcon,     color: '#8B5CF6', bg: '#F5F3FF', nav: 'Invoices'},
 ];

@@ -40,7 +40,7 @@ import {
   AlertCircleIcon,
 } from '../../assets/icons/Icons';
 import {MedicineDB} from '../../services/MedicationDatabaseService';
-import {MedicineApi} from '../../API/Api';
+import {MedicineApi, PrescriptionMasterApi} from '../../API/Api';
 
 const MEDICINE_TYPES = [
   {value: 'tablet', label: 'Tablet', Icon: PillIcon, color: '#3B82F6', unit: 'tablet', needsQuantity: true},
@@ -81,7 +81,7 @@ const TIME_PRESETS = [
 ];
 
 export default function AddMedicinesScreen({navigation, route}) {
-  const {prescriptionId, prescriptionName} = route.params;
+  const {prescriptionId, prescriptionName, isEditing} = route.params;
 
   const [medicines, setMedicines] = useState([]);
   const [showTypeModal, setShowTypeModal] = useState(false);
@@ -89,6 +89,9 @@ export default function AddMedicinesScreen({navigation, route}) {
   const [showTimePickerModal, setShowTimePickerModal] = useState(false);
   const [editingTimeIndex, setEditingTimeIndex] = useState(null);
   const [selectedPresetTime, setSelectedPresetTime] = useState('08:00 AM');
+  const [isLoadingMedicines, setIsLoadingMedicines] = useState(false);
+  const [editingMedicineId, setEditingMedicineId] = useState(null);
+  const [expandedMedicineId, setExpandedMedicineId] = useState(null);
   
   const [currentMedicine, setCurrentMedicine] = useState({
     name: '',
@@ -111,6 +114,47 @@ export default function AddMedicinesScreen({navigation, route}) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchDebounceRef = useRef(null);
 
+  // Load existing medicines when in edit mode
+  useEffect(() => {
+    if (isEditing) {
+      loadExistingMedicines();
+    }
+  }, [isEditing]);
+
+  const loadExistingMedicines = async () => {
+    setIsLoadingMedicines(true);
+    try {
+      const existingMedicines = await MedicineDB.getByPrescriptionId(prescriptionId);
+      
+      // Convert database format to component state format
+      const formattedMedicines = existingMedicines.map(med => ({
+        id: med.id,
+        name: med.name,
+        type: med.type,
+        unit: med.unit,
+        dose: med.dose,
+        totalQuantity: med.totalQuantity?.toString() || '',
+        frequency: med.frequency,
+        customTimes: med.times || [],
+        times: med.times || [],
+        timesPerDay: med.times?.length || 0,
+        foodInstruction: med.foodInstruction,
+        durationDays: med.durationDays?.toString() || '0',
+        remainingDoses: 0,
+        instructions: med.instructions || '',
+        needsQuantity: MEDICINE_TYPES.find(t => t.value === med.type)?.needsQuantity,
+      }));
+      
+      setMedicines(formattedMedicines);
+      console.log('[AddMedicines] Loaded existing medicines:', formattedMedicines.length);
+    } catch (error) {
+      console.error('[AddMedicines] Error loading medicines:', error);
+      Alert.alert('Error', 'Failed to load existing medicines');
+    } finally {
+      setIsLoadingMedicines(false);
+    }
+  };
+
   const selectedTypeDetails = MEDICINE_TYPES.find(t => t.value === currentMedicine.type);
 
   // Debounced medicine name search — fires 400ms after typing stops, min 3 chars
@@ -128,22 +172,80 @@ export default function AddMedicinesScreen({navigation, route}) {
 
     setIsSearching(true);
     searchDebounceRef.current = setTimeout(async () => {
-      const result = await MedicineApi.search(text.trim());
+      // Try PrescriptionMasterApi first
+      const result = await PrescriptionMasterApi.searchMedicines(text.trim());
       setIsSearching(false);
-      if (result.success && result.data.length > 0) {
+      
+      if (result.success && result.data && result.data.length > 0) {
         setSuggestions(result.data);
         setShowSuggestions(true);
       } else {
-        setSuggestions([]);
-        setShowSuggestions(false);
+        // Fallback to local MedicineApi if PrescriptionMasterApi fails or returns no results
+        console.log('[AddMedicines] PrescriptionMasterApi returned no results, trying fallback');
+        const fallbackResult = await MedicineApi.search(text.trim());
+        if (fallbackResult.success && fallbackResult.data.length > 0) {
+          setSuggestions(fallbackResult.data);
+          setShowSuggestions(true);
+        } else {
+          setSuggestions([]);
+          setShowSuggestions(false);
+        }
       }
     }, 400);
   };
 
   const selectSuggestion = (item) => {
-    // item could be a string or an object with a name field — handle both
-    const name = typeof item === 'string' ? item : (item.name || item.medicineName || item.brandName || String(item));
-    setCurrentMedicine(prev => ({...prev, name}));
+    // Extract medicine name from PrescriptionMasterApi response
+    const name = typeof item === 'string' 
+      ? item 
+      : (item.medicine_name || item.mainName || item.name || item.medicineName || item.brandName || String(item));
+    
+    // Auto-select medicine type if available from API
+    let autoType = currentMedicine.type; // Keep current type as default
+    if (typeof item === 'object' && item.type) {
+      // Map API type codes to our MEDICINE_TYPES values
+      const apiType = item.type.toLowerCase().trim();
+      
+      // Map API type codes (med, cap, sur, liq, inj, inf, etc.) to our types
+      const typeMapping = {
+        // API abbreviations
+        'med': 'tablet',           // MED -> Tablet
+        'cap': 'capsule',          // CAP -> Capsule
+        'sur': 'syrup',            // SUR -> Syrup (assuming syrup)
+        'liq': 'syrup',            // LIQ -> Liquid/Syrup
+        'inj': 'injection',        // INJ -> Injection
+        'inf': 'injection',        // INF -> Infusion/Injection
+        
+        // Full names (fallback)
+        'tablet': 'tablet',
+        'tablets': 'tablet',
+        'capsule': 'capsule',
+        'capsules': 'capsule',
+        'syrup': 'syrup',
+        'syrups': 'syrup',
+        'liquid': 'syrup',
+        'injection': 'injection',
+        'injections': 'injection',
+        'infusion': 'injection',
+        'drops': 'drops',
+        'drop': 'drops',
+        'cream': 'cream',
+        'creams': 'cream',
+        'ointment': 'cream',
+        'ointments': 'cream',
+        'gel': 'cream',
+        'inhaler': 'inhaler',
+        'inhalers': 'inhaler',
+      };
+      
+      // Check if the API type matches any of our supported types
+      const mappedType = typeMapping[apiType];
+      if (mappedType) {
+        autoType = mappedType;
+      }
+    }
+    
+    setCurrentMedicine(prev => ({...prev, name, type: autoType}));
     setSuggestions([]);
     setShowSuggestions(false);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -229,6 +331,93 @@ export default function AddMedicinesScreen({navigation, route}) {
     Alert.alert('✓ Added', `${newMedicine.name} has been added`);
   };
 
+  const editMedicine = (id) => {
+    const medicineToEdit = medicines.find(m => m.id === id);
+    if (!medicineToEdit) return;
+
+    // Populate the form with the medicine data
+    setCurrentMedicine({
+      name: medicineToEdit.name,
+      type: medicineToEdit.type,
+      unit: medicineToEdit.unit,
+      dose: medicineToEdit.dose,
+      totalQuantity: medicineToEdit.totalQuantity || '',
+      frequency: medicineToEdit.frequency,
+      customTimes: medicineToEdit.customTimes || medicineToEdit.times || [],
+      foodInstruction: medicineToEdit.foodInstruction,
+      durationDays: medicineToEdit.durationDays || '0',
+      remainingDoses: medicineToEdit.remainingDoses || 0,
+      instructions: medicineToEdit.instructions || '',
+    });
+
+    setEditingMedicineId(id);
+  };
+
+  const updateMedicine = () => {
+    if (!currentMedicine.name.trim()) {
+      Alert.alert('Required Field', 'Please enter the medicine name');
+      return;
+    }
+
+    if (selectedTypeDetails?.needsQuantity && !currentMedicine.totalQuantity) {
+      Alert.alert('Required Field', `Please enter the total quantity in ${currentMedicine.unit}s`);
+      return;
+    }
+
+    if (currentMedicine.customTimes.length === 0) {
+      Alert.alert('Required', 'Please add at least one time');
+      return;
+    }
+
+    const updatedMedicine = {
+      ...currentMedicine,
+      name: currentMedicine.name.trim(),
+      times: currentMedicine.customTimes,
+      timesPerDay: currentMedicine.customTimes.length,
+      id: editingMedicineId,
+      needsQuantity: selectedTypeDetails?.needsQuantity,
+    };
+
+    // Replace the medicine in the list
+    setMedicines(medicines.map(m => m.id === editingMedicineId ? updatedMedicine : m));
+
+    // Reset form and editing state
+    setCurrentMedicine({
+      name: '',
+      type: 'tablet',
+      unit: 'tablet',
+      dose: '1',
+      totalQuantity: '',
+      frequency: 'twice_daily',
+      customTimes: ['08:00 AM', '08:00 PM'],
+      foodInstruction: 'after_food',
+      durationDays: '0',
+      remainingDoses: 0,
+      instructions: '',
+    });
+    setEditingMedicineId(null);
+
+    Alert.alert('✓ Updated', `${updatedMedicine.name} has been updated`);
+  };
+
+  const cancelEdit = () => {
+    // Reset form
+    setCurrentMedicine({
+      name: '',
+      type: 'tablet',
+      unit: 'tablet',
+      dose: '1',
+      totalQuantity: '',
+      frequency: 'twice_daily',
+      customTimes: ['08:00 AM', '08:00 PM'],
+      foodInstruction: 'after_food',
+      durationDays: '0',
+      remainingDoses: 0,
+      instructions: '',
+    });
+    setEditingMedicineId(null);
+  };
+
   const removeMedicine = id => {
     Alert.alert('Remove Medicine', 'Are you sure?', [
       {text: 'Cancel', style: 'cancel'},
@@ -304,6 +493,15 @@ export default function AddMedicinesScreen({navigation, route}) {
     setIsSaving(true);
 
     try {
+      if (isEditing) {
+        // In edit mode: delete all existing medicines first, then re-create them
+        const existingMedicines = await MedicineDB.getByPrescriptionId(prescriptionId);
+        for (const existing of existingMedicines) {
+          await MedicineDB.delete(existing.id);
+        }
+      }
+
+      // Create/save all medicines
       const savedMedicines = [];
       for (const med of medicines) {
         const saved = await MedicineDB.create({
@@ -322,7 +520,18 @@ export default function AddMedicinesScreen({navigation, route}) {
         savedMedicines.push(saved);
       }
 
-      navigation.replace('ReviewPrescription', {prescriptionId, prescriptionName});
+      if (isEditing) {
+        // Go back to prescriptions screen after editing
+        Alert.alert('Success', 'Medicines updated successfully', [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Prescriptions'),
+          },
+        ]);
+      } else {
+        // Go to review screen for new prescriptions
+        navigation.replace('ReviewPrescription', {prescriptionId, prescriptionName});
+      }
     } catch (error) {
       console.error('[AddMedicines] Error:', error);
       Alert.alert('Error', 'Failed to save medicines. Please try again.');
@@ -379,10 +588,17 @@ export default function AddMedicinesScreen({navigation, route}) {
             <ArrowBackIcon size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Add Medicines</Text>
+            <Text style={styles.headerTitle}>{isEditing ? 'Edit Medicines' : 'Add Medicines'}</Text>
             <Text style={styles.headerSubtitle}>{prescriptionName}</Text>
           </View>
         </View>
+
+        {/* Loading State */}
+        {isLoadingMedicines && (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading medicines...</Text>
+          </View>
+        )}
 
         {/* Added Medicines List */}
         {medicines.length > 0 && (
@@ -397,37 +613,82 @@ export default function AddMedicinesScreen({navigation, route}) {
             {medicines.map((med) => {
               const medType = MEDICINE_TYPES.find(t => t.value === med.type);
               const MedIcon = medType?.Icon || PillIcon;
+              const isBeingEdited = editingMedicineId === med.id;
+              const isExpanded = expandedMedicineId === med.id;
               
               return (
-                <View key={med.id} style={styles.medicineListItem}>
-                  <View style={[styles.medicineIconContainer, {backgroundColor: medType?.color + '20'}]}>
-                    {MedIcon && React.createElement(MedIcon, {size: 24, color: medType?.color || colors.primary})}
-                  </View>
-                  
-                  <View style={styles.medicineContent}>
-                    <Text style={styles.medicineName}>{med.name}</Text>
-                    <View style={styles.medicineMetaRow}>
-                      <Text style={styles.metaText}>{med.times.length}x daily</Text>
-                      <View style={styles.metaDot} />
-                      <Text style={styles.metaText}>{med.times.join(', ')}</Text>
+                <View 
+                  key={med.id} 
+                  style={[
+                    styles.medicineListItem, 
+                    isBeingEdited && styles.medicineListItemEditing,
+                    isExpanded && styles.medicineListItemExpanded,
+                  ]}>
+                  <TouchableOpacity 
+                    style={styles.medicineCardContent}
+                    onPress={() => setExpandedMedicineId(isExpanded ? null : med.id)}
+                    activeOpacity={0.7}>
+                    <View style={[styles.medicineIconContainer, {backgroundColor: medType?.color + '20'}]}>
+                      {MedIcon && React.createElement(MedIcon, {size: 24, color: medType?.color || colors.primary})}
                     </View>
-                    {med.needsQuantity && (
-                      <View style={styles.quantityRow}>
-                        <BoxMultipleIcon size={14} color={colors.primary} />
-                        <Text style={styles.quantityText}>
-                          {med.totalQuantity} {med.unit}s • {med.durationDays}d
-                          {med.remainingDoses > 0 && ` +${med.remainingDoses}`}
-                        </Text>
+                    
+                    <View style={styles.medicineContent}>
+                      <Text style={styles.medicineName}>
+                        {med.name}
+                        {isBeingEdited && <Text style={styles.editingBadge}> • Editing</Text>}
+                      </Text>
+                      <View style={styles.medicineMetaRow}>
+                        <Text style={styles.metaText}>{med.times.length}x daily</Text>
+                        <View style={styles.metaDot} />
+                        <Text style={styles.metaText}>{med.times.join(', ')}</Text>
                       </View>
-                    )}
-                  </View>
-                  
-                  <TouchableOpacity
-                    onPress={() => removeMedicine(med.id)}
-                    style={styles.removeButton}
-                    hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
-                    <TrashIcon size={20} color={colors.error} />
+                      {med.needsQuantity && (
+                        <View style={styles.quantityRow}>
+                          <BoxMultipleIcon size={14} color={colors.primary} />
+                          <Text style={styles.quantityText}>
+                            {med.totalQuantity} {med.unit}s • {med.durationDays}d
+                            {med.remainingDoses > 0 && ` +${med.remainingDoses}`}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    <ChevronRightIcon 
+                      size={20} 
+                      color={colors.textMuted} 
+                      style={[
+                        styles.expandIcon, 
+                        isExpanded && styles.expandIconRotated
+                      ]} 
+                    />
                   </TouchableOpacity>
+                  
+                  {/* Expandable Action Buttons */}
+                  {isExpanded && (
+                    <View style={styles.medicineActionsExpanded}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setExpandedMedicineId(null);
+                          editMedicine(med.id);
+                        }}
+                        style={[styles.expandedActionButton, styles.editActionButton]}
+                        activeOpacity={0.7}>
+                        <EditIcon size={20} color={colors.primary} />
+                        <Text style={styles.editActionText}>Edit</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        onPress={() => {
+                          setExpandedMedicineId(null);
+                          removeMedicine(med.id);
+                        }}
+                        style={[styles.expandedActionButton, styles.deleteActionButton]}
+                        activeOpacity={0.7}>
+                        <TrashIcon size={20} color={colors.error} />
+                        <Text style={styles.deleteActionText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -437,7 +698,12 @@ export default function AddMedicinesScreen({navigation, route}) {
         {/* Add Medicine Form */}
         <View style={styles.formContainer}>
           <Text style={styles.formTitle}>
-            {medicines.length === 0 ? 'Add Your First Medicine' : 'Add Another Medicine'}
+            {editingMedicineId 
+              ? 'Edit Medicine Details' 
+              : medicines.length === 0 
+                ? 'Add Your First Medicine' 
+                : 'Add Another Medicine'
+            }
           </Text>
 
           {/* Medicine Name */}
@@ -461,12 +727,25 @@ export default function AddMedicinesScreen({navigation, route}) {
                   <Text style={styles.searchingText}>Searching...</Text>
                 )}
                 {suggestions.slice(0, 8).map((item, index) => {
-                  const displayName = typeof item === 'string'
+                  // Extract medicine details from PrescriptionMasterApi response
+                  const mainName = typeof item === 'string'
                     ? item
-                    : (item.name || item.medicineName || item.brandName || JSON.stringify(item));
-                  const subText = typeof item === 'object'
-                    ? (item.genericName || item.category || item.type || '')
+                    : (item.medicine_name || item.mainName || item.name || item.medicineName || item.brandName || 'Unknown');
+                  
+                  const genericName = typeof item === 'object'
+                    ? (item.genericname || item.genericName || item.generic || '')
                     : '';
+                  
+                  const type = typeof item === 'object'
+                    ? (item.type || item.category || item.medicineType || '')
+                    : '';
+                  
+                  // Build subtitle with generic name and type
+                  const subTextParts = [];
+                  if (genericName) subTextParts.push(genericName);
+                  if (type) subTextParts.push(type);
+                  const subText = subTextParts.join(' • ');
+                  
                   return (
                     <TouchableOpacity
                       key={index}
@@ -478,7 +757,7 @@ export default function AddMedicinesScreen({navigation, route}) {
                       activeOpacity={0.7}>
                       <PillIcon size={16} color={colors.primary} />
                       <View style={styles.suggestionTextContainer}>
-                        <Text style={styles.suggestionName}>{displayName}</Text>
+                        <Text style={styles.suggestionName}>{mainName}</Text>
                         {subText ? <Text style={styles.suggestionSub}>{subText}</Text> : null}
                       </View>
                     </TouchableOpacity>
@@ -637,11 +916,31 @@ export default function AddMedicinesScreen({navigation, route}) {
             </View>
           )}
 
-          {/* Add Button */}
-          <TouchableOpacity style={styles.addButton} onPress={addMedicine} activeOpacity={0.7}>
-            <PlusIcon size={20} color={colors.white} />
-            <Text style={styles.addButtonText}>Add Medicine</Text>
-          </TouchableOpacity>
+          {/* Add/Update Button */}
+          {editingMedicineId ? (
+            <View style={styles.editActionsContainer}>
+              <TouchableOpacity 
+                style={[styles.addButton, styles.cancelButton]} 
+                onPress={cancelEdit} 
+                activeOpacity={0.7}>
+                <XIcon size={20} color={colors.textPrimary} />
+                <Text style={[styles.addButtonText, styles.cancelButtonText]}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.addButton, styles.updateButton]} 
+                onPress={updateMedicine} 
+                activeOpacity={0.7}>
+                <CheckIcon size={20} color={colors.white} />
+                <Text style={styles.addButtonText}>Update Medicine</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addButton} onPress={addMedicine} activeOpacity={0.7}>
+              <PlusIcon size={20} color={colors.white} />
+              <Text style={styles.addButtonText}>Add Medicine</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Continue Button */}
@@ -654,14 +953,22 @@ export default function AddMedicinesScreen({navigation, route}) {
               activeOpacity={0.7}>
               <CheckIcon size={22} color={colors.white} />
               <Text style={styles.continueButtonText}>
-                {isSaving ? 'Saving...' : `Continue with ${medicines.length} Medicine${medicines.length > 1 ? 's' : ''}`}
+                {isSaving 
+                  ? 'Saving...' 
+                  : isEditing 
+                    ? `Update ${medicines.length} Medicine${medicines.length > 1 ? 's' : ''}`
+                    : `Continue with ${medicines.length} Medicine${medicines.length > 1 ? 's' : ''}`
+                }
               </Text>
             </TouchableOpacity>
 
             <View style={styles.helpContainer}>
               <InfoIcon size={16} color={colors.primary} />
               <Text style={styles.helpText}>
-                You can add more medicines or continue to review
+                {isEditing 
+                  ? 'You can add, edit, or remove medicines then save changes'
+                  : 'You can add more medicines or continue to review'
+                }
               </Text>
             </View>
           </>
@@ -801,13 +1108,49 @@ const styles = StyleSheet.create({
   headerTitle: {fontSize: 20, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5},
   headerSubtitle: {fontSize: 14, color: colors.primary, marginTop: 2, fontWeight: '600'},
 
+  loadingContainer: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+
   medicinesListContainer: {marginBottom: spacing.lg},
   listHeader: {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md},
   listTitle: {fontSize: 16, fontWeight: '700', color: colors.textPrimary},
   countBadge: {backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4, minWidth: 28, alignItems: 'center'},
   countBadgeText: {fontSize: 13, fontWeight: '800', color: colors.white},
 
-  medicineListItem: {flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.sm, ...shadows.md},
+  medicineListItem: {
+    backgroundColor: colors.surface, 
+    borderRadius: radius.lg, 
+    marginBottom: spacing.sm, 
+    ...shadows.md,
+    overflow: 'hidden',
+  },
+  medicineListItemEditing: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  medicineListItemExpanded: {
+    ...shadows.lg,
+  },
+  medicineCardContent: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: spacing.md, 
+    padding: spacing.base,
+  },
+  editingBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
   medicineIconContainer: {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
   medicineContent: {flex: 1},
   medicineName: {fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 6},
@@ -816,6 +1159,56 @@ const styles = StyleSheet.create({
   metaDot: {width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.border},
   quantityRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   quantityText: {fontSize: 12, color: colors.primary, fontWeight: '600'},
+  
+  expandIcon: {
+    transform: [{rotate: '0deg'}],
+  },
+  expandIconRotated: {
+    transform: [{rotate: '90deg'}],
+  },
+  
+  medicineActionsExpanded: {
+    flexDirection: 'row', 
+    gap: spacing.sm, 
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.base,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  expandedActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    ...shadows.sm,
+  },
+  editActionButton: {
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  editActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  deleteActionButton: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.error,
+  },
+  deleteActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.error,
+  },
+  
+  medicineActions: {flexDirection: 'row', gap: spacing.xs},
+  actionButton: {padding: 8, backgroundColor: colors.background, borderRadius: radius.sm},
   removeButton: {padding: 8},
 
   formContainer: {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg, ...shadows.lg, marginBottom: spacing.lg},
@@ -867,6 +1260,11 @@ const styles = StyleSheet.create({
 
   addButton: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.textSecondary, borderRadius: radius.md, paddingVertical: 14, ...shadows.sm},
   addButtonText: {fontSize: 15, fontWeight: '700', color: colors.white, letterSpacing: 0.3},
+
+  editActionsContainer: {flexDirection: 'row', gap: spacing.sm},
+  updateButton: {flex: 2, backgroundColor: colors.primary},
+  cancelButton: {flex: 1, backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.border},
+  cancelButtonText: {color: colors.textPrimary},
 
   continueButton: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 16, ...shadows.lg},
   continueButtonDisabled: {opacity: 0.5},

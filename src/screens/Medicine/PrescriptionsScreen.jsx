@@ -1,5 +1,5 @@
 import React, {useState, useMemo, useEffect, useCallback} from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Platform, ActivityIndicator, Alert} from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Platform, ActivityIndicator, Alert, Modal} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context'; 
 import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
@@ -7,13 +7,20 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {PrescriptionDB, MedicineDB} from '../../services/MedicationDatabaseService';
-import {ArrowBackIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon, CapsuleIcon, PlusIcon, FileTextIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon, CapsuleIcon, PlusIcon, FileTextIcon, TrashIcon, EditIcon, AlertCircleIcon, CheckCircleIcon, ChevronRightIcon, ChevronDownIcon} from '../../assets/icons/Icons';
 
 export default function PrescriptionsScreen({navigation}) {
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-
+  const [expandedPrescriptionId, setExpandedPrescriptionId] = useState(null);
+  
+  // Custom modal states
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedPrescription, setSelectedPrescription] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
   useFocusEffect(
     useCallback(() => {
       loadPrescriptions();
@@ -24,13 +31,14 @@ export default function PrescriptionsScreen({navigation}) {
     try {
       const allPrescriptions = await PrescriptionDB.getAll();
       
-      // Enrich with medicine count
+      // Enrich with medicine count and medicines list
       const enriched = await Promise.all(
         allPrescriptions.map(async (presc) => {
           const medicines = await MedicineDB.getByPrescriptionId(presc.id);
           return {
             ...presc,
             medicineCount: medicines.length,
+            medicines: medicines, // Include full medicines list
           };
         })
       );
@@ -57,6 +65,63 @@ export default function PrescriptionsScreen({navigation}) {
 
   const handlePrescriptionPress = (prescription) => {
     navigation.navigate('PrescriptionDetail', {prescriptionId: prescription.id});
+  };
+
+  const handleLongPress = (prescription) => {
+    setSelectedPrescription(prescription);
+    setShowActionModal(true);
+  };
+
+  const handleEdit = (prescription) => {
+    setShowActionModal(false);
+    // Navigate to AddMedicines to edit existing medicines in the prescription
+    navigation.navigate('AddMedicines', { 
+      prescriptionId: prescription.id,
+      prescriptionName: prescription.name,
+      isEditing: true,
+    });
+  };
+
+  const handleDelete = (prescription) => {
+    setSelectedPrescription(prescription);
+    setExpandedPrescriptionId(null);
+    setShowActionModal(false);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedPrescription) return;
+    
+    try {
+      setShowDeleteModal(false);
+      setLoading(true);
+      
+      // Delete all medicines associated with this prescription
+      const medicines = await MedicineDB.getByPrescriptionId(selectedPrescription.id);
+      for (const medicine of medicines) {
+        await MedicineDB.delete(medicine.id);
+      }
+      
+      // Delete the prescription
+      await PrescriptionDB.delete(selectedPrescription.id);
+      
+      // Reload prescriptions
+      await loadPrescriptions();
+      
+      setSuccessMessage('Prescription deleted successfully');
+      setShowSuccessModal(true);
+      
+      // Auto-hide success message
+      setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 2000);
+    } catch (error) {
+      console.error('[PrescriptionsScreen] Delete error:', error);
+      Alert.alert('Error', 'Failed to delete prescription');
+    } finally {
+      setLoading(false);
+      setSelectedPrescription(null);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -146,32 +211,102 @@ export default function PrescriptionsScreen({navigation}) {
                 <Text style={styles.emptyText}>No prescriptions match "{query}"</Text>
               </View>
             ) : (
-              filtered.map((presc, i) => (
-                <TouchableOpacity
-                  key={presc.id}
-                  style={[styles.prescCard, presc.status === 'active' && styles.prescCardActive]}
-                  onPress={() => handlePrescriptionPress(presc)}
-                  activeOpacity={0.8}>
-                  <View style={[styles.prescIcon, {backgroundColor: colors.primaryLight}]}>
-                    <FileTextIcon size={22} color={colors.primary} />
+              filtered.map((presc, i) => {
+                const isExpanded = expandedPrescriptionId === presc.id;
+                
+                return (
+                  <View 
+                    key={presc.id}
+                    style={[
+                      styles.prescCard, 
+                      presc.status === 'active' && styles.prescCardActive,
+                      isExpanded && styles.prescCardExpanded,
+                    ]}>
+                    <TouchableOpacity
+                      style={styles.prescCardContent}
+                      onPress={() => setExpandedPrescriptionId(isExpanded ? null : presc.id)}
+                      activeOpacity={0.7}>
+                      <View style={[styles.prescIcon, {backgroundColor: colors.primaryLight}]}>
+                        <FileTextIcon size={22} color={colors.primary} />
+                      </View>
+                      <View style={styles.prescInfo}>
+                        <Text style={styles.prescName}>{presc.name}</Text>
+                        <Text style={styles.prescMeta}>
+                          {presc.medicineCount} medicine{presc.medicineCount !== 1 ? 's' : ''}
+                          {presc.doctorName ? ` • Dr. ${presc.doctorName}` : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.prescRight}>
+                        <View style={[styles.statusBadge, {backgroundColor: `${getStatusColor(presc.status)}20`}]}>
+                          <Text style={[styles.statusText, {color: getStatusColor(presc.status)}]}>
+                            {getStatusLabel(presc.status)}
+                          </Text>
+                        </View>
+                      </View>
+                      {isExpanded ? (
+                        <ChevronDownIcon 
+                          size={20} 
+                          color={colors.textMuted} 
+                        />
+                      ) : (
+                        <ChevronRightIcon 
+                          size={20} 
+                          color={colors.textMuted} 
+                        />
+                      )}
+                    </TouchableOpacity>
+                    
+                    {/* Expandable Medicines List & Actions */}
+                    {isExpanded && (
+                      <>
+                        {/* Medicines List */}
+                        {presc.medicines && presc.medicines.length > 0 && (
+                          <View style={styles.medicinesListSection}>
+                            <Text style={styles.medicinesListTitle}>Medicines in this prescription:</Text>
+                            {presc.medicines.map((med, idx) => (
+                              <View key={med.id} style={styles.medicineItem}>
+                                <View style={styles.medicineItemDot} />
+                                <View style={styles.medicineItemContent}>
+                                  <Text style={styles.medicineItemName}>{med.name}</Text>
+                                  <Text style={styles.medicineItemDetails}>
+                                    {med.dose} {med.unit} • {med.times?.length || 0}x daily
+                                    {med.times && med.times.length > 0 && ` • ${med.times.join(', ')}`}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                        
+                        {/* Action Buttons */}
+                        <View style={styles.prescActionsExpanded}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setExpandedPrescriptionId(null);
+                              handleEdit(presc);
+                            }}
+                            style={[styles.expandedActionButton, styles.editActionButton]}
+                            activeOpacity={0.7}>
+                            <EditIcon size={20} color={colors.primary} />
+                            <Text style={styles.editActionText}>Edit</Text>
+                          </TouchableOpacity>
+                          
+                          <TouchableOpacity
+                            onPress={() => {
+                              setExpandedPrescriptionId(null);
+                              handleDelete(presc);
+                            }}
+                            style={[styles.expandedActionButton, styles.deleteActionButton]}
+                            activeOpacity={0.7}>
+                            <TrashIcon size={20} color={colors.error} />
+                            <Text style={styles.deleteActionText}>Delete</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
                   </View>
-                  <View style={styles.prescInfo}>
-                    <Text style={styles.prescName}>{presc.name}</Text>
-                    <Text style={styles.prescMeta}>
-                      {presc.medicineCount} medicine{presc.medicineCount !== 1 ? 's' : ''}
-                      {presc.doctorName ? ` • Dr. ${presc.doctorName}` : ''}
-                    </Text>
-                  </View>
-                  <View style={styles.prescRight}>
-                    <View style={[styles.statusBadge, {backgroundColor: `${getStatusColor(presc.status)}20`}]}>
-                      <Text style={[styles.statusText, {color: getStatusColor(presc.status)}]}>
-                        {getStatusLabel(presc.status)}
-                      </Text>
-                    </View>
-                  </View>
-                  <ArrowRightIcon size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              ))
+                );
+              })
             )}
 
             <TouchableOpacity style={styles.createCard} onPress={handleCreateNew} activeOpacity={0.85}>
@@ -197,6 +332,111 @@ export default function PrescriptionsScreen({navigation}) {
           <ArrowRightIcon size={16} color={colors.primary} />
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Action Modal */}
+      <Modal
+        visible={showActionModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowActionModal(false)}>
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowActionModal(false)}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{selectedPrescription?.name}</Text>
+              <Text style={styles.modalSubtitle}>Choose an action</Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.modalOption}
+              onPress={() => {
+                setShowActionModal(false);
+                handleEdit(selectedPrescription);
+              }}>
+              <View style={[styles.modalOptionIcon, {backgroundColor: colors.primaryLight}]}>
+                <EditIcon size={22} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionText}>
+                <Text style={styles.modalOptionTitle}>Edit Prescription</Text>
+                <Text style={styles.modalOptionDesc}>Modify prescription details</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.modalOption}
+              onPress={() => handleDelete(selectedPrescription)}>
+              <View style={[styles.modalOptionIcon, {backgroundColor: `${colors.error}20`}]}>
+                <TrashIcon size={22} color={colors.error} />
+              </View>
+              <View style={styles.modalOptionText}>
+                <Text style={[styles.modalOptionTitle, {color: colors.error}]}>Delete Prescription</Text>
+                <Text style={styles.modalOptionDesc}>Remove permanently</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.modalCancelBtn}
+              onPress={() => setShowActionModal(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}>
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowDeleteModal(false)}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.deleteIconContainer}>
+              <AlertCircleIcon size={48} color={colors.error} />
+            </View>
+            
+            <Text style={styles.deleteTitle}>Delete Prescription?</Text>
+            <Text style={styles.deleteMessage}>
+              Are you sure you want to delete "{selectedPrescription?.name}"? {'\n'}
+              This will also delete all associated medicines.
+            </Text>
+            
+            <View style={styles.deleteActions}>
+              <TouchableOpacity 
+                style={[styles.deleteBtn, styles.deleteBtnCancel]}
+                onPress={() => setShowDeleteModal(false)}>
+                <Text style={styles.deleteBtnTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.deleteBtn, styles.deleteBtnConfirm]}
+                onPress={confirmDelete}>
+                <Text style={styles.deleteBtnTextConfirm}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade">
+        <View style={styles.successOverlay}>
+          <View style={styles.successContent}>
+            <View style={styles.successIconContainer}>
+              <CheckCircleIcon size={48} color={colors.success} />
+            </View>
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -269,19 +509,25 @@ const styles = StyleSheet.create({
   empty: {alignItems: 'center', paddingVertical: spacing['3xl']},
   
   prescCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    padding: spacing.base,
     ...shadows.sm,
     marginBottom: spacing.sm,
-    gap: spacing.md,
     borderWidth: 1.5,
     borderColor: 'transparent',
+    overflow: 'hidden',
   },
   prescCardActive: {
     borderColor: colors.primary,
+  },
+  prescCardExpanded: {
+    ...shadows.lg,
+  },
+  prescCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.base,
+    gap: spacing.md,
   },
   prescIcon: {
     width: 48,
@@ -302,6 +548,90 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  
+  prescActionsExpanded: {
+    flexDirection: 'row', 
+    gap: spacing.xs, 
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.base,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  expandedActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    ...shadows.sm,
+  },
+  editActionButton: {
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  editActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  deleteActionButton: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.error,
+  },
+  deleteActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.error,
+  },
+  
+  // Medicines List in Expanded Card
+  medicinesListSection: {
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  medicinesListTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  medicineItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  medicineItemDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+    marginTop: 6,
+  },
+  medicineItemContent: {
+    flex: 1,
+  },
+  medicineItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  medicineItemDetails: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 16,
   },
   
   createCard: {
@@ -335,4 +665,157 @@ const styles = StyleSheet.create({
   scheduleInfo: {flex: 1},
   scheduleName: {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
   scheduleSub: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
+  
+  // Custom Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  modalHeader: {
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.base,
+    gap: spacing.md,
+  },
+  modalOptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOptionText: {
+    flex: 1,
+  },
+  modalOptionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  modalOptionDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  modalCancelBtn: {
+    padding: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  
+  // Delete Modal Styles
+  deleteIconContainer: {
+    alignItems: 'center',
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  deleteTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  deleteMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  deleteBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    alignItems: 'center',
+  },
+  deleteBtnCancel: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  deleteBtnConfirm: {
+    backgroundColor: colors.error,
+  },
+  deleteBtnTextCancel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  deleteBtnTextConfirm: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  
+  // Success Modal Styles
+  successOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  successContent: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.md,
+    ...shadows.lg,
+  },
+  successIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.full,
+    backgroundColor: `${colors.success}20`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
 });
