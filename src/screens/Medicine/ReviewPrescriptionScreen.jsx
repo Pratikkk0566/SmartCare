@@ -98,9 +98,9 @@ export default function ReviewPrescriptionScreen({navigation, route}) {
             text: 'View Schedule',
             onPress: () => {
               navigation.reset({
-                index: 0,
+                index: 1,
                 routes: [
-                  {name: 'Main'},
+                  {name: 'MainTabs'},
                   {name: 'MedicineSchedule'},
                 ],
               });
