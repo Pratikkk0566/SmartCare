@@ -219,7 +219,7 @@ export const PatientApi = {
       {
         method: 'POST',
         body  : JSON.stringify(userData),
-      },
+      }, 
       clientId,
     ),
 };
