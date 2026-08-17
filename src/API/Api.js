@@ -225,7 +225,7 @@ export const PatientApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AppointmentApi — all appointment operations
+// AppointmentApi — every appointment operations
 // Website: bookappoinment, fetchAppointmentHistory, cancelAppointment,
 //          availSlots, appoinmentcharge, videoAppoinment
 // ─────────────────────────────────────────────────────────────────────────────
