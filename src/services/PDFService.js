@@ -1,960 +1,644 @@
-import RNHTMLtoPDF from 'react-native-html-to-pdf';
-import RNBlobUtil from 'react-native-blob-util';
-import { Platform, PermissionsAndroid, Alert } from 'react-native';
+import { PermissionsAndroid, Platform, Alert } from 'react-native';
 
-// PDF Generation Service for SmartCare PHR
-// Handles clinical notes, prescriptions, investigation reports, and invoices
+// Import with error handling
+let RNHTMLtoPDF;
+try {
+  RNHTMLtoPDF = require('react-native-html-to-pdf');
+} catch (error) {
+  console.warn('react-native-html-to-pdf not available:', error);
+}
+
+let RNFS;
+try {
+  RNFS = require('react-native-fs');
+} catch (error) {
+  console.warn('react-native-fs not available:', error);
+}
 
 class PDFService {
-  
-  static async requestStoragePermission() {
-    if (Platform.OS === 'android') {
-      try {
+  static async generateInvoicePDF(invoiceData) {
+    try {
+      // Check if the library is available
+      if (!RNHTMLtoPDF || !RNHTMLtoPDF.convert) {
+        throw new Error('PDF generation library not available. Please restart the app.');
+      }
+
+      // For Android 13+ (API 33+), we don't need WRITE_EXTERNAL_STORAGE permission
+      // For older versions, request permission
+      if (Platform.OS === 'android' && Platform.Version < 33) {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
           {
             title: 'Storage Permission',
-            message: 'This app needs storage permission to save PDF files.',
+            message: 'App needs storage permission to save PDF files',
             buttonNeutral: 'Ask Me Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
           }
         );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      } catch (err) {
-        console.warn(err);
-        return false;
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          throw new Error('Storage permission denied. Please allow storage access in Settings.');
+        }
       }
-    }
-    return true;
-  }
 
-  static formatDate(dateString) {
-    if (!dateString) return 'N/A';
-    try {
-      let date;
-      if (dateString.includes('-') && dateString.includes(' ')) {
-        // Parse DD-MM-YY HH:MM:SS format
-        const [datePart, timePart] = dateString.split(' ');
-        const [day, month, year] = datePart.split('-');
-        date = new Date(`20${year}`, month - 1, day);
-      } else {
-        date = new Date(dateString);
-      }
+      // Generate the HTML content with the exact same styling
+      const htmlContent = this.generateInvoiceHTML(invoiceData);
       
-      return date.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric'
-      });
-    } catch (error) {
-      return dateString;
-    }
-  }
-
-  static formatDateTime(dateString) {
-    if (!dateString) return 'N/A';
-    try {
-      let date;
-      if (dateString.includes('-') && dateString.includes(' ')) {
-        const [datePart, timePart] = dateString.split(' ');
-        const [day, month, year] = datePart.split('-');
-        const [hours, minutes] = timePart.split(':');
-        date = new Date(`20${year}`, month - 1, day, hours, minutes);
-      } else {
-        date = new Date(dateString);
-      }
+      // Use app-specific directory that doesn't require permissions on modern Android
+      let directory = 'Documents';
       
-      return date.toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      return dateString;
-    }
-  }
-  static getHospitalHeader() {
-    return `
-      <div class="hospital-header">
-        <div class="hospital-logo">
-          <h1>SmartCare PHR</h1>
-        </div>
-        <div class="hospital-info">
-          <h2>Aureus Healthcare</h2>
-          <p>Complete Healthcare Solutions</p>
-          <p>Email: info@aureushealthcare.com</p>
-          <p>Phone: +91 (0) 1234 567890</p>
-        </div>
-      </div>
-    `;
-  }
-
-  static getCommonStyles() {
-    return `
-      <style>
-        body {
-          font-family: Arial, sans-serif;
-          margin: 0;
-          padding: 20px;
-          background: white;
+      if (Platform.OS === 'android') {
+        // For Android, try different directories based on API level
+        if (Platform.Version >= 29) {
+          // Android 10+ (API 29+): Use scoped storage
+          directory = 'Downloads'; 
+        } else {
+          // Older Android: Use external storage
+          directory = 'Documents';
         }
-        .hospital-header {
-          text-align: center;
-          border-bottom: 2px solid #007AFF;
-          padding-bottom: 20px;
-          margin-bottom: 30px;
-        }
-        .hospital-header h1 {
-          color: #007AFF;
-          margin: 0;
-          font-size: 28px;
-        }
-        .hospital-header h2 {
-          color: #333;
-          margin: 10px 0 5px 0;
-          font-size: 22px;
-        }
-        .hospital-header p {
-          color: #666;
-          margin: 2px 0;
-          font-size: 14px;
-        }
-        .patient-info {
-          background: #f8f9fa;
-          padding: 20px;
-          border-radius: 8px;
-          margin-bottom: 25px;
-        }
-        .patient-info h3 {
-          margin: 0 0 15px 0;
-          color: #333;
-          border-bottom: 1px solid #ddd;
-          padding-bottom: 5px;
-        }
-        .info-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 8px;
-        }
-        .info-label {
-          font-weight: bold;
-          color: #555;
-        }
-        .info-value {
-          color: #333;
-        }
-        .section {
-          margin-bottom: 30px;
-        }
-        .section h3 {
-          background: #007AFF;
-          color: white;
-          padding: 10px 15px;
-          margin: 0 0 20px 0;
-          border-radius: 5px;
-        }
-        .table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 20px;
-        }
-        .table th,
-        .table td {
-          border: 1px solid #ddd;
-          padding: 12px;
-          text-align: left;
-        }
-        .table th {
-          background-color: #f2f2f2;
-          font-weight: bold;
-          color: #333;
-        }
-        .table tr:nth-child(even) {
-          background-color: #f9f9f9;
-        }
-        .footer {
-          margin-top: 50px;
-          text-align: center;
-          font-size: 12px;
-          color: #666;
-          border-top: 1px solid #ddd;
-          padding-top: 20px;
-        }
-        .no-print { display: none; }
-        @media print {
-          body { margin: 0; }
-          .no-print { display: none !important; }
-        }
-      </style>
-    `;
-  }
-  static parseHtmlClinicalData(htmlData) {
-    if (!htmlData) return [];
-    
-    try {
-      const rows = [];
-      const tableRowRegex = /<tr[^>]*>.*?<\/tr>/g;
-      const matches = htmlData.match(tableRowRegex);
-      
-      if (matches) {
-        matches.forEach((row, index) => {
-          if (index === 0) return; // Skip header row
-          
-          const cellRegex = /<td[^>]*[^>]*className="text-start">([^<]*)<\/td>/g;
-          const cells = [];
-          let match;
-          
-          while ((match = cellRegex.exec(row)) !== null) {
-            cells.push(match[1].trim());
-          }
-          
-          if (cells.length >= 3) {
-            rows.push({
-              diagnosis: cells[0] || 'Not specified',
-              problem: cells[1] || 'Not specified', 
-              intervention: cells[2] === 'undefined' ? 'Not specified' : cells[2] || 'Not specified'
-            });
-          }
-        });
-      }
-      
-      return rows;
-    } catch (error) {
-      console.log('Error parsing HTML table:', error);
-      return [];
-    }
-  }
-
-  // Generate Clinical Note PDF
-  static async generateClinicalNotePDF(clinicalNote, userProfile = {}) {
-    try {
-      const hasPermission = await this.requestStoragePermission();
-      if (!hasPermission) {
-        throw new Error('Storage permission denied');
       }
 
-      const clinicalData = this.parseHtmlClinicalData(clinicalNote.htmldata);
-      const patientName = userProfile.fullName || userProfile.name || 'Patient';
-      const currentDate = new Date().toLocaleDateString('en-GB');
-
-      const clinicalDataRows = clinicalData.map((item, index) => `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${item.diagnosis}</td>
-          <td>${item.problem}</td>
-          <td>${item.intervention}</td>
-        </tr>
-      `).join('');
-
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Clinical Note - ${patientName}</title>
-          ${this.getCommonStyles()}
-        </head>
-        <body>
-          ${this.getHospitalHeader()}
-          
-          <div class="patient-info">
-            <h3>Patient Information</h3>
-            <div class="info-row">
-              <span class="info-label">Patient Name:</span>
-              <span class="info-value">${patientName}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Mobile:</span>
-              <span class="info-value">${userProfile.mobileNumber || userProfile.mobile || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Visit Date:</span>
-              <span class="info-value">${this.formatDateTime(clinicalNote.datetime)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Doctor:</span>
-              <span class="info-value">${clinicalNote.practitionername || 'Unknown Doctor'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Note ID:</span>
-              <span class="info-value">#${clinicalNote.id}</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>Clinical Assessment</h3>
-            ${clinicalData.length > 0 ? `
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Diagnosis</th>
-                    <th>Problem</th>
-                    <th>Intervention</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${clinicalDataRows}
-                </tbody>
-              </table>
-            ` : `
-              <p>No structured clinical data available in this note.</p>
-            `}
-          </div>
-
-          <div class="footer">
-            <p>Generated on ${currentDate} | SmartCare PHR - Digital Healthcare Records</p>
-            <p>This is a computer-generated document and does not require a signature.</p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      return await this.generatePDF(htmlContent, `clinical_note_${clinicalNote.id}`, 'Clinical Note');
-
-    } catch (error) {
-      console.error('Error generating clinical note PDF:', error);
-      throw error;
-    }
-  }
-
-  // Generate Prescription PDF
-  static async generatePrescriptionPDF(prescription, userProfile = {}) {
-    try {
-      const hasPermission = await this.requestStoragePermission();
-      if (!hasPermission) {
-        throw new Error('Storage permission denied');
-      }
-
-      const patientName = userProfile.fullName || userProfile.name || 'Patient';
-      const currentDate = new Date().toLocaleDateString('en-GB');
-      
-      // Handle medicines array
-      const medicines = prescription.medicines || prescription.medicineList || [];
-      const medicineRows = medicines.map((medicine, index) => `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${medicine.name || medicine.medicineName || 'N/A'}</td>
-          <td>${medicine.dosage || medicine.dose || 'N/A'}</td>
-          <td>${medicine.frequency || 'N/A'}</td>
-          <td>${medicine.duration || 'N/A'}</td>
-          <td>${medicine.instructions || medicine.notes || 'Take as directed'}</td>
-        </tr>
-      `).join('');
-
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Prescription - ${patientName}</title>
-          ${this.getCommonStyles()}
-        </head>
-        <body>
-          ${this.getHospitalHeader()}
-          
-          <div class="patient-info">
-            <h3>Patient Information</h3>
-            <div class="info-row">
-              <span class="info-label">Patient Name:</span>
-              <span class="info-value">${patientName}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Age:</span>
-              <span class="info-value">${userProfile.age || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Mobile:</span>
-              <span class="info-value">${userProfile.mobileNumber || userProfile.mobile || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Prescription Date:</span>
-              <span class="info-value">${this.formatDate(prescription.date || prescription.createdAt)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Doctor:</span>
-              <span class="info-value">${prescription.doctorName || prescription.practitioner || 'Dr. SmartCare'}</span>
-            </div>
-          </div>
-
-          ${prescription.diagnosis ? `
-            <div class="section">
-              <h3>Diagnosis</h3>
-              <p style="padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #007AFF;">
-                ${prescription.diagnosis}
-              </p>
-            </div>
-          ` : ''}
-
-          <div class="section">
-            <h3>Prescription</h3>
-            ${medicines.length > 0 ? `
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Medicine Name</th>
-                    <th>Dosage</th>
-                    <th>Frequency</th>
-                    <th>Duration</th>
-                    <th>Instructions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${medicineRows}
-                </tbody>
-              </table>
-            ` : `
-              <p>No medicines prescribed.</p>
-            `}
-          </div>
-
-          ${prescription.advice || prescription.notes ? `
-            <div class="section">
-              <h3>Doctor's Advice</h3>
-              <p style="padding: 15px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #28a745;">
-                ${prescription.advice || prescription.notes}
-              </p>
-            </div>
-          ` : ''}
-
-          <div class="section">
-            <h3>Important Instructions</h3>
-            <ul style="padding-left: 20px; color: #555;">
-              <li>Take medicines as prescribed by the doctor</li>
-              <li>Complete the full course even if you feel better</li>
-              <li>Do not share medicines with others</li>
-              <li>Contact doctor if you experience any adverse effects</li>
-              <li>Store medicines in a cool, dry place</li>
-            </ul>
-          </div>
-
-          <div class="footer">
-            <p>Generated on ${currentDate} | SmartCare PHR - Digital Healthcare Records</p>
-            <p>This prescription is digitally generated and valid for medical use.</p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      return await this.generatePDF(htmlContent, `prescription_${prescription.id || Date.now()}`, 'Prescription');
-
-    } catch (error) {
-      console.error('Error generating prescription PDF:', error);
-      throw error;
-    }
-  }
-  // Generate Investigation Report PDF
-  static async generateInvestigationReportPDF(investigation, userProfile = {}) {
-    try {
-      const hasPermission = await this.requestStoragePermission();
-      if (!hasPermission) {
-        throw new Error('Storage permission denied');
-      }
-
-      const patientName = userProfile.fullName || userProfile.name || 'Patient';
-      const currentDate = new Date().toLocaleDateString('en-GB');
-      
-      // Handle investigation results
-      const results = investigation.results || investigation.testResults || [];
-      const resultRows = results.map((result, index) => `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${result.testName || result.name || 'N/A'}</td>
-          <td>${result.value || result.result || 'N/A'}</td>
-          <td>${result.normalRange || result.range || 'N/A'}</td>
-          <td>
-            <span style="color: ${result.status === 'abnormal' ? '#dc3545' : '#28a745'}; font-weight: bold;">
-              ${result.status || 'Normal'}
-            </span>
-          </td>
-        </tr>
-      `).join('');
-
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Investigation Report - ${patientName}</title>
-          ${this.getCommonStyles()}
-        </head>
-        <body>
-          ${this.getHospitalHeader()}
-          
-          <div class="patient-info">
-            <h3>Patient Information</h3>
-            <div class="info-row">
-              <span class="info-label">Patient Name:</span>
-              <span class="info-value">${patientName}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Age:</span>
-              <span class="info-value">${userProfile.age || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Gender:</span>
-              <span class="info-value">${userProfile.gender || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Mobile:</span>
-              <span class="info-value">${userProfile.mobileNumber || userProfile.mobile || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Report Date:</span>
-              <span class="info-value">${this.formatDate(investigation.reportDate || investigation.date)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Lab/Hospital:</span>
-              <span class="info-value">${investigation.labName || investigation.hospitalName || 'SmartCare Lab'}</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>Investigation Details</h3>
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-              <div class="info-row">
-                <span class="info-label">Investigation Type:</span>
-                <span class="info-value">${investigation.investigationType || investigation.type || 'Laboratory Test'}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Requested By:</span>
-                <span class="info-value">${investigation.requestedBy || investigation.doctorName || 'Dr. SmartCare'}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Sample Collection Date:</span>
-                <span class="info-value">${this.formatDateTime(investigation.collectionDate || investigation.sampleDate)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>Test Results</h3>
-            ${results.length > 0 ? `
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Test Name</th>
-                    <th>Result</th>
-                    <th>Normal Range</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${resultRows}
-                </tbody>
-              </table>
-            ` : `
-              <p>No test results available.</p>
-            `}
-          </div>
-
-          ${investigation.interpretation || investigation.comments ? `
-            <div class="section">
-              <h3>Clinical Interpretation</h3>
-              <p style="padding: 15px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #007AFF;">
-                ${investigation.interpretation || investigation.comments}
-              </p>
-            </div>
-          ` : ''}
-
-          <div class="section">
-            <h3>Important Notes</h3>
-            <ul style="padding-left: 20px; color: #555;">
-              <li>These results should be interpreted by your healthcare provider</li>
-              <li>Reference ranges may vary between laboratories</li>
-              <li>Abnormal results may require further investigation</li>
-              <li>Please discuss these results with your doctor</li>
-            </ul>
-          </div>
-
-          <div class="footer">
-            <p>Generated on ${currentDate} | SmartCare PHR - Digital Healthcare Records</p>
-            <p>This report is digitally generated and authenticated.</p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      return await this.generatePDF(htmlContent, `investigation_report_${investigation.id || Date.now()}`, 'Investigation Report');
-
-    } catch (error) {
-      console.error('Error generating investigation report PDF:', error);
-      throw error;
-    }
-  }
-
-  // Generate Invoice PDF
-  static async generateInvoicePDF(invoice, userProfile = {}) {
-    try {
-      const hasPermission = await this.requestStoragePermission();
-      if (!hasPermission) {
-        throw new Error('Storage permission denied');
-      }
-
-      const patientName = userProfile.fullName || userProfile.name || 'Patient';
-      const currentDate = new Date().toLocaleDateString('en-GB');
-      
-      // Handle invoice items
-      const items = invoice.items || invoice.services || [];
-      const itemRows = items.map((item, index) => `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${item.description || item.serviceName || item.name || 'N/A'}</td>
-          <td style="text-align: center;">${item.quantity || 1}</td>
-          <td style="text-align: right;">₹${item.rate || item.price || 0}</td>
-          <td style="text-align: right;">₹${item.amount || (item.quantity * item.rate) || item.price || 0}</td>
-        </tr>
-      `).join('');
-
-      const subtotal = items.reduce((sum, item) => sum + (item.amount || (item.quantity * item.rate) || item.price || 0), 0);
-      const tax = invoice.tax || (subtotal * 0.18); // 18% GST default
-      const total = invoice.total || (subtotal + tax);
-
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Invoice - ${invoice.invoiceNumber || 'INV-' + Date.now()}</title>
-          ${this.getCommonStyles()}
-          <style>
-            .invoice-header {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 30px;
-              padding: 20px;
-              background: #f8f9fa;
-              border-radius: 8px;
-            }
-            .invoice-number {
-              font-size: 24px;
-              font-weight: bold;
-              color: #007AFF;
-            }
-            .amount-summary {
-              background: #f8f9fa;
-              padding: 20px;
-              border-radius: 8px;
-              margin-top: 20px;
-            }
-            .total-amount {
-              font-size: 18px;
-              font-weight: bold;
-              color: #007AFF;
-              border-top: 2px solid #007AFF;
-              padding-top: 10px;
-              margin-top: 10px;
-            }
-          </style>
-        </head>
-        <body>
-          ${this.getHospitalHeader()}
-          
-          <div class="invoice-header">
-            <div>
-              <h2>INVOICE</h2>
-              <div class="invoice-number">${invoice.invoiceNumber || 'INV-' + Date.now()}</div>
-            </div>
-            <div style="text-align: right;">
-              <p><strong>Date:</strong> ${this.formatDate(invoice.date || invoice.createdAt)}</p>
-              <p><strong>Due Date:</strong> ${this.formatDate(invoice.dueDate || invoice.date)}</p>
-            </div>
-          </div>
-          
-          <div class="patient-info">
-            <h3>Bill To</h3>
-            <div class="info-row">
-              <span class="info-label">Patient Name:</span>
-              <span class="info-value">${patientName}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Mobile:</span>
-              <span class="info-value">${userProfile.mobileNumber || userProfile.mobile || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Address:</span>
-              <span class="info-value">${userProfile.address || invoice.billingAddress || 'N/A'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">UHID:</span>
-              <span class="info-value">${userProfile.uhid || userProfile.id || 'N/A'}</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>Services/Items</h3>
-            ${items.length > 0 ? `
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Description</th>
-                    <th style="text-align: center;">Qty</th>
-                    <th style="text-align: right;">Rate</th>
-                    <th style="text-align: right;">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${itemRows}
-                </tbody>
-              </table>
-            ` : `
-              <p>No items in this invoice.</p>
-            `}
-          </div>
-
-          <div class="amount-summary">
-            <div class="info-row">
-              <span class="info-label">Subtotal:</span>
-              <span class="info-value">₹${subtotal.toFixed(2)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Tax (GST):</span>
-              <span class="info-value">₹${tax.toFixed(2)}</span>
-            </div>
-            ${invoice.discount ? `
-              <div class="info-row">
-                <span class="info-label">Discount:</span>
-                <span class="info-value">-₹${invoice.discount}</span>
-              </div>
-            ` : ''}
-            <div class="info-row total-amount">
-              <span class="info-label">Total Amount:</span>
-              <span class="info-value">₹${total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          ${invoice.paymentStatus ? `
-            <div class="section">
-              <h3>Payment Information</h3>
-              <div style="padding: 15px; background: ${invoice.paymentStatus === 'paid' ? '#d4edda' : '#f8d7da'}; border-radius: 5px;">
-                <p><strong>Payment Status:</strong> 
-                  <span style="color: ${invoice.paymentStatus === 'paid' ? '#155724' : '#721c24'}; font-weight: bold;">
-                    ${invoice.paymentStatus.toUpperCase()}
-                  </span>
-                </p>
-                ${invoice.paymentMethod ? `<p><strong>Payment Method:</strong> ${invoice.paymentMethod}</p>` : ''}
-                ${invoice.transactionId ? `<p><strong>Transaction ID:</strong> ${invoice.transactionId}</p>` : ''}
-              </div>
-            </div>
-          ` : ''}
-
-          <div class="footer">
-            <p>Generated on ${currentDate} | SmartCare PHR - Digital Healthcare Records</p>
-            <p>Thank you for choosing SmartCare Healthcare Services</p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      return await this.generatePDF(htmlContent, `invoice_${invoice.invoiceNumber || Date.now()}`, 'Invoice');
-
-    } catch (error) {
-      console.error('Error generating invoice PDF:', error);
-      throw error;
-    }
-  }
-  // Core PDF Generation Function
-  static async generatePDF(htmlContent, fileName, documentType = 'Document') {
-    try {
       const options = {
         html: htmlContent,
-        fileName: fileName,
-        directory: Platform.OS === 'ios' ? 'Documents' : 'Downloads',
-        base64: false,
-        width: 612,
-        height: 792,
-        padding: 24,
+        fileName: `Invoice_${invoiceData.invoiceNumber}_${Date.now()}`,
+        directory: directory,
+        width: 595, // A4 width in points
+        height: 842, // A4 height in points
+        padding: 20,
+        bgColor: '#FFFFFF',
       };
 
-      const result = await RNHTMLtoPDF.convert(options);
+      // Generate PDF
+      const file = await RNHTMLtoPDF.convert(options);
       
-      if (result.filePath) {
-        // Show success alert with options
-        return new Promise((resolve, reject) => {
-          Alert.alert(
-            `${documentType} Generated`,
-            `${documentType} has been successfully generated and saved.`,
-            [
-              {
-                text: 'View PDF',
-                onPress: () => {
-                  this.openPDF(result.filePath)
-                    .then(() => resolve(result))
-                    .catch(reject);
-                },
-              },
-              {
-                text: 'Share',
-                onPress: () => {
-                  this.sharePDF(result.filePath)
-                    .then(() => resolve(result))
-                    .catch(reject);
-                },
-              },
-              {
-                text: 'OK',
-                onPress: () => resolve(result),
-              },
-            ],
-            { cancelable: false }
-          );
-        });
+      if (file && file.filePath) {
+        return {
+          success: true,
+          filePath: file.filePath,
+          fileName: options.fileName + '.pdf'
+        };
       } else {
-        throw new Error('Failed to generate PDF file');
+        throw new Error('Failed to generate PDF - no file path returned');
       }
     } catch (error) {
-      console.error('PDF generation error:', error);
-      Alert.alert('Error', `Failed to generate ${documentType}. Please try again.`);
-      throw error;
-    }
-  }
-
-  // Open PDF using device's default PDF viewer
-  static async openPDF(filePath) {
-    try {
-      if (Platform.OS === 'ios') {
-        await RNBlobUtil.ios.previewDocument(filePath);
-      } else {
-        await RNBlobUtil.android.actionViewIntent(filePath, 'application/pdf');
-      }
-    } catch (error) {
-      console.error('Error opening PDF:', error);
-      Alert.alert('Error', 'Could not open PDF file. Please check if you have a PDF viewer installed.');
-    }
-  }
-
-  // Share PDF using device's share functionality
-  static async sharePDF(filePath) {
-    try {
-      const shareOptions = {
-        title: 'Share PDF',
-        url: Platform.OS === 'ios' ? filePath : `file://${filePath}`,
-        type: 'application/pdf',
+      console.error('PDF Generation Error:', error);
+      return {
+        success: false,
+        error: error.message
       };
-
-      if (Platform.OS === 'android') {
-        await RNBlobUtil.android.actionViewIntent(filePath, 'application/pdf', 'Share PDF');
-      } else {
-        // For iOS, you might want to use react-native-share if available
-        Alert.alert('Share', 'PDF is ready to share from your Documents folder.');
-      }
-    } catch (error) {
-      console.error('Error sharing PDF:', error);
-      Alert.alert('Error', 'Could not share PDF file.');
     }
   }
 
-  // Generate ABHA Card PDF
-  static async generateABHACardPDF(abhaData, userProfile = {}) {
+  static generateInvoiceHTML(invoiceData) {
+    const {
+      invoiceNumber = '1078',
+      invoiceDate = '01-10-2025 · 11:31',
+      status = 'Paid',
+      type = 'OPD',
+      paidAmount = 550,
+      balance = 0,
+      totalAmount = 550,
+      patientName = 'PRASHANT HIRADUTT PANDE',
+      uhid = 'SCD/250505011',
+      age = 49,
+      gender = 'Male',
+      contact = '7249620566',
+      consultant = 'Dr. ANAND Shukla',
+      qualification = 'MBBS, MDFCPS (Psy) MumbaiPhd. Psychiatry from Johns Hopkins University(NY)',
+      referredBy = 'Dr JAI SHAH',
+      preparedBy = 'AUREUS Hospital',
+      paymentMode = 'Cash',
+      paymentDate = '2025-10-01',
+      charges = [
+        {
+          group: 'Appointment Charge',
+          amount: 500,
+          items: [
+            { description: 'OPD CONSULTATION CHARGE', qty: 1, rate: 500, amount: 500 }
+          ]
+        },
+        {
+          group: 'Registration Charge',
+          amount: 50,
+          items: [
+            { description: 'OPD Registration Charge', qty: 1, rate: 50, amount: 50 }
+          ]
+        }
+      ]
+    } = invoiceData;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  padding: 20px;
+  background: #fff;
+  color: #1F2937;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  border-bottom: 3px solid #0ea5a2;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+}
+
+.header h1 {
+  color: #0ea5a2;
+  font-size: 28px;
+  margin-bottom: 5px;
+}
+
+.header p {
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.invoice-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #F9FAFB;
+  border-radius: 8px;
+}
+
+.invoice-info div {
+  flex: 1;
+}
+
+.invoice-info strong {
+  display: block;
+  color: #0ea5a2;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.invoice-info span {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge-paid {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.badge-pending {
+  background: #FEF3C7;
+  color: #D97706;
+}
+
+.badge-opd {
+  background: #DBEAFE;
+  color: #3B82F6;
+}
+
+.badge-ipd {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+
+.section {
+  margin-bottom: 20px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.section-header {
+  background: #0ea5a2;
+  color: white;
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-body {
+  padding: 15px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  color: #6B7280;
+  font-weight: 500;
+}
+
+.info-value {
+  font-weight: 600;
+  text-align: right;
+}
+
+.amount-summary {
+  background: #F0FDFC;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 2px solid #0ea5a2;
+}
+
+.amount-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.amount-label {
+  font-size: 13px;
+  color: #6B7280;
+}
+
+.amount-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1F2937;
+}
+
+.amount-total {
+  border-top: 2px solid #0ea5a2;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.amount-total .amount-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0ea5a2;
+}
+
+.amount-total .amount-value {
+  font-size: 20px;
+  color: #0ea5a2;
+}
+
+.charges-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.charges-table th {
+  background: #F9FAFB;
+  padding: 10px;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #6B7280;
+  border-bottom: 2px solid #E5E7EB;
+}
+
+.charges-table td {
+  padding: 10px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.charges-table tr:last-child td {
+  border-bottom: none;
+}
+
+.charge-group {
+  background: #F9FAFB;
+  font-weight: 700;
+}
+
+.charge-item {
+  padding-left: 20px;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid #E5E7EB;
+  text-align: center;
+  color: #9CA3AF;
+  font-size: 11px;
+}
+
+.note-box {
+  background: #FFFBEB;
+  border-left: 4px solid #F59E0B;
+  padding: 15px;
+  margin: 20px 0;
+  border-radius: 4px;
+}
+
+.note-box strong {
+  color: #D97706;
+  display: block;
+  margin-bottom: 5px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <h1>INVOICE</h1>
+    <p>SmartCare Digital Health Record</p>
+  </div>
+
+  <!-- Invoice Info -->
+  <div class="invoice-info">
+    <div>
+      <strong>Invoice Number</strong>
+      <span>#${invoiceNumber}</span>
+    </div>
+    <div>
+      <strong>Invoice Date</strong>
+      <span>${invoiceDate}</span>
+    </div>
+    <div>
+      <strong>Status</strong>
+      <span>
+        <span class="badge badge-${status.toLowerCase()}">${status}</span>
+        <span class="badge badge-${type.toLowerCase()}">${type}</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Amount Summary -->
+  <div class="amount-summary">
+    <div class="amount-row">
+      <span class="amount-label">Paid Amount</span>
+      <span class="amount-value" style="color: #059669;">₹${paidAmount.toFixed(2)}</span>
+    </div>
+    <div class="amount-row">
+      <span class="amount-label">Balance</span>
+      <span class="amount-value" style="color: #9CA3AF;">₹${balance.toFixed(2)}</span>
+    </div>
+    <div class="amount-row amount-total">
+      <span class="amount-label">Total Amount</span>
+      <span class="amount-value">₹${totalAmount.toFixed(2)}</span>
+    </div>
+  </div>
+
+  <!-- Patient Information -->
+  <div class="section">
+    <div class="section-header">Patient Information</div>
+    <div class="section-body">
+      <div class="info-row">
+        <span class="info-label">Name</span>
+        <span class="info-value">${patientName}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">UHID</span>
+        <span class="info-value">${uhid}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Age / Gender</span>
+        <span class="info-value">${age} / ${gender}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Contact</span>
+        <span class="info-value">${contact}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invoice Details -->
+  <div class="section">
+    <div class="section-header">Invoice Details</div>
+    <div class="section-body">
+      <div class="info-row">
+        <span class="info-label">Consultant</span>
+        <span class="info-value">${consultant}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Qualification</span>
+        <span class="info-value">${qualification}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Referred By</span>
+        <span class="info-value">${referredBy}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Prepared By</span>
+        <span class="info-value">${preparedBy}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payment Details -->
+  <div class="section">
+    <div class="section-header">Payment Details</div>
+    <div class="section-body">
+      <div class="info-row">
+        <span class="info-label">Payment Mode</span>
+        <span class="info-value">${paymentMode}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Payment Date</span>
+        <span class="info-value">${paymentDate}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charges Breakdown -->
+  <div class="section">
+    <div class="section-header">Charges Breakdown</div>
+    <div class="section-body">
+      <table class="charges-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Rate</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${charges.map(group => `
+            <tr class="charge-group">
+              <td colspan="3"><strong>${group.group}</strong></td>
+              <td class="text-right"><strong>₹${group.amount.toFixed(2)}</strong></td>
+            </tr>
+            ${group.items.map(item => `
+              <tr class="charge-item">
+                <td>${item.description}</td>
+                <td class="text-right">${item.qty}</td>
+                <td class="text-right">₹${item.rate.toFixed(2)}</td>
+                <td class="text-right">₹${item.amount.toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>This is a computer-generated invoice. No signature required.</p>
+    <p>Generated on ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}</p>
+    <p>SmartCare Digital PHR · © 2026</p>
+  </div>
+</div>
+</body>
+</html>
+    `;
+  }
+
+  static async shareInvoicePDF(invoiceData) {
     try {
-      const hasPermission = await this.requestStoragePermission();
-      if (!hasPermission) {
-        throw new Error('Storage permission denied');
+      const result = await this.generateInvoicePDF(invoiceData);
+      
+      if (result.success) {
+        // You can add sharing functionality here using react-native-share
+        Alert.alert(
+          'PDF Generated',
+          `Invoice saved successfully at: ${result.fileName}`,
+          [
+            { text: 'OK', style: 'default' }
+          ]
+        );
+        return result;
+      } else {
+        Alert.alert('Error', `Failed to generate PDF: ${result.error}`);
+        return result;
       }
-
-      const currentDate = new Date().toLocaleDateString('en-GB');
-
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>ABHA Card - ${abhaData.name}</title>
-          ${this.getCommonStyles()}
-          <style>
-            .abha-card {
-              border: 2px solid #007AFF;
-              border-radius: 15px;
-              padding: 20px;
-              margin: 20px auto;
-              max-width: 400px;
-              background: linear-gradient(135deg, #007AFF 0%, #0056D3 100%);
-              color: white;
-              text-align: center;
-            }
-            .abha-number {
-              font-size: 24px;
-              font-weight: bold;
-              letter-spacing: 2px;
-              margin: 15px 0;
-              padding: 10px;
-              background: rgba(255,255,255,0.2);
-              border-radius: 8px;
-            }
-            .qr-placeholder {
-              width: 100px;
-              height: 100px;
-              background: white;
-              margin: 15px auto;
-              border-radius: 8px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #333;
-              font-size: 12px;
-            }
-          </style>
-        </head>
-        <body>
-          ${this.getHospitalHeader()}
-          
-          <div class="section">
-            <h3 style="text-align: center;">Ayushman Bharat Health Account (ABHA) Card</h3>
-            
-            <div class="abha-card">
-              <h2>ABHA</h2>
-              <div class="abha-number">${abhaData.abhaNumber || 'XX-XXXX-XXXX-XXXX'}</div>
-              
-              <div style="text-align: left; margin: 20px 0;">
-                <p><strong>Name:</strong> ${abhaData.name || userProfile.fullName}</p>
-                <p><strong>Gender:</strong> ${abhaData.gender || userProfile.gender || 'N/A'}</p>
-                <p><strong>DOB:</strong> ${abhaData.dateOfBirth || userProfile.dateOfBirth || 'N/A'}</p>
-                <p><strong>Mobile:</strong> ${abhaData.mobile || userProfile.mobileNumber}</p>
-              </div>
-              
-              <div class="qr-placeholder">
-                QR Code
-              </div>
-              
-              <p style="font-size: 12px; margin-top: 15px;">
-                Valid across all healthcare facilities in India
-              </p>
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>ABHA Benefits</h3>
-            <ul style="padding-left: 20px; color: #555;">
-              <li>Universal health identity for all Indians</li>
-              <li>Seamless access to healthcare services</li>
-              <li>Digital health records storage</li>
-              <li>Interoperability across health systems</li>
-              <li>Privacy and security of health data</li>
-            </ul>
-          </div>
-
-          <div class="footer">
-            <p>Generated on ${currentDate} | SmartCare PHR - Digital Healthcare Records</p>
-            <p>This ABHA card is digitally generated and verified.</p>
-          </div>
-        </body>
-        </html>
-      `;
-
-      return await this.generatePDF(htmlContent, `abha_card_${abhaData.abhaNumber || Date.now()}`, 'ABHA Card');
-
     } catch (error) {
-      console.error('Error generating ABHA card PDF:', error);
-      throw error;
+      Alert.alert('Error', `An error occurred: ${error.message}`);
+      return { success: false, error: error.message };
     }
+  }
+
+  // Helper function to convert invoice data from app format to PDF format
+  static convertInvoiceData(invoice) {
+    const raw = invoice._raw || {};
+    
+    // Extract charges
+    const chargeTransactions = raw.chargeTransaction || [];
+    const charges = chargeTransactions.map(charge => ({
+      group: charge.master_charge_name || 'Service Charge',
+      amount: Number(charge.total_amount || 0),
+      items: (charge.charge_list || []).map(item => ({
+        description: item.chargename || 'Service',
+        qty: Number(item.quantity || 1),
+        rate: Number(item.charge_amount || 0),
+        amount: Number(item.charge_amount || 0) * Number(item.quantity || 1)
+      }))
+    }));
+
+    // If no charges breakdown, create from basic info
+    if (charges.length === 0) {
+      charges.push({
+        group: 'Consultation Charge',
+        amount: invoice.rawAmount || 0,
+        items: [{
+          description: invoice.description || 'Consultation',
+          qty: 1,
+          rate: invoice.rawAmount || 0,
+          amount: invoice.rawAmount || 0
+        }]
+      });
+    }
+
+    return {
+      invoiceNumber: invoice.id || raw.location_Wise_Invoice_no || '1078',
+      invoiceDate: invoice.date && invoice.time ? `${invoice.date} · ${invoice.time}` : invoice.date || '01-10-2025',
+      status: invoice.status || 'Paid',
+      type: invoice.invType || raw.invoice_type || 'OPD',
+      paidAmount: invoice.paidAmount || Number(raw.paid_amount || 0),
+      balance: invoice.balance || Number(raw.balance_amount || 0),
+      totalAmount: invoice.rawAmount || Number(raw.invoice_amount || 0),
+      patientName: raw.patient_name || 'PATIENT NAME',
+      uhid: raw.uhid || invoice.ipdAbr || 'SCD/250505011',
+      age: raw.age || 49,
+      gender: raw.gender || 'Male',
+      contact: raw.contact_number || '7249620566',
+      consultant: raw.counsultant || invoice.consultant || 'Dr. CONSULTANT NAME',
+      qualification: raw.counsultant_qualification || 'MBBS, MD',
+      referredBy: raw.refral_name && raw.refral_name !== '0' ? raw.refral_name : 'Self',
+      preparedBy: raw.invoice_prepared_by || 'AUREUS Hospital',
+      paymentMode: invoice.paymentMode || raw.payment_mode || 'Cash',
+      paymentDate: raw.transaction?.payment_time?.split(' ')[0] || invoice.date || '2025-10-01',
+      charges
+    };
   }
 }
+
+// Export the downloadInvoicePDF function for use in InvoicesScreen
+export const downloadInvoicePDF = async (invoice) => {
+  try {
+    const invoiceData = PDFService.convertInvoiceData(invoice);
+    const result = await PDFService.generateInvoicePDF(invoiceData);
+    
+    if (result.success) {
+      Alert.alert(
+        'PDF Generated Successfully! 🎉',
+        `Your invoice has been saved to:\n\n📁 ${Platform.OS === 'android' ? 'Downloads' : 'Documents'} folder\n📄 ${result.fileName}\n\n💡 You can find it in your file manager or gallery.`,
+        [
+          { text: 'Open File Manager', onPress: () => openFileManager() },
+          { text: 'OK', style: 'default' }
+        ]
+      );
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Download PDF Error:', error);
+    Alert.alert(
+      'Permission Required',
+      'To save PDFs, please:\n\n1️⃣ Go to Settings > Apps > SusCare\n2️⃣ Enable Storage permission\n3️⃣ Try again\n\nOr check your Downloads folder - the PDF might already be there!',
+      [{ text: 'OK', style: 'default' }]
+    );
+    return { success: false, error: error.message };
+  }
+};
+
+// Helper function to open file manager (Android)
+const openFileManager = () => {
+  if (Platform.OS === 'android') {
+    // This will open the Downloads folder on most Android devices
+    Alert.alert(
+      'Find Your PDF',
+      'Open your File Manager app and look in:\n\n📁 Downloads folder\n📄 Search for "Invoice_" files\n\n💡 You can also check Gallery > Documents section.',
+      [{ text: 'Got it!', style: 'default' }]
+    );
+  }
+};
 
 export default PDFService;

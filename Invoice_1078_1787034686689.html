@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      padding: 20px;
+      background: #fff;
+      color: #1F2937;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 3px solid #0ea5a2;
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      color: #0ea5a2;
+      font-size: 28px;
+      margin-bottom: 5px;
+    }
+    .header p {
+      color: #6B7280;
+      font-size: 14px;
+    }
+    .invoice-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #F9FAFB;
+      border-radius: 8px;
+    }
+    .invoice-info div {
+      flex: 1;
+    }
+    .invoice-info strong {
+      display: block;
+      color: #0ea5a2;
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .invoice-info span {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-paid {
+      background: #D1FAE5;
+      color: #059669;
+    }
+    .badge-pending {
+      background: #FEF3C7;
+      color: #D97706;
+    }
+    .badge-opd {
+      background: #DBEAFE;
+      color: #3B82F6;
+    }
+    .badge-ipd {
+      background: #FEE2E2;
+      color: #EF4444;
+    }
+    .section {
+      margin-bottom: 20px;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: #0ea5a2;
+      color: white;
+      padding: 10px 15px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .section-body {
+      padding: 15px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #F3F4F6;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: #6B7280;
+      font-weight: 500;
+    }
+    .info-value {
+      font-weight: 600;
+      text-align: right;
+    }
+    .amount-summary {
+      background: #F0FDFC;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 2px solid #0ea5a2;
+    }
+    .amount-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .amount-label {
+      font-size: 13px;
+      color: #6B7280;
+    }
+    .amount-value {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1F2937;
+    }
+    .amount-total {
+      border-top: 2px solid #0ea5a2;
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+    .amount-total .amount-label {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0ea5a2;
+    }
+    .amount-total .amount-value {
+      font-size: 20px;
+      color: #0ea5a2;
+    }
+    .charges-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .charges-table th {
+      background: #F9FAFB;
+      padding: 10px;
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #6B7280;
+      border-bottom: 2px solid #E5E7EB;
+    }
+    .charges-table td {
+      padding: 10px;
+      border-bottom: 1px solid #F3F4F6;
+    }
+    .charges-table tr:last-child td {
+      border-bottom: none;
+    }
+    .charge-group {
+      background: #F9FAFB;
+      font-weight: 700;
+    }
+    .charge-item {
+      padding-left: 20px;
+    }
+    .text-right {
+      text-align: right;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid #E5E7EB;
+      text-align: center;
+      color: #9CA3AF;
+      font-size: 11px;
+    }
+    .note-box {
+      background: #FFFBEB;
+      border-left: 4px solid #F59E0B;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .note-box strong {
+      color: #D97706;
+      display: block;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>INVOICE</h1>
+      <p>SmartCare Digital Health Record</p>
+    </div>
+
+    <!-- Invoice Info -->
+    <div class="invoice-info">
+      <div>
+        <strong>Invoice Number</strong>
+        <span>#1078</span>
+      </div>
+      <div>
+        <strong>Invoice Date</strong>
+        <span>01-10-2025 · 11:31</span>
+      </div>
+      <div>
+        <strong>Status</strong>
+        <span>
+          <span class="badge badge-paid">Paid</span>
+          <span class="badge badge-opd">OPD</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Amount Summary -->
+    <div class="amount-summary">
+      <div class="amount-row">
+        <span class="amount-label">Paid Amount</span>
+        <span class="amount-value" style="color: #059669;">₹550.00</span>
+      </div>
+      <div class="amount-row">
+        <span class="amount-label">Balance</span>
+        <span class="amount-value" style="color: #9CA3AF;">₹0.00</span>
+      </div>
+      
+      <div class="amount-row amount-total">
+        <span class="amount-label">Total Amount</span>
+        <span class="amount-value">₹550.00</span>
+      </div>
+    </div>
+
+    <!-- Patient Information -->
+    <div class="section">
+      <div class="section-header">Patient Information</div>
+      <div class="section-body">
+        <div class="info-row">
+          <span class="info-label">Name</span>
+          <span class="info-value">  PRASHANT HIRADUTT PANDE</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">UHID</span>
+          <span class="info-value">SCD/250505011</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Age / Gender</span>
+          <span class="info-value">49 / Male</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Contact</span>
+          <span class="info-value">7249620566</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice Details -->
+    <div class="section">
+      <div class="section-header">Invoice Details</div>
+      <div class="section-body">
+        <div class="info-row">
+          <span class="info-label">Consultant</span>
+          <span class="info-value">Dr. ANAND Shukla</span>
+        </div>
+        
+        <div class="info-row">
+          <span class="info-label">Qualification</span>
+          <span class="info-value">MBBS, MD
+FCPS (Psy) Mumbai
+Phd. Psychiatry from Johns Hopkins University(NY)</span>
+        </div>
+        
+        
+        <div class="info-row">
+          <span class="info-label">Referred By</span>
+          <span class="info-value">Dr JAI SHAH</span>
+        </div>
+        
+        <div class="info-row">
+          <span class="info-label">Prepared By</span>
+          <span class="info-value"> AUREUS Hospital</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment Details -->
+    <div class="section">
+      <div class="section-header">Payment Details</div>
+      <div class="section-body">
+        <div class="info-row">
+          <span class="info-label">Payment Mode</span>
+          <span class="info-value">Cash</span>
+        </div>
+        
+        <div class="info-row">
+          <span class="info-label">Payment Date</span>
+          <span class="info-value">2025-10-01</span>
+        </div>
+        
+        
+      </div>
+    </div>
+
+    <!-- Charges Breakdown -->
+    
+    <div class="section">
+      <div class="section-header">Charges Breakdown</div>
+      <div class="section-body">
+        <table class="charges-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Rate</th>
+              <th class="text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+              <tr class="charge-group">
+                <td colspan="3"><strong>Appointment Charge</strong></td>
+                <td class="text-right"><strong>₹500.00</strong></td>
+              </tr>
+              
+                <tr class="charge-item">
+                  <td>OPD CONSULTATION CHARGE</td>
+                  <td class="text-right">1</td>
+                  <td class="text-right">₹500.00</td>
+                  <td class="text-right">₹500.00</td>
+                </tr>
+              
+            
+              <tr class="charge-group">
+                <td colspan="3"><strong>Registration Charge</strong></td>
+                <td class="text-right"><strong>₹50.00</strong></td>
+              </tr>
+              
+                <tr class="charge-item">
+                  <td>OPD Registration Charge</td>
+                  <td class="text-right">1</td>
+                  <td class="text-right">₹50.00</td>
+                  <td class="text-right">₹50.00</td>
+                </tr>
+              
+            
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+
+    <!-- Payment History -->
+    
+
+    <!-- Notes -->
+    
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>This is a computer-generated invoice. No signature required.</p>
+      <p>Generated on 18/8/2026 at 12:01:26 pm</p>
+      <p>SmartCare Digital PHR · © 2026</p>
+    </div>
+  </div>
+</body>
+</html>

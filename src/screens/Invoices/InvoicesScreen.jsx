@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator, RefreshControl, Modal, Pressable,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
@@ -12,8 +12,207 @@ import {InvoiceApi} from '../../API/Api';
 import {useApp} from '../../context/AppContext';
 import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon, InvoiceIcon, WalletIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon, InvoiceIcon, WalletIcon, PersonIcon, CalendarIcon, CheckCircleIcon, XIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
+import {downloadInvoicePDF} from '../../services/PDFService';
+
+// ─── Invoice Detail Modal Component ─────────────────────────────────────────
+function InvoiceDetailModal({visible, invoice, onClose}) {
+  if (!invoice) return null;
+
+  const raw = invoice._raw || {};
+  
+  // Extract charges
+  const chargeTransactions = raw.chargeTransaction || [];
+  const paymentLogs = raw.payment_log || [];
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderLeft}>
+              <View style={[styles.modalIcon, {backgroundColor: '#0ea5a2' + '20'}]}>
+                <InvoiceIcon size={24} color="#0ea5a2" />
+              </View>
+              <View>
+                <Text style={styles.modalTitle}>Invoice Details</Text>
+                <Text style={styles.modalSubtitle}>
+                  {raw.ipdAbirvationId || `#${invoice.id}`}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+              <XIcon size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+            {/* Status Badge */}
+            <View style={styles.statusRow}>
+              <StatusChip status={invoice.status} size="md" />
+              {raw.invoice_type && (
+                <View style={[styles.typeBadge, {backgroundColor: raw.invoice_type === 'IPD' ? '#FEE2E2' : '#DBEAFE'}]}>
+                  <Text style={[styles.typeBadgeText, {color: raw.invoice_type === 'IPD' ? '#EF4444' : '#3B82F6'}]}>
+                    {raw.invoice_type}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Amount Card */}
+            <View style={styles.amountCard}>
+              <Text style={styles.amountLabel}>Total Amount</Text>
+              <Text style={styles.amountValue}>{invoice.amount}</Text>
+              <View style={styles.amountBreakdown}>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Paid Amount</Text>
+                  <Text style={[styles.breakdownValue, {color: colors.success}]}>
+                    ₹{invoice.paidAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                  </Text>
+                </View>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Balance</Text>
+                  <Text style={[styles.breakdownValue, {color: invoice.balance > 0 ? colors.warning : colors.textMuted}]}>
+                    ₹{invoice.balance.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                  </Text>
+                </View>
+                {raw.discount_amount > 0 && (
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Discount ({raw.discount_percent}%)</Text>
+                    <Text style={[styles.breakdownValue, {color: colors.success}]}>
+                      -₹{Number(raw.discount_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Patient Info */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>PATIENT INFORMATION</Text>
+              <InfoRow icon={PersonIcon} label="Name" value={raw.patient_name || '—'} />
+              <InfoRow icon={DocumentIcon} label="UHID" value={raw.uhid || '—'} />
+              <InfoRow icon={CalendarIcon} label="Age / Gender" value={`${raw.age || '—'} / ${raw.gender || '—'}`} />
+              <InfoRow icon={CalendarIcon} label="Contact" value={raw.contact_number || '—'} />
+            </View>
+
+            {/* Invoice Info */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>INVOICE INFORMATION</Text>
+              <InfoRow icon={CalendarIcon} label="Date & Time" value={`${invoice.date}${invoice.time ? ' · ' + invoice.time : ''}`} />
+              <InfoRow icon={PersonIcon} label="Consultant" value={raw.counsultant || '—'} />
+              {raw.counsultant_qualification && (
+                <InfoRow icon={DocumentIcon} label="Qualification" value={raw.counsultant_qualification} />
+              )}
+              {raw.refral_name && raw.refral_name !== '0' && (
+                <InfoRow icon={PersonIcon} label="Referred By" value={raw.refral_name} />
+              )}
+              <InfoRow icon={DocumentIcon} label="Prepared By" value={raw.invoice_prepared_by || '—'} />
+            </View>
+
+            {/* Payment Info */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>PAYMENT DETAILS</Text>
+              <InfoRow icon={WalletIcon} label="Payment Mode" value={invoice.paymentMode || '—'} />
+              {raw.transaction && (
+                <>
+                  <InfoRow icon={CalendarIcon} label="Payment Date" value={raw.transaction.payment_time?.split(' ')[0] || '—'} />
+                  {raw.transaction.payment_note && (
+                    <InfoRow icon={DocumentIcon} label="Note" value={raw.transaction.payment_note} />
+                  )}
+                </>
+              )}
+            </View>
+
+            {/* Charges Breakdown */}
+            {chargeTransactions.length > 0 && (
+              <View style={styles.infoSection}>
+                <Text style={styles.sectionLabel}>CHARGES BREAKDOWN</Text>
+                {chargeTransactions.map((charge, idx) => (
+                  <View key={idx} style={styles.chargeGroup}>
+                    <View style={styles.chargeHeader}>
+                      <Text style={styles.chargeName}>{charge.master_charge_name}</Text>
+                      <Text style={styles.chargeAmount}>
+                        ₹{Number(charge.total_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                      </Text>
+                    </View>
+                    {charge.charge_list?.map((item, i) => (
+                      <View key={i} style={styles.chargeItem}>
+                        <Text style={styles.chargeItemName}>• {item.chargename}</Text>
+                        <Text style={styles.chargeItemAmount}>
+                          ₹{Number(item.charge_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})} × {item.quantity}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Payment History */}
+            {paymentLogs.length > 1 && (
+              <View style={styles.infoSection}>
+                <Text style={styles.sectionLabel}>PAYMENT HISTORY</Text>
+                {paymentLogs.map((log, idx) => (
+                  <View key={idx} style={styles.paymentLogRow}>
+                    <View>
+                      <Text style={styles.paymentLogMode}>{log.payment_mode}</Text>
+                      <Text style={styles.paymentLogTime}>{log.payment_time?.split(' ')[0] || '—'}</Text>
+                    </View>
+                    <Text style={styles.paymentLogAmount}>
+                      ₹{Number(log.part_payment_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {raw.invoice_note && (
+              <View style={styles.noteCard}>
+                <Text style={styles.noteLabel}>Note</Text>
+                <Text style={styles.noteText}>{raw.invoice_note}</Text>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnPrimary]}
+                onPress={() => downloadInvoicePDF(invoice)}>
+                <DownloadIcon size={18} color="#fff" />
+                <Text style={styles.actionBtnTextPrimary}>Download PDF</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnSecondary]}
+                onPress={onClose}>
+                <Text style={styles.actionBtnTextSecondary}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Helper component for info rows
+function InfoRow({icon: Icon, label, value}) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoLeft}>
+        <Icon size={14} color={colors.textMuted} />
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
+      <Text style={styles.infoValue} numberOfLines={2}>{value}</Text>
+    </View>
+  );
+}
 
 const TABS = ['All', 'Paid', 'Pending', 'Cancelled'];
 
@@ -83,6 +282,8 @@ function mapInvoice(inv) {
 export default function InvoicesScreen({navigation}) {
   const {invoices: cachedInvoices, isOnline, refreshAllData, appReady} = useApp();
   const [activeTab,  setActiveTab]  = useState('All');
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   // Map cached context invoices through the richer local normaliser
   // Context stores a simplified shape; we need the billing-specific fields for display.
@@ -153,6 +354,11 @@ export default function InvoicesScreen({navigation}) {
   const totalPending   = invoices.filter(i => i.status === 'Pending').reduce((s, i) => s + i.rawAmount, 0);
   const totalCancelled = invoices.filter(i => i.status === 'Cancelled').reduce((s, i) => s + i.rawAmount, 0);
 
+  const handleInvoicePress = (invoice) => {
+    setSelectedInvoice(invoice);
+    setModalVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView
@@ -210,10 +416,7 @@ export default function InvoicesScreen({navigation}) {
             <TouchableOpacity
               key={inv.id || Math.random().toString()}
               style={styles.invRow}
-              onPress={() => Alert.alert(
-                `Invoice #${inv.id}`,
-                `Amount: ${inv.amount}\nPaid: ₹${inv.paidAmount.toLocaleString('en-IN')}\nBalance: ₹${inv.balance.toLocaleString('en-IN')}\nDate: ${inv.date}${inv.time ? ' ' + inv.time : ''}\nType: ${inv.invType || '—'}\nPayment: ${inv.paymentMode || '—'}\nStatus: ${inv.status}`,
-              )}
+              onPress={() => handleInvoicePress(inv)}
               activeOpacity={0.8}>
               <View style={[styles.invIcon, {backgroundColor: STATUS_BG[inv.status] || '#F3F4F6'}]}>
                 <DocumentIcon size={22} color={STATUS_COLORS[inv.status] || colors.textMuted} />
@@ -308,6 +511,13 @@ export default function InvoicesScreen({navigation}) {
         )}
 
       </ScrollView>
+
+      {/* Invoice Detail Modal */}
+      <InvoiceDetailModal
+        visible={modalVisible}
+        invoice={selectedInvoice}
+        onClose={() => setModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -354,4 +564,257 @@ const styles = StyleSheet.create({
   statNum:      {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
   statLabel:    {fontSize: 11, color: colors.textMuted, marginTop: 2},
   statAmount:   {fontSize: 10, fontWeight: '600', marginTop: 2},
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    height: '90%',
+    ...shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  modalIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    padding: spacing.lg,
+    paddingBottom: 40,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  amountCard: {
+    backgroundColor: '#0ea5a2' + '10',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#0ea5a2' + '30',
+  },
+  amountLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  amountValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0ea5a2',
+    marginBottom: spacing.md,
+  },
+  amountBreakdown: {
+    gap: spacing.sm,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  breakdownLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  breakdownValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  infoSection: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.base,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: spacing.md,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  infoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+  },
+  chargeGroup: {
+    marginBottom: spacing.md,
+  },
+  chargeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  chargeName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  chargeAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0ea5a2',
+  },
+  chargeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingLeft: spacing.md,
+    marginBottom: 4,
+  },
+  chargeItemName: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  chargeItemAmount: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  paymentLogRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  paymentLogMode: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  paymentLogTime: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  paymentLogAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0ea5a2',
+  },
+  noteCard: {
+    backgroundColor: colors.warningLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  noteLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.warning,
+    marginBottom: 4,
+  },
+  noteText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: 0,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+  },
+  actionBtnPrimary: {
+    backgroundColor: '#0ea5a2',
+  },
+  actionBtnSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  actionBtnTextPrimary: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  actionBtnTextSecondary: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

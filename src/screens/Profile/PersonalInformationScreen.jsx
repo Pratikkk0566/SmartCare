@@ -489,15 +489,16 @@ const s = StyleSheet.create({
   // Save block
   saveBlock: {
     backgroundColor: colors.primary,
-    borderRadius: radius.xl,
-    paddingVertical: 20,
-    marginHorizontal: -spacing.base, // break out of ScrollView padding to go edge-to-edge
+    borderRadius: radius.lg,
+    paddingVertical: 18,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
+    width: '100%',
     shadowColor: colors.primary,
-    shadowOffset: {width: 0, height: 6},
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  saveBlockText: {fontSize: 18, fontWeight: '800', color: '#fff', letterSpacing: 0.4},
+  saveBlockText: {fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: 0.3},
 });
