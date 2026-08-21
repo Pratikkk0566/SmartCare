@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -36,9 +37,11 @@ function deriveCategory(name = '') {
   return 'Others';
 }
 
-// Fetch ALL investigations from the very beginning (year 2000) to today
-const FROM_DATE = '2000-01-01';
-function getToDate() { return new Date().toISOString().split('T')[0]; }
+// Fetch ALL investigations from the very beginning (year 2000) to today end of day
+const FROM_DATE = '2000-01-01 00:00:00';
+function getToDate() { 
+  return new Date().toISOString().split('T')[0] + ' 23:59:59';
+}
 
 // Parse any date string to a comparable timestamp (returns 0 on failure)
 function toTimestamp(dateStr = '') {
@@ -83,6 +86,19 @@ export default function InvestigationsScreen({navigation}) {
   const [loading, setLoading] = useState(!appReady && cachedInvestigations.length === 0);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Auto-fetch on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (cachedInvestigations.length > 0) {
+        setReports(cachedInvestigations);
+        setLoading(false);
+      } else if (appReady) {
+        // App is ready but no cached data - fetch immediately
+        fetchReports();
+      }
+    }, [cachedInvestigations, appReady])
+  );
+
   // Sync from context — covers the case where AppContext finishes fetching
   // after this screen is already mounted.
   useEffect(() => {
@@ -99,10 +115,10 @@ export default function InvestigationsScreen({navigation}) {
   }, [appReady]);
 
   // Full re-fetch — only called on explicit pull-to-refresh
-  const fetchReports = useCallback(async () => {
+  const fetchReports = async () => {
     setRefreshing(true);
     const patientId = await AsyncStorage.getItem('patientId');
-    if (!patientId) { setRefreshing(false); return; }
+    if (!patientId) { setRefreshing(false); setLoading(false); return; }
     const result = await InvestigationApi.getAll(patientId, FROM_DATE, getToDate());
     if (result.success) {
       let raw = [];
@@ -150,7 +166,8 @@ export default function InvestigationsScreen({navigation}) {
       await StorageService.saveInvestigations(mapped);
     }
     setRefreshing(false);
-  }, []);
+    setLoading(false);
+  };
 
   const onRefresh = () => fetchReports();
 
@@ -170,13 +187,8 @@ export default function InvestigationsScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-        }>
-
+      {/* Fixed Header Section */}
+      <View style={styles.fixedHeader}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
@@ -212,29 +224,34 @@ export default function InvestigationsScreen({navigation}) {
         {testRequests.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>My Test Requests</Text>
-            {testRequests.slice(0, 3).map(req => {
-              const IconComp = STATUS_ICON[req.status] || ClockIcon;
-              return (
-                <View key={req.id} style={styles.requestCard}>
-                  <View style={[styles.requestIconWrap, {backgroundColor: req.status === 'Approved' ? colors.successLight : colors.warningLight}]}>
-                    <IconComp size={20} color={req.status === 'Approved' ? colors.success : colors.warning} />
-                  </View>
-                  <View style={styles.requestInfo}>
-                    <Text style={styles.requestName} numberOfLines={1}>{req.testName}</Text>
-                    <Text style={styles.requestMeta}>{req.hospitalName} · {req.date}</Text>
-                    <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
-                      {req.collectionType === 'home'
-                        ? <HomeDeliveryIcon size={12} color={colors.textSecondary} />
-                        : <HospitalBuildingIcon size={12} color={colors.textSecondary} />}
-                      <Text style={styles.requestMeta}>
-                        {req.collectionType === 'home' ? 'Home Collection' : 'Visit Hospital'} · {req.time}
-                      </Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{gap: spacing.sm}}>
+              {testRequests.slice(0, 3).map(req => {
+                const IconComp = STATUS_ICON[req.status] || ClockIcon;
+                return (
+                  <View key={req.id} style={styles.requestCard}>
+                    <View style={[styles.requestIconWrap, {backgroundColor: req.status === 'Approved' ? colors.successLight : colors.warningLight}]}>
+                      <IconComp size={20} color={req.status === 'Approved' ? colors.success : colors.warning} />
                     </View>
+                    <View style={styles.requestInfo}>
+                      <Text style={styles.requestName} numberOfLines={1}>{req.testName}</Text>
+                      <Text style={styles.requestMeta}>{req.hospitalName} · {req.date}</Text>
+                      <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
+                        {req.collectionType === 'home'
+                          ? <HomeDeliveryIcon size={12} color={colors.textSecondary} />
+                          : <HospitalBuildingIcon size={12} color={colors.textSecondary} />}
+                        <Text style={styles.requestMeta}>
+                          {req.collectionType === 'home' ? 'Home Collection' : 'Visit Hospital'} · {req.time}
+                        </Text>
+                      </View>
+                    </View>
+                    <StatusChip status={req.status === 'Approved' ? 'completed' : 'pending'} label={req.status} size="xs" />
                   </View>
-                  <StatusChip status={req.status === 'Approved' ? 'completed' : 'pending'} label={req.status} size="xs" />
-                </View>
-              );
-            })}
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
@@ -256,6 +273,16 @@ export default function InvestigationsScreen({navigation}) {
           </Text>
           <Text style={styles.sectionSub}>Newest first · pull to refresh</Text>
         </View>
+      </View>
+
+      {/* Scrollable Report List */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }>
 
         {loading ? (
           <>
@@ -310,7 +337,9 @@ export default function InvestigationsScreen({navigation}) {
 
 const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: colors.background},
-  scroll: {padding: spacing.base, paddingTop: spacing['4xl'], paddingBottom: 32},
+  fixedHeader: {backgroundColor: colors.background, paddingHorizontal: spacing.base, paddingTop: spacing['4xl'], paddingBottom: spacing.sm},
+  scrollContainer: {flex: 1},
+  scrollContent: {padding: spacing.base, paddingTop: spacing.sm, paddingBottom: 32},
   header: {flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.base},
   back: {padding: 4, marginTop: 2},
   headerCenter: {flex: 1},
@@ -344,7 +373,8 @@ const styles = StyleSheet.create({
   requestCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, ...shadows.sm, marginBottom: spacing.sm, gap: spacing.md,
+    padding: spacing.md, ...shadows.sm, gap: spacing.md,
+    width: 280,
   },
   requestIconWrap: {width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
   requestInfo: {flex: 1},

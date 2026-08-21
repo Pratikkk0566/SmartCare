@@ -1,20 +1,23 @@
-import React, {useState} from 'react';
+import React, {useState, useCallback, useEffect} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform, Dimensions,
+  StyleSheet, Alert, Platform, Dimensions, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Path, Defs, LinearGradient as SvgLinearGradient, Stop} from 'react-native-svg';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {useApp} from '../../context/AppContext';
+import {InvoiceApi, AppointmentApi, InvestigationApi, PatientApi, HospitalApi} from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
   PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
   LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
-  BloodDropIcon, ScaleIcon, RulerIcon, HeartRateIcon,
+  ScaleIcon, RulerIcon, HospitalBuildingIcon, HeartRateIcon,
 } from '../../assets/icons/Icons';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
@@ -129,7 +132,200 @@ function Section({title, Icon, iconColor, children}) {
 }
 
 export default function ProfileScreen({navigation}) {
-  const {userProfile, appointments, appointmentHistory, medicines, invoices, investigations} = useApp();
+  const {
+    userProfile: cachedProfile, 
+    appointments: cachedAppointments, 
+    appointmentHistory: cachedHistory,
+    medicines, 
+    invoices: cachedInvoices, 
+    investigations: cachedInvestigations,
+    appReady
+  } = useApp();
+
+  // Local state for fetched data
+  const [userProfile, setUserProfile] = useState(cachedProfile || {});
+  const [appointments, setAppointments] = useState(cachedAppointments || []);
+  const [appointmentHistory, setAppointmentHistory] = useState(cachedHistory || []);
+  const [invoices, setInvoices] = useState(cachedInvoices || []);
+  const [investigations, setInvestigations] = useState(cachedInvestigations || []);
+  const [hospitalName, setHospitalName] = useState('Aureus Hospital'); // Default to Aureus
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Set hospital name based on clinic ID on mount
+  useEffect(() => {
+    const loadClinicInfo = async () => {
+      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+      if (clinicId.toLowerCase() === 'aureus') {
+        setHospitalName('Aureus Hospital');
+      }
+    };
+    loadClinicInfo();
+  }, []);
+
+  // Sync with context updates immediately
+  useEffect(() => {
+    setUserProfile(cachedProfile || {});
+  }, [cachedProfile]);
+
+  useEffect(() => {
+    setAppointments(cachedAppointments || []);
+    setAppointmentHistory(cachedHistory || []);
+  }, [cachedAppointments, cachedHistory]);
+
+  useEffect(() => {
+    setInvoices(cachedInvoices || []);
+  }, [cachedInvoices]);
+
+  useEffect(() => {
+    setInvestigations(cachedInvestigations || []);
+  }, [cachedInvestigations]);
+
+  // Auto-fetch on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      // Always use the latest cached data from context
+      setUserProfile(cachedProfile || {});
+      setAppointments(cachedAppointments || []);
+      setAppointmentHistory(cachedHistory || []);
+      setInvoices(cachedInvoices || []);
+      setInvestigations(cachedInvestigations || []);
+      
+      // Fetch fresh data every time screen is focused
+      if (appReady) {
+        fetchAllData();
+      }
+    }, [cachedProfile, cachedAppointments, cachedHistory, cachedInvoices, cachedInvestigations, appReady])
+  );
+
+  // Fetch all profile-related data
+  const fetchAllData = async () => {
+    setRefreshing(true);
+    const patientId = await AsyncStorage.getItem('patientId');
+    const mobileNo = await AsyncStorage.getItem('mobileNumber');
+    
+    if (!patientId) {
+      setRefreshing(false);
+      return;
+    }
+
+    const FROM_DATE = '2000-01-01 00:00:00';
+    const getToDate = () => {
+      return new Date().toISOString().split('T')[0] + ' 23:59:59';
+    };
+
+    try {
+      // Fetch all data in parallel
+      const [profileRes, appointmentsRes, invoicesRes, investigationsRes, hospitalRes] = await Promise.all([
+        mobileNo ? PatientApi.getByMobile(mobileNo) : Promise.resolve({success: false}),
+        AppointmentApi.getHistory(patientId),
+        InvoiceApi.getAll(patientId, FROM_DATE, getToDate()),
+        InvestigationApi.getAll(patientId, FROM_DATE, getToDate()),
+        HospitalApi.getDetails(),
+      ]);
+
+      // Update profile if fetched successfully - MERGE with existing data
+      if (profileRes.success && profileRes.data) {
+        const profile = Array.isArray(profileRes.data) ? profileRes.data[0] : profileRes.data;
+        if (profile && typeof profile === 'object') {
+          // Only update fields that have values from the API
+          const updates = {};
+          if (profile.firstName || profile.first_name || profile.fname) updates.firstName = profile.firstName || profile.first_name || profile.fname;
+          if (profile.lastName || profile.last_name || profile.lname) updates.lastName = profile.lastName || profile.last_name || profile.lname;
+          if (profile.email) updates.email = profile.email;
+          if (profile.mobileNo || profile.mobile || profile.phone) updates.phone = profile.mobileNo || profile.mobile || profile.phone;
+          if (profile.uhid || profile.UHID) updates.uhid = profile.uhid || profile.UHID;
+          if (profile.dob || profile.dateOfBirth) updates.dateOfBirth = profile.dob || profile.dateOfBirth;
+          if (profile.gender) updates.gender = profile.gender;
+          if (profile.bloodGroup || profile.blood_group) updates.bloodGroup = profile.bloodGroup || profile.blood_group;
+          
+          // Merge with existing profile - keep existing values if API doesn't provide them
+          setUserProfile(prev => ({...prev, ...updates}));
+        }
+      }
+
+      // Update appointments - handle data.data structure
+      if (appointmentsRes.success && appointmentsRes.data) {
+        // Handle nested data.data structure
+        let rawList = [];
+        if (appointmentsRes.data.data && Array.isArray(appointmentsRes.data.data)) {
+          rawList = appointmentsRes.data.data;
+        } else if (Array.isArray(appointmentsRes.data)) {
+          rawList = appointmentsRes.data;
+        } else if (appointmentsRes.data.appointments && Array.isArray(appointmentsRes.data.appointments)) {
+          rawList = appointmentsRes.data.appointments;
+        }
+        
+        if (rawList.length > 0) {
+          const now = new Date();
+          
+          const upcoming = rawList.filter(a => {
+            const dateStr = a.commencing || a.appointmentDate || a.date || '';
+            const timeStr = a.starttime || a.appointmentTime || a.time || '00:00';
+            const apptDateTime = new Date(`${dateStr}T${timeStr}`);
+            return apptDateTime > now && (!a.status || (a.status !== 'Cancelled' && a.status !== 'Completed'));
+          });
+          
+          const history = rawList.filter(a => {
+            const dateStr = a.commencing || a.appointmentDate || a.date || '';
+            const timeStr = a.starttime || a.appointmentTime || a.time || '00:00';
+            const apptDateTime = new Date(`${dateStr}T${timeStr}`);
+            return apptDateTime <= now || a.status === 'Cancelled' || a.status === 'Completed';
+          });
+
+          setAppointments(upcoming);
+          setAppointmentHistory(history);
+        }
+      }
+
+      // Update invoices
+      if (invoicesRes.success && invoicesRes.data) {
+        const serverData = invoicesRes.data;
+        const inner = serverData?.data || serverData;
+        const listObj = inner?.list || inner;
+        const rawList = listObj?.invoiceDataList || listObj?.invoices || (Array.isArray(listObj) ? listObj : []);
+        setInvoices(rawList);
+      }
+
+      // Update investigations
+      if (investigationsRes.success && investigationsRes.data) {
+        let raw = [];
+        if (Array.isArray(investigationsRes.data)) raw = investigationsRes.data;
+        else if (Array.isArray(investigationsRes.data?.reports)) raw = investigationsRes.data.reports;
+        else if (Array.isArray(investigationsRes.data?.data)) raw = investigationsRes.data.data;
+        setInvestigations(raw);
+      }
+
+      // Update hospital name
+      if (hospitalRes.success && hospitalRes.data) {
+        const hospital = hospitalRes.data;
+        const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+        
+        // If clinic ID is 'aureus', use branded hospital name
+        if (clinicId.toLowerCase() === 'aureus') {
+          setHospitalName('Aureus Hospital');
+        } else {
+          setHospitalName(hospital.hospitalName || hospital.clinicName || hospital.name || 'SmartCare Hospital');
+        }
+      } else {
+        // Fallback to check clinic ID even if API fails
+        const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+        if (clinicId.toLowerCase() === 'aureus') {
+          setHospitalName('Aureus Hospital');
+        } else {
+          setHospitalName('SmartCare Hospital');
+        }
+      }
+
+    } catch (error) {
+      console.log('[ProfileScreen] Fetch error:', error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = () => fetchAllData();
 
   const initials = `${userProfile.firstName?.[0] ?? ''}${userProfile.lastName?.[0] ?? ''}`.toUpperCase();
   const fullName = `${userProfile.firstName ?? ''} ${userProfile.lastName ?? ''}`.trim() || 'Your Name';
@@ -154,8 +350,8 @@ export default function ProfileScreen({navigation}) {
   const vitals = [
     {Icon: ScaleIcon,     color: '#8B5CF6', val: `${userProfile.weight ?? '--'} ${userProfile.weightUnit ?? 'kg'}`, label: 'Weight'},
     {Icon: RulerIcon,     color: '#3B82F6', val: `${userProfile.height ?? '--'} ${userProfile.heightUnit ?? 'cm'}`, label: 'Height'},
-    {Icon: BloodDropIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood'},
-    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bp ?? '--',                                             label: 'BP'},
+    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood Group'},
+    {Icon: HospitalBuildingIcon, color: '#10B981', val: hospitalName || 'Aureus Hospital',                          label: 'Hospital'},
   ];
 
 
@@ -164,7 +360,15 @@ export default function ProfileScreen({navigation}) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
-        bounces={true}>
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }>
 
         {/* ── HERO WITH GREEN BACKGROUND ─────────────────────────────────────────── */}
         <View style={styles.hero}>
@@ -245,21 +449,27 @@ export default function ProfileScreen({navigation}) {
           <View style={styles.vitalsHeader}>
             <HeartRateIcon size={16} color={colors.success} />
             <Text style={styles.vitalsTitle}>HEALTH SUMMARY</Text>
-            <TouchableOpacity onPress={() => Alert.alert('View Details')} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => navigation.navigate('PersonalInformation')} activeOpacity={0.7}>
               <Text style={styles.viewDetails}>View details →</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.vitalsRow}>
-            {vitals.map(({Icon, color, val, label}) => (
-              <View key={label} style={styles.vitalItem}>
-                <View style={[styles.vitalIconWrap, {backgroundColor: color + '15'}]}>
-                  <Icon size={22} color={color} />
+          {loading ? (
+            <View style={{alignItems: 'center', paddingVertical: 24}}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.vitalsRow}>
+              {vitals.map(({Icon, color, val, label}) => (
+                <View key={label} style={styles.vitalItem}>
+                  <View style={[styles.vitalIconWrap, {backgroundColor: color + '15'}]}>
+                    <Icon size={22} color={color} />
+                  </View>
+                  <Text style={styles.vitalVal}>{val}</Text>
+                  <Text style={styles.vitalLabel}>{label}</Text>
                 </View>
-                <Text style={styles.vitalVal}>{val}</Text>
-                <Text style={styles.vitalLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* ── ACCOUNT SECTION ─────────────────────────────────── */}

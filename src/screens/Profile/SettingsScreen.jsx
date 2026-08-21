@@ -62,10 +62,32 @@ useEffect(() => { StorageService.set('@setting_medicineReminders', medicineRemin
 useEffect(() => { StorageService.set('@setting_appointmentAlerts', appointmentAlerts); }, [appointmentAlerts]);
 
 const confirmLogout = async () => {
+  console.log('confirmLogout called');
   setShowLogout(false);
-  await StorageService.set('@isLoggedIn', false);
-  setIsLoggedIn(false);
-  navigation.reset({index: 0, routes: [{name: 'Welcome'}]});
+  try {
+    // Clear all authentication data
+    await StorageService.set('@isLoggedIn', false);
+    await StorageService.set('@isOnboarded', false);
+    
+    // Clear AsyncStorage auth tokens
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    await AsyncStorage.removeItem('AUTHTOKEN');
+    await AsyncStorage.removeItem('mobileNumber');
+    await AsyncStorage.removeItem('patientId');
+    await AsyncStorage.removeItem('patientName');
+    await AsyncStorage.removeItem('uhid');
+    await AsyncStorage.removeItem('CLINICID');
+    
+    // Update context
+    setIsLoggedIn(false);
+    
+    console.log('Navigating to Welcome');
+    // Reset navigation to Welcome screen
+    navigation.reset({index: 0, routes: [{name: 'Welcome'}]});
+  } catch (error) {
+    console.error('Logout error:', error);
+    Alert.alert('Logout Error', 'Failed to logout. Please try again.');
+  }
 };
 
   return (
@@ -194,7 +216,10 @@ const confirmLogout = async () => {
             icon={LockIcon}
             label="Log Out"
             sub="Sign out of your account"
-            onPress={() => setShowLogout(true)}
+            onPress={() => {
+              console.log('Log Out button pressed');
+              setShowLogout(true);
+            }}
             danger
           />
         </View>
@@ -203,39 +228,48 @@ const confirmLogout = async () => {
       </ScrollView>
 
       {/* Logout Modal */}
-      <Modal
-        visible={showLogout}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowLogout(false)}>
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          activeOpacity={1}
-          onPress={() => setShowLogout(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalIconWrap}>
-              <ShieldIcon size={36} color={colors.error} />
+      {showLogout && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBackdrop}>
+            <TouchableOpacity 
+              style={styles.modalBackdropTouch}
+              activeOpacity={1}
+              onPress={() => {
+                console.log('Backdrop pressed');
+                setShowLogout(false);
+              }}
+            />
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalIconWrap}>
+                <ShieldIcon size={36} color={colors.error} />
+              </View>
+              <Text style={styles.modalTitle}>Logging out?</Text>
+              <Text style={styles.modalSub}>
+                You'll need to sign back in to access your health data.
+              </Text>
+              <TouchableOpacity
+                style={styles.modalLogoutBtn}
+                onPress={() => {
+                  console.log('Logout button pressed in modal');
+                  confirmLogout();
+                }}
+                activeOpacity={0.85}>
+                <Text style={styles.modalLogoutText}>Yes, log me out</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => {
+                  console.log('Cancel button pressed');
+                  setShowLogout(false);
+                }}
+                activeOpacity={0.7}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.modalTitle}>Logging out?</Text>
-            <Text style={styles.modalSub}>
-              You'll need to sign back in to access your health data.
-            </Text>
-            <TouchableOpacity
-              style={styles.modalLogoutBtn}
-              onPress={confirmLogout}
-              activeOpacity={0.85}>
-              <Text style={styles.modalLogoutText}>Yes, log me out</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalCancelBtn}
-              onPress={() => setShowLogout(false)}
-              activeOpacity={0.7}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -276,10 +310,26 @@ const styles = StyleSheet.create({
   versionBadgeText: {fontSize: 11, fontWeight: '700', color: colors.success},
 
   // ── Logout modal ───────────────────────────────────────
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    elevation: 10,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
+  },
+  modalBackdropTouch: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   modalSheet: {
     backgroundColor: colors.surface,

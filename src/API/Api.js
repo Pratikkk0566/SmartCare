@@ -47,23 +47,27 @@ export const buildHeaders = async (clientId = 0, preAuth = false) => {
     Tenant        : tenant,
     'is-auth'     : '1',
     clinicid      : clinicId,
+    userid        : clinicId, // Web app sends userid as "aureus" (clinic ID)
+    patientid     : '0',      // Web app sends patientid header, default "0"
   };
 
   if (!preAuth) {
     const token    = await getItem('AUTHTOKEN');
-    // Only send userid if it's a real HIS staff user ID (not the patient's own id)
-    // Patient-portal JWT has sub = mobile number, no user ID in login response
-    // We skip userid header to avoid billing server filtering by wrong user
     const branchId = await getItem('branch_id') || await getItem('branchId');
 
     headers.Authorization = `Bearer ${token}`;
 
-    // userid intentionally omitted — billing server returns empty when wrong userid sent
-    if (branchId) headers.branchId = branchId;
+    // Web app sends branchid as "null" string when no branch
+    if (branchId && branchId !== 'null' && branchId !== '') {
+      headers.branchid = branchId;
+    } else {
+      headers.branchid = 'null';
+    }
   }
 
   if (clientId) {
     headers.clientId = String(clientId);
+    headers.patientid = String(clientId); // Web app also sends patientid
   }
 
   return headers;
@@ -233,13 +237,25 @@ export const AppointmentApi = {
 
   // Get available time slots for a doctor on a date
   // Website: GET ?date=YYYY-MM-DD&practionerId=ID  (query string, NOT POST body)
-  getAvailableSlots: async (clientId, date, practitionerId) =>
-    apiCall(
+  getAvailableSlots: async (clientId, date, practitionerId) => {
+    const result = await apiCall(
       HISAPI_BASE,
       `appointment/availableSlots?date=${date}&practionerId=${practitionerId}`,
       { method: 'GET' },
       clientId,
-    ),
+    );
+    
+    // LOG THE ACTUAL RESPONSE HERE
+    console.log('🔵🔵🔵 [SLOTS API RESULT] success:', result.success);
+    console.log('🔵🔵🔵 [SLOTS API RESULT] data type:', typeof result.data);
+    console.log('🔵🔵🔵 [SLOTS API RESULT] data:', JSON.stringify(result.data, null, 2));
+    if (result.data && result.data.availableSlotList) {
+      console.log('🔵🔵🔵 [SLOTS API RESULT] availableSlotList length:', result.data.availableSlotList.length);
+      console.log('🔵🔵🔵 [SLOTS API RESULT] first 5 slots:', result.data.availableSlotList.slice(0, 5));
+    }
+    
+    return result;
+  },
 
   // Get the charges/fees for an appointment type
   // NOTE: HIS server returns HTTP 405 on GET — must use POST even for reads.
@@ -354,16 +370,61 @@ export const InvestigationApi = {
 
   // Generate PDF using the PDFInvReport service
   // Website: POST apiHost + Port2 + '/smartcaremain/pdfinvreport/generateinvestigationreportpdf'
-  generateInvReportPDF: async (clientId, data) =>
-    apiCall(
-      SMARTCARE_BASE,
-      'pdfinvreport/generateinvestigationreportpdf',
-      {
+  // NOTE: This endpoint requires exact header matching with web app
+  generateInvReportPDF: async (clientId, data) => {
+    const token = await getItem('AUTHTOKEN');
+    const branchId = await getItem('branch_id') || await getItem('branchId');
+    
+    // Replicate exact headers from web app
+    const headers = {
+      'accept': '*/*',
+      'accept-encoding': 'gzip, deflate, br, zstd',
+      'accept-language': 'en-US,en;q=0.7',
+      'Authorization': `Bearer ${token}`,
+      'branchid': branchId && branchId !== 'null' ? branchId : 'null',
+      'clinicid': 'aureus',
+      'Content-Type': 'application/json; charset=utf-8',
+      'patientid': clientId ? String(clientId) : '0',
+      'userid': 'aureus',
+      'zoneid': 'Asia/Kolkata',
+    };
+    
+    const url = `${SMARTCARE_BASE}pdfinvreport/generateinvestigationreportpdf`;
+    
+    console.log('[InvestigationApi] generateInvReportPDF URL:', url);
+    console.log('[InvestigationApi] generateInvReportPDF headers:', JSON.stringify(headers, null, 2));
+    
+    try {
+      const response = await fetch(url, {
         method: 'POST',
-        body  : JSON.stringify(data),
-      },
-      clientId,
-    ),
+        headers: headers,
+        body: JSON.stringify(data),
+      });
+
+      let responseData = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        responseData = await response.json();
+      } else {
+        const text = await response.text();
+        try { responseData = JSON.parse(text); } catch { responseData = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[InvestigationApi] generateInvReportPDF response status:', response.status);
+      console.log('[InvestigationApi] generateInvReportPDF response data:', JSON.stringify(responseData, null, 2));
+
+      if (!response.ok) {
+        const msg = responseData?.message || responseData?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      return { success: true, data: responseData };
+
+    } catch (error) {
+      console.log('[InvestigationApi] generateInvReportPDF ERROR:', error.message);
+      return { success: false, error: error.message };
+    }
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

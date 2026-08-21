@@ -4,6 +4,7 @@ import {
   Alert, ActivityIndicator, RefreshControl, Modal, Pressable,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -12,9 +13,8 @@ import {InvoiceApi} from '../../API/Api';
 import {useApp} from '../../context/AppContext';
 import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon, InvoiceIcon, WalletIcon, PersonIcon, CalendarIcon, CheckCircleIcon, XIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, FilterIcon, DocumentIcon, ArrowRightIcon, InvoiceIcon, WalletIcon, PersonIcon, CalendarIcon, CheckCircleIcon, XIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
-import {downloadInvoicePDF} from '../../services/PDFService';
 
 // ─── Invoice Detail Modal Component ─────────────────────────────────────────
 function InvoiceDetailModal({visible, invoice, onClose}) {
@@ -183,12 +183,6 @@ function InvoiceDetailModal({visible, invoice, onClose}) {
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
               <TouchableOpacity
-                style={[styles.actionBtn, styles.actionBtnPrimary]}
-                onPress={() => downloadInvoicePDF(invoice)}>
-                <DownloadIcon size={18} color="#fff" />
-                <Text style={styles.actionBtnTextPrimary}>Download PDF</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={[styles.actionBtn, styles.actionBtnSecondary]}
                 onPress={onClose}>
                 <Text style={styles.actionBtnTextSecondary}>Close</Text>
@@ -219,9 +213,11 @@ const TABS = ['All', 'Paid', 'Pending', 'Cancelled'];
 const STATUS_COLORS = {Paid: colors.success, Pending: colors.warning, Cancelled: colors.error};
 const STATUS_BG     = {Paid: colors.successLight, Pending: colors.warningLight, Cancelled: colors.errorLight};
 
-// Fetch ALL invoices from the very beginning (year 2000) to today
-const FROM_DATE = '2000-01-01';
-function getToDate() { return new Date().toISOString().split('T')[0]; }
+// Fetch ALL invoices from the very beginning (year 2000) to today end of day
+const FROM_DATE = '2000-01-01 00:00:00';
+function getToDate() { 
+  return new Date().toISOString().split('T')[0] + ' 23:59:59';
+}
 
 // Parse any date string to a comparable timestamp (returns 0 on failure)
 function toTimestamp(dateStr = '') {
@@ -259,6 +255,9 @@ function mapInvoice(inv) {
     ? `${invType ? invType + ' · ' : ''}${consultant}`
     : (inv.description || invType || 'Consultation');
 
+  // Capture referral name
+  const referralName = inv.refral_name && inv.refral_name !== '0' ? inv.refral_name : '';
+
   return {
     id:          String(inv.location_Wise_Invoice_no || inv.invoice_id || ''),
     ipdAbr:      inv.ipdAbirvationId || '',             // e.g. "SCD/IP/25/0305"
@@ -268,6 +267,7 @@ function mapInvoice(inv) {
     consultant,
     invType,
     invSuffix,
+    referralName,
     amount:      `₹${amountNum.toLocaleString('en-IN', {minimumFractionDigits: 2})}`,
     rawAmount:   amountNum,
     balance:     balanceNum,
@@ -295,6 +295,7 @@ export default function InvoicesScreen({navigation}) {
       ipdAbr:      inv.ipdAbr      || '',
       time:        inv.time        || '',
       invType:     inv.invType     || '',
+      referralName: inv.referralName || '',
       paymentMode: inv.paymentMode || '',
       rawAmount:   typeof inv.rawAmount === 'number' ? inv.rawAmount
                     : Number(String(inv.amount || '0').replace(/[^\d.]/g, '')) || 0,
@@ -307,6 +308,19 @@ export default function InvoicesScreen({navigation}) {
   const [invoices,   setInvoices]   = useState(() => mapFromContext(cachedInvoices || []));
   const [loading,    setLoading]    = useState(!appReady && cachedInvoices.length === 0);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Auto-fetch on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (cachedInvoices && cachedInvoices.length > 0) {
+        setInvoices(mapFromContext(cachedInvoices));
+        setLoading(false);
+      } else if (appReady) {
+        // App is ready but no cached data - fetch immediately
+        fetchInvoices();
+      }
+    }, [cachedInvoices, appReady, mapFromContext])
+  );
 
   // Keep local state in sync when context updates (e.g. after login data fetch)
   useEffect(() => {
@@ -322,10 +336,10 @@ export default function InvoicesScreen({navigation}) {
   }, [appReady]);
 
   // Full re-fetch — only called on explicit pull-to-refresh
-  const fetchInvoices = useCallback(async () => {
+  const fetchInvoices = async () => {
     setRefreshing(true);
     let patientId = await AsyncStorage.getItem('patientId');
-    if (!patientId) { setRefreshing(false); return; }
+    if (!patientId) { setRefreshing(false); setLoading(false); return; }
 
     const result = await InvoiceApi.getAll(patientId, FROM_DATE, getToDate());
     if (result.success) {
@@ -342,7 +356,8 @@ export default function InvoicesScreen({navigation}) {
       await StorageService.saveInvoices(mapped);
     }
     setRefreshing(false);
-  }, []);
+    setLoading(false);
+  };
 
   const onRefresh = () => fetchInvoices();
 
@@ -361,13 +376,8 @@ export default function InvoicesScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-        }>
-
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
@@ -391,12 +401,62 @@ export default function InvoicesScreen({navigation}) {
           ))}
         </View>
 
+        {/* Summary - Moved to top */}
+        {!loading && invoices.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, {marginBottom: spacing.sm}]}>Summary</Text>
+            <View style={styles.summaryGrid}>
+              <View style={styles.statBox}>
+                <Text style={styles.statNum}>{invoices.length}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </View>
+              <View style={[styles.statBox, styles.statBorderLeft]}>
+                <Text style={[styles.statNum, {color: colors.success}]}>
+                  {invoices.filter(i => i.status === 'Paid').length}
+                </Text>
+                <Text style={styles.statLabel}>Paid</Text>
+                <Text style={[styles.statAmount, {color: colors.success}]}>
+                  ₹{totalPaid.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                </Text>
+              </View>
+              <View style={[styles.statBox, styles.statBorderLeft]}>
+                <Text style={[styles.statNum, {color: colors.warning}]}>
+                  {invoices.filter(i => i.status === 'Pending').length}
+                </Text>
+                <Text style={styles.statLabel}>Pending</Text>
+                <Text style={[styles.statAmount, {color: colors.warning}]}>
+                  ₹{totalPending.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                </Text>
+              </View>
+              <View style={[styles.statBox, styles.statBorderLeft]}>
+                <Text style={[styles.statNum, {color: colors.error}]}>
+                  {invoices.filter(i => i.status === 'Cancelled').length}
+                </Text>
+                <Text style={styles.statLabel}>Cancelled</Text>
+                <Text style={[styles.statAmount, {color: colors.error}]}>
+                  ₹{totalCancelled.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             {filtered.length} invoice{filtered.length !== 1 ? 's' : ''}
           </Text>
           <Text style={styles.sectionSub}>Newest first · pull to refresh</Text>
         </View>
+      </View>
+
+      {/* Scrollable Invoice List */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }>
 
         {/* Invoice list */}
         {loading ? (
@@ -436,8 +496,14 @@ export default function InvoicesScreen({navigation}) {
                 </View>
                 <Text style={styles.invDate}>{inv.date}{inv.time ? ` · ${inv.time}` : ''}</Text>
                 <Text style={styles.invDesc} numberOfLines={1}>{inv.description}</Text>
+                {inv.referralName ? (
+                  <View style={styles.invReferralRow}>
+                    <PersonIcon size={11} color={colors.primary} />
+                    <Text style={styles.invReferral}>Referred by: {inv.referralName}</Text>
+                  </View>
+                ) : null}
                 {inv.paymentMode ? (
-                  <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
+                  <View style={{flexDirection:'row', alignItems:'center', gap:4, marginTop:2}}>
                     <WalletIcon size={11} color={colors.textMuted} />
                     <Text style={styles.invMeta}>{inv.paymentMode}</Text>
                   </View>
@@ -450,64 +516,6 @@ export default function InvoicesScreen({navigation}) {
               <ArrowRightIcon size={16} color={colors.textMuted} />
             </TouchableOpacity>
           ))
-        )}
-
-        {/* Download hint */}
-        {!loading && (
-          <View style={styles.helpCard}>
-            <View style={[styles.helpIcon, {backgroundColor: colors.primaryLight}]}>
-              <DownloadIcon size={24} color={colors.primary} />
-            </View>
-            <View style={styles.helpInfo}>
-              <Text style={styles.helpTitle}>Need an Invoice?</Text>
-              <Text style={styles.helpSub}>Download your invoice and claim for insurance reimbursement.</Text>
-              <TouchableOpacity
-                style={styles.learnBtn}
-                onPress={() => Alert.alert('Download', 'PDF download feature coming soon!')}>
-                <Text style={styles.learnBtnText}>Learn More</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Summary */}
-        {!loading && invoices.length > 0 && (
-          <>
-            <Text style={[styles.sectionTitle, {marginTop: spacing.base}]}>Summary</Text>
-            <View style={styles.summaryGrid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statNum}>{invoices.length}</Text>
-                <Text style={styles.statLabel}>Total</Text>
-              </View>
-              <View style={[styles.statBox, styles.statBorderLeft]}>
-                <Text style={[styles.statNum, {color: colors.success}]}>
-                  {invoices.filter(i => i.status === 'Paid').length}
-                </Text>
-                <Text style={styles.statLabel}>Paid</Text>
-                <Text style={[styles.statAmount, {color: colors.success}]}>
-                  ₹{totalPaid.toLocaleString('en-IN', {minimumFractionDigits: 2})}
-                </Text>
-              </View>
-              <View style={[styles.statBox, styles.statBorderLeft]}>
-                <Text style={[styles.statNum, {color: colors.warning}]}>
-                  {invoices.filter(i => i.status === 'Pending').length}
-                </Text>
-                <Text style={styles.statLabel}>Pending</Text>
-                <Text style={[styles.statAmount, {color: colors.warning}]}>
-                  ₹{totalPending.toLocaleString('en-IN', {minimumFractionDigits: 2})}
-                </Text>
-              </View>
-              <View style={[styles.statBox, styles.statBorderLeft]}>
-                <Text style={[styles.statNum, {color: colors.error}]}>
-                  {invoices.filter(i => i.status === 'Cancelled').length}
-                </Text>
-                <Text style={styles.statLabel}>Cancelled</Text>
-                <Text style={[styles.statAmount, {color: colors.error}]}>
-                  ₹{totalCancelled.toLocaleString('en-IN', {minimumFractionDigits: 2})}
-                </Text>
-              </View>
-            </View>
-          </>
         )}
 
       </ScrollView>
@@ -524,7 +532,9 @@ export default function InvoicesScreen({navigation}) {
 
 const styles = StyleSheet.create({
   safe:         {flex: 1, backgroundColor: colors.background},
-  scroll:       {padding: spacing.base, paddingTop: spacing['4xl'], paddingBottom: 32},
+  fixedHeader:  {backgroundColor: colors.background, paddingHorizontal: spacing.base, paddingTop: spacing['4xl'], paddingBottom: spacing.sm},
+  scrollContainer: {flex: 1},
+  scrollContent: {padding: spacing.base, paddingTop: spacing.sm, paddingBottom: 32},
   header:       {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.base},
   back:         {padding: 4},
   headerTitle:  {flex: 1, fontSize: 18, fontWeight: '700', color: colors.textPrimary},
@@ -546,18 +556,13 @@ const styles = StyleSheet.create({
   invTopRow:    {flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2},
   typeBadge:    {paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4},
   typeBadgeText:{fontSize: 10, fontWeight: '800'},
-  invDate:      {fontSize: 11, color: colors.textMuted, marginTop: 1},
-  invDesc:      {fontSize: 12, color: colors.textSecondary, marginTop: 1},
+  invDate:      {fontSize: 12, color: colors.textPrimary, marginTop: 2, fontWeight: '700'},
+  invDesc:      {fontSize: 12, color: colors.textSecondary, marginTop: 2},
+  invReferralRow: {flexDirection:'row', alignItems:'center', gap:4, marginTop:3},
+  invReferral:  {fontSize: 11, color: colors.primary, fontWeight: '600'},
   invMeta:      {fontSize: 11, color: colors.textMuted, marginTop: 1},
   invRight:     {alignItems: 'flex-end', gap: 4},
   invAmount:    {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
-  helpCard:     {flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.base, ...shadows.sm, gap: spacing.md, marginBottom: spacing.base},
-  helpIcon:     {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
-  helpInfo:     {flex: 1},
-  helpTitle:    {fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: 4},
-  helpSub:      {fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm},
-  learnBtn:     {borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 6, alignSelf: 'flex-start'},
-  learnBtnText: {color: colors.primary, fontSize: 12, fontWeight: '700'},
   summaryGrid:  {flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.md, ...shadows.sm, marginBottom: spacing.base},
   statBox:      {flex: 1, padding: spacing.md, alignItems: 'center'},
   statBorderLeft: {borderLeftWidth: 1, borderLeftColor: colors.border},
@@ -572,7 +577,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: colors.background,
+    backgroundColor: '#F9FFFE',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     height: '90%',

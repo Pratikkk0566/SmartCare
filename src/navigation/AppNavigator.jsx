@@ -78,7 +78,7 @@ function TabBadge({count}) {
 
 const TAB_LABELS = {
   Home:           'Home',
-  Invoices:       'Records',
+  Invoices:       'Invoices',
   Investigations: 'Investigation',
   Profile:        'Profile',
 };

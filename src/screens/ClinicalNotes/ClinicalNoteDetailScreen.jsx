@@ -10,7 +10,6 @@ import {
   Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import usePDFGenerator from '../../hooks/usePDFGenerator';
 import { useApp } from '../../context/AppContext';
 import { ClinicalNotesApi } from '../../API/Api';
 
@@ -34,7 +33,6 @@ const ClinicalNoteDetailScreen = ({ route, navigation }) => {
   }
   
   const { userProfile } = useApp();
-  const { isGenerating, generateClinicalNotePDF } = usePDFGenerator();
   const [detailedNote, setDetailedNote] = useState(note);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -73,13 +71,7 @@ const ClinicalNoteDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleGeneratePDF = async () => {
-    try {
-      await generateClinicalNotePDF(detailedNote, userProfile);
-    } catch (error) {
-      console.error('Failed to generate PDF:', error);
-    }
-  };
+
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -266,17 +258,6 @@ const ClinicalNoteDetailScreen = ({ route, navigation }) => {
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Clinical Note</Text>
-        <TouchableOpacity 
-          onPress={handleGeneratePDF}
-          style={styles.pdfButton}
-          disabled={isGenerating}
-        >
-          {isGenerating ? (
-            <ActivityIndicator size="small" color="#007AFF" />
-          ) : (
-            <Text style={styles.pdfButtonText}>📄 PDF</Text>
-          )}
-        </TouchableOpacity>
       </View>
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

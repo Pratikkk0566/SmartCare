@@ -8,8 +8,10 @@ import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {PrescriptionDB, MedicineDB} from '../../services/MedicationDatabaseService';
 import {ArrowBackIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon, CapsuleIcon, PlusIcon, FileTextIcon, TrashIcon, EditIcon, AlertCircleIcon, CheckCircleIcon, ChevronRightIcon, ChevronDownIcon} from '../../assets/icons/Icons';
+import {useApp} from '../../context/AppContext';
 
 export default function PrescriptionsScreen({navigation}) {
+  const {invoices: cachedInvoices, isOnline, refreshAllData, appReady, user} = useApp();
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -88,6 +90,8 @@ export default function PrescriptionsScreen({navigation}) {
     setShowActionModal(false);
     setShowDeleteModal(true);
   };
+
+
 
   const confirmDelete = async () => {
     if (!selectedPrescription) return;
