@@ -1,5 +1,68 @@
+diff --git a/node_modules/react-native-push-notification/android/.classpath b/node_modules/react-native-push-notification/android/.classpath
+index eb19361..bbe97e5 100644
+--- a/node_modules/react-native-push-notification/android/.classpath
++++ b/node_modules/react-native-push-notification/android/.classpath
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <classpath>
+-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.8/"/>
++	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-17/"/>
+ 	<classpathentry kind="con" path="org.eclipse.buildship.core.gradleclasspathcontainer"/>
+ 	<classpathentry kind="output" path="bin/default"/>
+ </classpath>
+diff --git a/node_modules/react-native-push-notification/android/.gradle/5.6.4/fileChanges/last-build.bin b/node_modules/react-native-push-notification/android/.gradle/5.6.4/fileChanges/last-build.bin
+new file mode 100644
+index 0000000..f76dd23
+Binary files /dev/null and b/node_modules/react-native-push-notification/android/.gradle/5.6.4/fileChanges/last-build.bin differ
+diff --git a/node_modules/react-native-push-notification/android/.gradle/5.6.4/fileHashes/fileHashes.lock b/node_modules/react-native-push-notification/android/.gradle/5.6.4/fileHashes/fileHashes.lock
+new file mode 100644
+index 0000000..e052814
+Binary files /dev/null and b/node_modules/react-native-push-notification/android/.gradle/5.6.4/fileHashes/fileHashes.lock differ
+diff --git a/node_modules/react-native-push-notification/android/.gradle/5.6.4/gc.properties b/node_modules/react-native-push-notification/android/.gradle/5.6.4/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/react-native-push-notification/android/.gradle/nb-cache/trust/E2061D487E51B9BF82FF89BC7BF96254DAA29782B1ED07A6D0E99EC0016EE4B5 b/node_modules/react-native-push-notification/android/.gradle/nb-cache/trust/E2061D487E51B9BF82FF89BC7BF96254DAA29782B1ED07A6D0E99EC0016EE4B5
+new file mode 100644
+index 0000000..d3ae51e
+--- /dev/null
++++ b/node_modules/react-native-push-notification/android/.gradle/nb-cache/trust/E2061D487E51B9BF82FF89BC7BF96254DAA29782B1ED07A6D0E99EC0016EE4B5
+@@ -0,0 +1 @@
++CBCA59C6C75B2995206AA290AC0B78F4E343E2942962811A81A32E48D716D2B8
+diff --git a/node_modules/react-native-push-notification/android/.project b/node_modules/react-native-push-notification/android/.project
+index 3865e0f..0ba4114 100644
+--- a/node_modules/react-native-push-notification/android/.project
++++ b/node_modules/react-native-push-notification/android/.project
+@@ -20,4 +20,15 @@
+ 		<nature>org.eclipse.jdt.core.javanature</nature>
+ 		<nature>org.eclipse.buildship.core.gradleprojectnature</nature>
+ 	</natures>
++	<filteredResources>
++		<filter>
++			<id>1787567091621</id>
++			<name></name>
++			<type>30</type>
++			<matcher>
++				<id>org.eclipse.core.resources.regexFilterMatcher</id>
++				<arguments>node_modules|\.git|__CREATED_BY_JAVA_LANGUAGE_SERVER__</arguments>
++			</matcher>
++		</filter>
++	</filteredResources>
+ </projectDescription>
+diff --git a/node_modules/react-native-push-notification/android/.settings/org.eclipse.buildship.core.prefs b/node_modules/react-native-push-notification/android/.settings/org.eclipse.buildship.core.prefs
+index 342e81e..8b9e321 100644
+--- a/node_modules/react-native-push-notification/android/.settings/org.eclipse.buildship.core.prefs
++++ b/node_modules/react-native-push-notification/android/.settings/org.eclipse.buildship.core.prefs
+@@ -2,7 +2,7 @@ arguments=
+ auto.sync=false
+ build.scans.enabled=false
+ connection.gradle.distribution=GRADLE_DISTRIBUTION(WRAPPER)
+-connection.project.dir=
++connection.project.dir=../../../android
+ eclipse.preferences.version=1
+ gradle.user.home=
+ java.home=/Library/Java/JavaVirtualMachines/jdk1.8.0_131.jdk/Contents/Home
 diff --git a/node_modules/react-native-push-notification/android/build.gradle b/node_modules/react-native-push-notification/android/build.gradle
-index d6019f6..7c3a1b2 100644
+index d6019f6..6c8a069 100644
 --- a/node_modules/react-native-push-notification/android/build.gradle
 +++ b/node_modules/react-native-push-notification/android/build.gradle
 @@ -2,7 +2,6 @@ buildscript {
@@ -18,7 +81,7 @@ index d6019f6..7c3a1b2 100644
      }
  }
  
-@@ -47,11 +46,7 @@ android {
+@@ -50,14 +48,9 @@ android {
  }
  
  dependencies {

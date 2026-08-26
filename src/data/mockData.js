@@ -14,87 +14,9 @@ export const userProfile = {
   allergies: ['Penicillin', 'Dust'],
 };
 
-export const medicines = [
-  {
-    id: 'm1',
-    name: 'Paracetamol 500mg',
-    category: 'Pain reliever',
-    type: 'Tablet',
-    quantity: 10,
-    stock: 'out',
-    color: '#6C63FF',
-    bgColor: '#EEE9FF',
-    schedule: [
-      {period: 'morning', time: '08:00 AM', instruction: 'After Food', dose: '1 Tablet', status: 'taken'},
-      {period: 'afternoon', time: '02:00 PM', instruction: 'After Food', dose: '1 Tablet', status: 'upcoming'},
-      {period: 'night', time: '08:00 PM', instruction: 'After Food', dose: '1 Tablet', status: 'upcoming'},
-    ],
-    uses: 'Relieves pain, reduces fever',
-    strength: '500 mg',
-    duration: '5 Days',
-    importantNote: 'Do not skip any dose. Consult your doctor if side effects occur.',
-  },
-  {
-    id: 'm2',
-    name: 'Amoxicillin 500mg',
-    category: 'Antibiotic',
-    type: 'Capsule',
-    quantity: 15,
-    stock: 'in',
-    color: '#22C55E',
-    bgColor: '#DCFCE7',
-    schedule: [
-      {period: 'morning', time: '08:00 AM', instruction: 'After Food', dose: '1 Capsule', status: 'taken'},
-      {period: 'afternoon', time: '02:00 PM', instruction: 'After Food', dose: '1 Capsule', status: 'upcoming'},
-      {period: 'night', time: '08:00 PM', instruction: 'After Food', dose: '1 Capsule', status: 'pending'},
-    ],
-    uses: 'Treats bacterial infections',
-    strength: '500 mg',
-    duration: '7 Days',
-    importantNote: 'Complete the full course. Do not stop early.',
-  },
-  {
-    id: 'm3',
-    name: 'Cetirizine 10mg',
-    category: 'Antihistamine',
-    type: 'Tablet',
-    quantity: 10,
-    stock: 'in',
-    color: '#3B82F6',
-    bgColor: '#DBEAFE',
-    schedule: [
-      {period: 'night', time: '08:00 PM', instruction: 'Before Food', dose: '1 Tablet', status: 'pending'},
-    ],
-    uses: 'Relieves allergy symptoms',
-    strength: '10 mg',
-    duration: '5 Days',
-    importantNote: 'May cause drowsiness. Avoid driving after taking.',
-  },
-  {
-    id: 'm4',
-    name: 'Pantoprazole 40mg',
-    category: 'Acid reducer',
-    type: 'Tablet',
-    quantity: 10,
-    stock: 'out',
-    color: '#F59E0B',
-    bgColor: '#FEF3C7',
-    schedule: [
-      {period: 'morning', time: '08:00 AM', instruction: 'Before Food', dose: '1 Tablet', status: 'taken'},
-      {period: 'night', time: '08:00 PM', instruction: 'Before Food', dose: '1 Tablet', status: 'upcoming'},
-    ],
-    uses: 'Reduces stomach acid',
-    strength: '40 mg',
-    duration: '14 Days',
-    importantNote: 'Take 30 minutes before meals for best effect.',
-  },
-];
+export const medicines = [];
 
-export const todaySchedule = [
-  {time: '8:00 AM', medicine: 'Vitamin D3 1000 IU', dose: '1 tablet', period: 'morning', status: 'taken'},
-  {time: '1:00 PM', medicine: 'Omega-3', dose: '1 capsule', period: 'afternoon', status: 'upcoming'},
-  {time: '8:00 PM', medicine: 'Calcium + Magnesium', dose: '1 tablet', period: 'night', status: 'pending'},
-];
+export const todaySchedule = [];
 
 export const medicalReports = [
   {id: 'r1', name: 'Complete Blood Count (CBC)', category: 'Blood Test', date: 'May 15, 2024', time: '09:30 AM', location: 'City Health Clinic', status: 'Normal', iconColor: '#EF4444', iconBg: '#FEE2E2'},

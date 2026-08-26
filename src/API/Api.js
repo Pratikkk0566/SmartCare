@@ -11,10 +11,15 @@ const BILLING_BASE    = 'https://saas.smartcarehis.com:8443/billing/';
 const SMARTCARE_BASE  = 'https://saas.smartcarehis.com:8443/smartcaremain/';
 const IPD_BASE        = 'https://saas.smartcarehis.com:8443/ipd/';
 
-// Hardcoded clinic ID for this deployment — used as Tenant + clinicid header
-const CLINIC_ID = 'aureus';
-
-
+// Centralized Clinic Configuration
+export const CLINIC_OPTIONS = [
+  { displayName: 'Aureus (222Test)', clinicId: 'aureus' },
+  { displayName: 'Aureus', clinicId: 'aureus2024' },
+  { displayName: 'Borneo Waluj', clinicId: 'borneowaluj' },
+  { displayName: 'Borneo NEO Thane', clinicId: 'bornneothane' },
+  { displayName: 'Borneo Nashik', clinicId: 'Borneonashik' },
+  { displayName: 'BorneoCare Raipur', clinicId: 'borneocare' },
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AsyncStorage helper
@@ -37,9 +42,8 @@ const getItem = async (key) => {
 // clientId       → pass when the endpoint needs a specific patient
 // ─────────────────────────────────────────────────────────────────────────────
 export const buildHeaders = async (clientId = 0, preAuth = false) => {
-  // Always use the hardcoded clinic ID — this server only runs one clinic
-  const clinicId = CLINIC_ID;
-  const tenant   = CLINIC_ID;
+  const clinicId = await getItem('CLINICID') || 'aureus';
+  const tenant   = await getItem('Tenant') || clinicId;
 
   const headers = {
     'Content-Type': 'application/json',
@@ -47,8 +51,8 @@ export const buildHeaders = async (clientId = 0, preAuth = false) => {
     Tenant        : tenant,
     'is-auth'     : '1',
     clinicid      : clinicId,
-    userid        : clinicId, // Web app sends userid as "aureus" (clinic ID)
-    patientid     : '0',      // Web app sends patientid header, default "0"
+    userid        : clinicId, // Web app sends userid as clinic ID
+    patientid     : '0',      // default "0"
   };
 
   if (!preAuth) {
@@ -139,10 +143,8 @@ export const OTPApi = {
       true, // preAuth = true → no Authorization header
     ),
 
-  // Step 2 of login: verify the OTP the user typed
-  // Website: POST to apiHost + Port + '/hisapi/login'
-  verifyOTP: async (phoneNumber, otp) =>
-    apiCall(
+  verifyOTP: async (phoneNumber, otp) => {
+    return apiCall(
       HISAPI_BASE,
       'login',
       {
@@ -154,7 +156,8 @@ export const OTPApi = {
       },
       0,
       true, // preAuth = true → this IS the login call, no token yet
-    ),
+    );
+  },
 
   // Resend OTP — same endpoint as sendOTP
   resendOTP: async (phoneNumber) =>
@@ -257,17 +260,14 @@ export const AppointmentApi = {
     return result;
   },
 
-  // Get the charges/fees for an appointment type
-  // NOTE: HIS server returns HTTP 405 on GET — must use POST even for reads.
-  getAppointmentCharges: async (clientId, doctorId) =>
+  // Get appointment type details (charges/fees)
+  // URL format: appointment/appointmentTypeDetails?patientId=885&doctorId=1849
+  getAppointmentCharges: async (patientId, doctorId) =>
     apiCall(
       HISAPI_BASE,
-      'appointment/appointmentTypeDetails',
-      {
-        method: 'POST',
-        body  : JSON.stringify({ clientId, doctorId, practitionerId: doctorId }),
-      },
-      clientId,
+      `appointment/appointmentTypeDetails?patientId=${patientId}&doctorId=${doctorId}`,
+      { method: 'GET' },
+      patientId,
     ),
 
   // Book a new appointment
@@ -374,6 +374,7 @@ export const InvestigationApi = {
   generateInvReportPDF: async (clientId, data) => {
     const token = await getItem('AUTHTOKEN');
     const branchId = await getItem('branch_id') || await getItem('branchId');
+    const clinicId = await getItem('CLINICID') || 'aureus';
     
     // Replicate exact headers from web app
     const headers = {
@@ -382,10 +383,10 @@ export const InvestigationApi = {
       'accept-language': 'en-US,en;q=0.7',
       'Authorization': `Bearer ${token}`,
       'branchid': branchId && branchId !== 'null' ? branchId : 'null',
-      'clinicid': 'aureus',
+      'clinicid': clinicId,
       'Content-Type': 'application/json; charset=utf-8',
       'patientid': clientId ? String(clientId) : '0',
-      'userid': 'aureus',
+      'userid': clinicId,
       'zoneid': 'Asia/Kolkata',
     };
     
@@ -580,6 +581,439 @@ export const ClinicalNotesApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PrescriptionRepeatApi — fetch repeat prescription list + per-prescription details
+//
+// TWO-STEP flow (matches SmartCare HIS):
+//   1) LIST endpoint — returns prescription IDs + lastmodified only
+//      POST smartcaremain/priscription/repeatpriscriptionList
+//      body: { practid: <doctor diaryuserid>, clientid: <patientId> }
+//      resp: { repeatPriscriptionListByClientid: [ {id, lastmodified, is_visible}, ... ] }
+//
+//   2) DETAIL endpoint — returns the actual medicine array for one prescription
+//      GET  smartcaremain/priscription/fetchrepeatpriscrition/{prescriptionId}
+//      resp: [ { id, drug, dose, frequencyNote, duration, priscdurationtype,
+//                routes, medicineid, qty, genericname, remark, ... }, ... ]
+//
+// Note: `practid` in the LIST payload is the doctor's diaryuserid (NOT practitionerId)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Cache & In-flight promise tracker for getAllForPatient
+let _inFlightGetAllForPatient = null;
+let _cachedGetAllForPatient = { time: 0, patientId: null, data: null };
+
+export const PrescriptionRepeatApi = {
+
+  // ── Step 1: fetch prescription summary list for 1 doctor ────────────────
+  getListByDoctor: async (practid, clientid) => {
+    const headers = await buildHeaders(0, false);
+
+    const pid = Number(clientid);
+    const did = Number(practid);
+
+    try {
+      const url = `${SMARTCARE_BASE}priscription/repeatpriscriptionList`;
+      console.log('[PrescriptionRepeat API] Step1 LIST:', url, { practid: did, clientid: pid });
+
+      const response = await fetch(url, {
+        method : 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ practid: did, clientid: pid }),
+      });
+
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[PrescriptionRepeat API] Step1 LIST status:', response.status,
+        '| keys:', data && typeof data === 'object' ? Object.keys(data).join(',') : typeof data);
+
+      if (!response.ok) {
+        const msg = data?.message || data?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      // Unwrap the array from the (typo'd) wrapper key
+      let list = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && typeof data === 'object') {
+        const candidate =
+          data.repeatPriscriptionListByClientid   // exact server key (typo: Priscription)
+          || data.repeatPrescriptionListByClientid
+          || data.repeatpriscriptionlist
+          || data.repeatPriscriptionList
+          || data.repeatPrescriptionList
+          || data.prescriptions
+          || data.data
+          || data.list
+          || Object.values(data).find(v => Array.isArray(v))
+          || [];
+        list = Array.isArray(candidate) ? candidate : [];
+      }
+
+      // Attach doctor source so we know which practid produced the id
+      const stamped = list.map(item => ({ ...item, _doctorPractid: did }));
+      return { success: true, data: stamped };
+
+    } catch (error) {
+      console.log('[PrescriptionRepeat API Step1 ERROR]', error.message);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
+
+  // ── Step 2: fetch medicine details for a single prescription id (with AsyncStorage cache) ─
+  getById: async (prescriptionId, { forceRefresh = false } = {}) => {
+    const rid = String(prescriptionId).trim();
+    const cacheKey = `@rx_detail_${rid}`;
+
+    // 1) Check AsyncStorage cache first to avoid repeating network requests for static prescriptions
+    if (!forceRefresh) {
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Cache Hit: return stored medicines without calling the remote backend
+            return { success: true, data: parsed, fromCache: true };
+          }
+        }
+      } catch (e) {
+        // Cache read failure is non-fatal — seamlessly fall back to network fetch
+      }
+    }
+
+    const headers = await buildHeaders(0, false);
+
+    try {
+      const url = `${SMARTCARE_BASE}priscription/fetchrepeatpriscrition/${rid}`;
+      console.log('[PrescriptionRepeat API] Step2 DETAIL (Network Fetch):', url);
+
+      const response = await fetch(url, {
+        method : 'GET',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+      });
+
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[PrescriptionRepeat API] Step2 DETAIL status:', response.status,
+        '| items:', Array.isArray(data) ? data.length : (typeof data));
+
+      if (!response.ok) {
+        const msg = (typeof data === 'object' && (data?.message || data?.error)) || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      // Unwrap array
+      let meds = [];
+      if (Array.isArray(data)) meds = data;
+      else if (data && typeof data === 'object') {
+        const candidate =
+          data.medicines
+          || data.medicineList
+          || data.items
+          || data.itemlist
+          || data.data
+          || data.list
+          || data.drugs
+          || Object.values(data).find(v => Array.isArray(v))
+          || [];
+        meds = Array.isArray(candidate) ? candidate : [];
+      }
+
+      // Save medicines array into AsyncStorage for instant retrieval on next visit
+      if (meds.length > 0) {
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(meds));
+        } catch (e) {
+          // Cache write error non-critical
+        }
+      }
+
+      return { success: true, data: meds };
+
+    } catch (error) {
+      console.log(`[PrescriptionRepeat API Step2 ERROR id=${rid}]`, error.message);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
+
+  // ── Full pipeline: for a patient, get ALL repeat prescriptions across
+  //    visited doctors, fetch/cache all medicine details, sort newest first.
+  getAllForPatient: async (practids, clientid, { concurrency = 6, forceRefresh = false } = {}) => {
+    const ids = Array.isArray(practids) ? [...new Set(practids.map(Number).filter(Boolean))] : [];
+    const pid = Number(clientid);
+
+    if (!pid) {
+      return { success: false, error: 'Missing clientid (patientId)', data: [] };
+    }
+    if (ids.length === 0) {
+      return { success: true, data: [], skipped: true, reason: 'No visited doctor practids provided' };
+    }
+
+    // Cache hit within 60 seconds unless explicitly forced
+    if (!forceRefresh && _cachedGetAllForPatient.patientId === pid && (Date.now() - _cachedGetAllForPatient.time < 60000) && _cachedGetAllForPatient.data) {
+      console.log(`[PrescriptionRepeat API] getAllForPatient CACHE HIT for client ${pid} (${_cachedGetAllForPatient.data.length} records)`);
+      return { success: true, data: _cachedGetAllForPatient.data, fromCache: true };
+    }
+
+    // Deduplicate in-flight requests
+    if (_inFlightGetAllForPatient) {
+      console.log(`[PrescriptionRepeat API] getAllForPatient already in flight for client ${pid}, sharing promise`);
+      return _inFlightGetAllForPatient;
+    }
+
+    _inFlightGetAllForPatient = (async () => {
+      try {
+        console.log(`[PrescriptionRepeat API] getAllForPatient → ${ids.length} visited doctor(s) for client ${pid}`);
+
+        // ── PHASE A: gather summary IDs from visited doctors in parallel ─────────
+        const listResults = await Promise.all(
+          ids.map(did => PrescriptionRepeatApi.getListByDoctor(did, pid))
+        );
+        const seenSummary = new Map(); // prescriptionId -> summary
+        for (const res of listResults) {
+          if (!res.success) continue;
+          for (const s of res.data) {
+            const key = String(s.id);
+            if (!key) continue;
+            // Keep the first (or most recent) — overwriting with latest later
+            if (!seenSummary.has(key)) {
+              seenSummary.set(key, s);
+            } else if (s.lastmodified) {
+              // Merge doctor practids so we know which doctors produced it
+              const prev = seenSummary.get(key);
+              seenSummary.set(key, { ...prev, lastmodified: s.lastmodified || prev.lastmodified });
+            }
+          }
+        }
+
+        const summaries = [...seenSummary.values()];
+        console.log(`[PrescriptionRepeat API] Phase A: ${summaries.length} unique prescription IDs`);
+        if (summaries.length === 0) {
+          _cachedGetAllForPatient = { time: Date.now(), patientId: pid, data: [] };
+          return { success: true, data: [] };
+        }
+
+        // Sort summaries by lastmodified DESC (newest first) BEFORE detail fetch —
+        // this makes the earliest responses also the newest ones (faster UI).
+        summaries.sort((a, b) => {
+          const ta = a.lastmodified ? Date.parse(a.lastmodified.replace(/-/g, '/')) : 0;
+          const tb = b.lastmodified ? Date.parse(b.lastmodified.replace(/-/g, '/')) : 0;
+          return tb - ta;
+        });
+
+        // ── PHASE B: fetch medicine details for every prescription id (checks cache first) ──
+        // Uses AsyncStorage cache; only cache-misses will trigger HTTP calls.
+        const detailResults = new Map(); // prescriptionId -> medicine array
+        let cacheHits = 0;
+        let cacheMisses = 0;
+
+        const queue = summaries.map(s => s.id);
+        const worker = async () => {
+          while (queue.length > 0) {
+            const id = queue.shift();
+            const r = await PrescriptionRepeatApi.getById(id, { forceRefresh });
+            if (r.fromCache) cacheHits++;
+            else cacheMisses++;
+            detailResults.set(String(id), r.success ? r.data : []);
+          }
+        };
+        await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+        console.log(`[PrescriptionRepeat API] Phase B details done: ${cacheHits} cached, ${cacheMisses} fetched from server`);
+
+        // ── PHASE C: merge summary + medicines, sort newest first ─────────────
+        const merged = summaries.map(s => {
+          const key = String(s.id);
+          const meds = detailResults.get(key) || [];
+          return {
+            id: key,
+            lastmodified: s.lastmodified || '',
+            is_visible: s.is_visible,
+            _doctorPractid: s._doctorPractid,
+            medicines: meds,
+            medicineCount: meds.length,
+          };
+        });
+
+        // Final sort (same order as summaries, but re-assert in case)
+        merged.sort((a, b) => {
+          const ta = a.lastmodified ? Date.parse(a.lastmodified.replace(/-/g, '/')) : 0;
+          const tb = b.lastmodified ? Date.parse(b.lastmodified.replace(/-/g, '/')) : 0;
+          return tb - ta;
+        });
+
+        _cachedGetAllForPatient = { time: Date.now(), patientId: pid, data: merged };
+        console.log(`[PrescriptionRepeat API] getAllForPatient DONE → ${merged.length} prescriptions (newest first)`);
+        return { success: true, data: merged };
+      } finally {
+        _inFlightGetAllForPatient = null;
+      }
+    })();
+
+    return _inFlightGetAllForPatient;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PrescriptionRelevance — compute per-medicine expiry & per-prescription relevance
+//
+// Combines two signals:
+//   A) Medicine duration  — when the drug was prescribed to run until
+//      (lastmodified + duration converted to days).
+//   B) Recency / age     — how long since the prescription was last touched
+//      (pure fallback when no duration info is available).
+//
+// Output levels (ordered most-relevant first):
+//   'active'    — at least one medicine still within duration window
+//   'expiring'  — no active meds left, but at least one within expiry grace (≤7 days past)
+//   'expired'   — all medicines finished >7 days ago, or prescription >90 days old
+//                 with no parseable duration info
+//   'unknown'   — insufficient data to classify (no lastmodified + no duration on any med)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Parse "duration + priscdurationtype" (e.g. 5 + Days / 2 + Weeks / 1 + Months)
+// into a total number of days. Returns 0 on failure (unknown duration → active).
+export function durationToDays(durationVal, durTypeVal) {
+  const raw = String(durationVal || '').trim();
+  if (!raw) return 0;
+  const n = parseFloat(raw);
+  if (!isFinite(n) || n <= 0) return 0;
+
+  const t = String(durTypeVal || 'Days').trim().toLowerCase();
+  if (t.startsWith('day'))    return n;
+  if (t.startsWith('week'))   return n * 7;
+  if (t.startsWith('month'))  return n * 30;   // approximate, stable
+  if (t.startsWith('year'))   return n * 365;
+  // Fallback: if unit missing, assume days (common server default)
+  return n;
+}
+
+// For a single medicine row + its prescription's lastmodified timestamp,
+// compute days-remaining (can be negative for expired).
+// Returns { days, status: 'active'|'expiring'|'expired'|'unknown', expiryDate }
+export function computeMedicineRelevance(med = {}, prescriptionLastmodified = '') {
+  const durDays = durationToDays(med.duration, med.priscdurationtype);
+  const startTs = prescriptionLastmodified
+    ? Date.parse(String(prescriptionLastmodified).replace(/-/g, '/'))
+    : 0;
+
+  if (!startTs) {
+    return { days: Infinity, status: 'unknown', expiryDate: '' };
+  }
+
+  let expiryTs;
+  if (durDays > 0) {
+    expiryTs = startTs + durDays * 24 * 60 * 60 * 1000;
+  } else {
+    // No duration → treat as a "lifetime" prescription (e.g. maintenance drugs).
+    // We still don't want to mark it expired purely by time.
+    return { days: Infinity, status: 'active', expiryDate: '' };
+  }
+
+  const now = Date.now();
+  const daysLeft = Math.floor((expiryTs - now) / (1000 * 60 * 60 * 24));
+  let status;
+  if (daysLeft >= 0)       status = 'active';
+  else if (daysLeft >= -7) status = 'expiring';
+  else                     status = 'expired';
+
+  const d = new Date(expiryTs);
+  const pad = (n) => String(n).padStart(2, '0');
+  const expiryDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  return { days: daysLeft, status, expiryDate };
+}
+
+// For a full prescription object [{medicines:[], lastmodified:''}],
+// roll up the per-medicine statuses into a single prescription-level level.
+// Returns:
+//   { level, activeCount, expiringCount, expiredCount, unknownCount,
+//     daysSinceModified, medicinesRelevance: [...] }
+export function computePrescriptionRelevance(prescription = {}) {
+  const meds = Array.isArray(prescription.medicines) ? prescription.medicines : [];
+  const lastmod = prescription.lastmodified || prescription.date || '';
+
+  const perMed = meds.map(m => computeMedicineRelevance(m, lastmod));
+
+  const counts = { active: 0, expiring: 0, expired: 0, unknown: 0 };
+  perMed.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+
+  let level;
+  if (counts.active > 0)       level = 'active';
+  else if (counts.expiring > 0) level = 'expiring';
+  else if (counts.expired > 0)  level = 'expired';
+  else                          level = 'unknown';
+
+  // Fallback for unknown: use pure recency when no duration data existed
+  let daysSinceModified = Infinity;
+  if (lastmod) {
+    const t = Date.parse(String(lastmod).replace(/-/g, '/'));
+    if (t) daysSinceModified = Math.floor((Date.now() - t) / (1000 * 60 * 60 * 24));
+  }
+  if (level === 'unknown' && isFinite(daysSinceModified)) {
+    if (daysSinceModified <= 90) level = 'active';
+    else                         level = 'expired';
+  }
+
+  return {
+    level,
+    activeCount: counts.active,
+    expiringCount: counts.expiring,
+    expiredCount: counts.expired,
+    unknownCount: counts.unknown,
+    daysSinceModified,
+    medicinesRelevance: perMed,
+  };
+}
+
+// Map relevance level → UI styling (colour chip + card accent).
+export function relevanceStyle(level, daysSince = 0) {
+  switch (level) {
+    case 'active':
+      return {
+        cardClass: 'prescCardServerNewest',
+        chipBg:    '#D1FAE5',
+        chipFg:    '#047857',
+        chipLabel: 'Active',
+      };
+    case 'expiring':
+      return {
+        cardClass: 'prescCardServerRecent',
+        chipBg:    '#FEF3C7',
+        chipFg:    '#B45309',
+        chipLabel: 'Expiring',
+      };
+    case 'expired':
+      return {
+        cardClass: 'prescCardServerOld',
+        chipBg:    '#F3F4F6',
+        chipFg:    '#6B7280',
+        chipLabel: 'Expired',
+      };
+    default:
+      return {
+        cardClass: null,
+        chipBg:    '#EEF2FF',
+        chipFg:    '#4F46E5',
+        chipLabel: 'Clinic',
+      };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PrescriptionMasterApi — search medicines from prescription master
 // Endpoint: POST http://saas.smartcarehis.com:8443/smartcaremain/priscriptionmaster/medicinelist
 // ─────────────────────────────────────────────────────────────────────────────
@@ -734,11 +1168,13 @@ export const saveSession = async (responseData, mobile = '') => {
   const branchId = responseData.branchId || responseData.branch_id ||
                    responseData.branchid || responseData.branch    || '';
 
+  const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+
   const map = {
     AUTHTOKEN       : responseData.token      || responseData.Token      || '',
     SESSIONEXPIRTIME: responseData.expirytime || responseData.expiryTime || '',
-    CLINICID        : CLINIC_ID,   // always aureus
-    Tenant          : CLINIC_ID,   // always aureus
+    CLINICID        : clinicId,
+    Tenant          : clinicId,
     mobileNumber    : (mobile || '').replace(/\D/g, '').slice(-10),  // always store as plain 10-digit
     UserId          : String(userId),
     userid          : String(userId),
@@ -753,17 +1189,19 @@ export const saveSession = async (responseData, mobile = '') => {
   );
 
   console.log('[saveSession] saved → token:', map.AUTHTOKEN ? '✓' : '✗',
-    '| clinicId:', CLINIC_ID,
+    '| clinicId:', clinicId,
     '| userId:', map.UserId || '(empty)',
     '| branchId:', map.branch_id || '(empty)');
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PractitionerApi — list of doctors/practitioners at the clinic
+// New endpoint: POST http://103.159.239.222/smartcaremain/practitionerlist
+// Body: {branchid: "1", specializationid: 0, isVisitingConsultant: 0}
 // ─────────────────────────────────────────────────────────────────────────────
 export const PractitionerApi = {
 
-  // Get all practitioners for the current clinic
+  // Get all practitioners (old endpoint - keep for backward compatibility)
   // Website: GET hisapi/user/practitioner/all
   getAll: async () =>
     apiCall(
@@ -771,6 +1209,52 @@ export const PractitionerApi = {
       'user/practitioner/all',
       { method: 'GET' },
     ),
+
+  // Get practitioner list with filters (NEW - primary endpoint)
+  // POST http://103.159.239.222/smartcaremain/practitionerlist
+  // Body: {branchid: "1", specializationid: 0, isVisitingConsultant: 0}
+  getList: async (branchid = "1", specializationid = 0, isVisitingConsultant = 0) => {
+    // Use the new base URL for this specific endpoint
+    const NEW_BASE = 'http://103.159.239.222/smartcaremain/';
+    const headers = await buildHeaders(0, false);
+
+    try {
+      const url = `${NEW_BASE}practitionerlist`;
+      console.log('[PractitionerApi] Fetching list:', url, { branchid, specializationid, isVisitingConsultant });
+
+      const response = await fetch(url, {
+        method : 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ 
+          branchid: String(branchid),
+          specializationid: Number(specializationid),
+          isVisitingConsultant: Number(isVisitingConsultant)
+        }),
+      });
+
+      let data = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      }
+
+      console.log('[PractitionerApi] List response status:', response.status, '| practitioners:', Array.isArray(data) ? data.length : typeof data);
+
+      if (!response.ok) {
+        const msg = data?.message || data?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+
+      return { success: true, data };
+
+    } catch (error) {
+      console.log('[PractitionerApi ERROR]', error.message);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

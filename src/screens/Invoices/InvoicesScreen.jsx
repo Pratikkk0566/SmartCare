@@ -209,6 +209,7 @@ function InfoRow({icon: Icon, label, value}) {
 }
 
 const TABS = ['All', 'Paid', 'Pending', 'Cancelled'];
+const DATE_FILTERS = ['All Time', 'Past Week', 'Past Month', 'Past 3 Months', 'Past 6 Months'];
 
 const STATUS_COLORS = {Paid: colors.success, Pending: colors.warning, Cancelled: colors.error};
 const STATUS_BG     = {Paid: colors.successLight, Pending: colors.warningLight, Cancelled: colors.errorLight};
@@ -282,6 +283,8 @@ function mapInvoice(inv) {
 export default function InvoicesScreen({navigation}) {
   const {invoices: cachedInvoices, isOnline, refreshAllData, appReady} = useApp();
   const [activeTab,  setActiveTab]  = useState('All');
+  const [dateFilter, setDateFilter] = useState('All Time');
+  const [showDateFilterModal, setShowDateFilterModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -361,17 +364,59 @@ export default function InvoicesScreen({navigation}) {
 
   const onRefresh = () => fetchInvoices();
 
-  const filtered = invoices.filter(inv =>
-    activeTab === 'All' ? true : inv.status === activeTab,
-  );
+  // Date filtering helper
+  const isWithinDateRange = (dateStr, filterType) => {
+    if (filterType === 'All Time') return true;
+    if (!dateStr) return false;
+
+    // Parse date string (format: "DD-MM-YYYY" or "YYYY-MM-DD")
+    let reportDate;
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        reportDate = new Date(dateStr);
+      } else {
+        // DD-MM-YYYY
+        reportDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      }
+    } else {
+      reportDate = new Date(dateStr);
+    }
+    
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const daysDiff = Math.floor((today - reportDate) / (1000 * 60 * 60 * 24));
+
+    switch (filterType) {
+      case 'Past Week':
+        return daysDiff <= 7;
+      case 'Past Month':
+        return daysDiff <= 30;
+      case 'Past 3 Months':
+        return daysDiff <= 90;
+      case 'Past 6 Months':
+        return daysDiff <= 180;
+      default:
+        return true;
+    }
+  };
+
+  const filtered = invoices.filter(inv => {
+    const matchStatus = activeTab === 'All' || inv.status === activeTab;
+    if (!matchStatus) return false;
+
+    const matchDate = isWithinDateRange(inv._isoDate || inv.date, dateFilter);
+    return matchDate;
+  });
 
   const totalPaid      = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.rawAmount, 0);
   const totalPending   = invoices.filter(i => i.status === 'Pending').reduce((s, i) => s + i.rawAmount, 0);
   const totalCancelled = invoices.filter(i => i.status === 'Cancelled').reduce((s, i) => s + i.rawAmount, 0);
 
   const handleInvoicePress = (invoice) => {
-    setSelectedInvoice(invoice);
-    setModalVisible(true);
+    navigation.navigate('InvoiceDetail', { invoice });
   };
 
   return (
@@ -384,8 +429,9 @@ export default function InvoicesScreen({navigation}) {
             <ArrowBackIcon size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Invoices & Bills</Text>
-          <TouchableOpacity onPress={onRefresh}>
+          <TouchableOpacity onPress={() => setShowDateFilterModal(true)} style={styles.filterIconBtn}>
             <FilterIcon size={22} color={colors.textSecondary} />
+            {dateFilter !== 'All Time' && <View style={styles.filterDot} />}
           </TouchableOpacity>
         </View>
 
@@ -526,6 +572,43 @@ export default function InvoicesScreen({navigation}) {
         invoice={selectedInvoice}
         onClose={() => setModalVisible(false)}
       />
+
+      {/* Date Filter Modal */}
+      <Modal
+        visible={showDateFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateFilterModal(false)}>
+        <Pressable style={styles.dateModalOverlay} onPress={() => setShowDateFilterModal(false)}>
+          <Pressable style={styles.dateFilterModal} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.dateModalHeader}>
+              <Text style={styles.dateModalTitle}>Filter by Date</Text>
+              <TouchableOpacity onPress={() => setShowDateFilterModal(false)} style={styles.dateModalCloseBtn}>
+                <Text style={styles.dateModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dateModalOptions}>
+              {DATE_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.dateOption, dateFilter === f && styles.dateOptionSelected]}
+                  onPress={() => {
+                    setDateFilter(f);
+                    setShowDateFilterModal(false);
+                  }}
+                  activeOpacity={0.7}>
+                  <Text style={[styles.dateOptionText, dateFilter === f && styles.dateOptionTextSelected]}>{f}</Text>
+                  {dateFilter === f && (
+                    <View style={styles.checkIcon}>
+                      <Text style={styles.checkIconText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -543,6 +626,23 @@ const styles = StyleSheet.create({
   tabSelected:  {backgroundColor: colors.primary},
   tabText:      {fontSize: 13, color: colors.textSecondary, fontWeight: '500'},
   tabTextSelected: {color: '#fff', fontWeight: '700'},
+  filterIconBtn: {padding: 4, position: 'relative'},
+  filterDot: {position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary},
+
+  // Date Filter Modal styles
+  dateModalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl},
+  dateFilterModal: {backgroundColor: colors.surface, borderRadius: radius.xl, width: '100%', maxWidth: 320, ...shadows.lg},
+  dateModalHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border},
+  dateModalTitle: {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
+  dateModalCloseBtn: {width: 32, height: 32, borderRadius: 16, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center'},
+  dateModalCloseText: {fontSize: 18, color: colors.textMuted, fontWeight: '600'},
+  dateModalOptions: {padding: spacing.base},
+  dateOption: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.base, borderRadius: radius.md, marginBottom: spacing.xs},
+  dateOptionSelected: {backgroundColor: colors.primaryLight},
+  dateOptionText: {fontSize: 15, color: colors.textPrimary, fontWeight: '500'},
+  dateOptionTextSelected: {color: colors.primary, fontWeight: '700'},
+  checkIcon: {width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center'},
+  checkIconText: {color: '#fff', fontSize: 14, fontWeight: '700'},
   sectionHeader:{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md},
   sectionTitle: {fontSize: 15, fontWeight: '700', color: colors.textPrimary},
   sectionSub:   {fontSize: 11, color: colors.textMuted},

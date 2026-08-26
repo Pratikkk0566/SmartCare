@@ -77,6 +77,7 @@ const confirmLogout = async () => {
     await AsyncStorage.removeItem('patientName');
     await AsyncStorage.removeItem('uhid');
     await AsyncStorage.removeItem('CLINICID');
+    await AsyncStorage.removeItem('Tenant');
     
     // Update context
     setIsLoggedIn(false);

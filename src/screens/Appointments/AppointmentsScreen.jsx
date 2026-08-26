@@ -9,9 +9,9 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {AppointmentApi} from '../../API/Api';
+import {AppointmentApi, PractitionerApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, SearchIcon, CalendarIcon, ClockIcon, PinIcon, StethoscopeIcon, VideoIcon, DocumentIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, SearchIcon, CalendarIcon, ClockIcon, PinIcon, StethoscopeIcon, VideoIcon, DocumentIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, ArrowRightIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 // Local specialties — no API endpoint exists for this list
@@ -30,20 +30,42 @@ const specialties = [
   {id: 's8', name: 'ENT Specialist',    iconKey: 'EarIcon',         color: '#14B8A6', bgColor: '#CCFBF1'},
 ];
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function getLocalDateYYYYMMDD(d = new Date()) {
+  const year  = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day   = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function toISODateKey(value = '') {
+  if (!value) return '';
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  // e.g. "August 25, 2026"
+  const parsed = new Date(value);
+  if (!isNaN(parsed.getTime())) return getLocalDateYYYYMMDD(parsed);
+  return '';
+}
+
 export default function AppointmentsScreen({navigation}) {
   const {appointments: cachedAppointments, appointmentHistory: cachedHistory, appReady} = useApp();
   const [activeTab, setActiveTab] = useState('Today\'s');
   const [appointments, setAppointments] = useState([]);
   const [todayAppointments, setTodayAppointments] = useState([]);
   const [appointmentHistory, setAppointmentHistory] = useState([]);
+  const [practitioners, setPractitioners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
 
-  // Auto-fetch on screen focus
+  // Auto-fetch on screen focus — cache first, then always refresh from API
   useFocusEffect(
     useCallback(() => {
       console.log('[AppointmentsScreen] Screen focused');
       loadAppointments();
+      fetchPractitioners();
+      fetchAppointments();
     }, [])
   );
 
@@ -52,23 +74,90 @@ export default function AppointmentsScreen({navigation}) {
     if (cachedAppointments.length > 0 || cachedHistory.length > 0) {
       setAppointments(cachedAppointments);
       setAppointmentHistory(cachedHistory);
-      filterTodayAppointments(cachedAppointments);
+      filterTodayAppointments(cachedAppointments, cachedHistory);
       setLoading(false);
     } else {
       setLoading(false);
     }
   };
 
-  const filterTodayAppointments = (allAppointments) => {
-    const today = new Date().toISOString().slice(0, 10);
-    console.log('[AppointmentsScreen] Today:', today);
-    const todayAppts = allAppointments.filter(a => {
-      const apptDate = (a.date || '').slice(0, 10);
-      console.log('[AppointmentsScreen] Comparing:', apptDate, 'with', today);
+  const filterTodayAppointments = (upcomingList, historyList = []) => {
+    const today = getLocalDateYYYYMMDD();
+    console.log('[AppointmentsScreen] Today (local):', today);
+    // Today = ALL appointments whose LOCAL date is today, regardless of past/future time
+    const merged = [...upcomingList, ...historyList];
+    const todayAppts = merged.filter(a => {
+      const apptDate = toISODateKey(a.date);
       return apptDate === today;
     });
     console.log('[AppointmentsScreen] Today appointments:', todayAppts.length);
     setTodayAppointments(todayAppts);
+  };
+
+  const fetchPractitioners = async () => {
+    setLoadingDoctors(true);
+    try {
+      const result = await PractitionerApi.getList("1", 0, 0);
+      console.log('[AppointmentsScreen] Practitioners API result:', result.success);
+      
+      if (result.success) {
+        const list = result.data?.practitioners || result.data || [];
+        console.log('[AppointmentsScreen] Raw practitioners:', list.length);
+        
+        if (Array.isArray(list) && list.length > 0) {
+          console.log('[AppointmentsScreen] First practitioner:', JSON.stringify(list[0], null, 2));
+        }
+        
+        const normalized = Array.isArray(list) ? list.map(p => {
+          const getId = () => {
+            const candidates = [
+              p.practitionerId, p.diaryuserid, p.diaryUserId, p.userId, p.user_id,
+              p.id, p.doctorId, p.doctor_id, p.practionerId,
+            ];
+            for (const c of candidates) {
+              if (c !== undefined && c !== null && String(c).trim() !== '') return c;
+            }
+            return null;
+          };
+
+          const getName = () => {
+            const candidates = [
+              p.practitionerName, p.diaryuser, p.diaryUser, p.name, p.doctorName, p.userName,
+              p.fullName, p.doctor_name, p.practitioner_name,
+            ];
+            for (const c of candidates) {
+              if (c && String(c).trim() !== '') return c;
+            }
+            return 'Unknown Doctor';
+          };
+
+          const practitionerId = getId();
+          const practitionerName = getName();
+
+          return {
+            practitionerId,
+            id: practitionerId,
+            name: practitionerName,
+            specialty: p.specialization || p.specialty || p.department || 'General Medicine',
+            qualifications: p.qualification || p.qualifications || p.degree || 'MBBS',
+            rating: p.rating || 4.5,
+            reviewCount: p.reviewCount || p.review_count || 0,
+            consultationFee: p.consultationFee || p.charge || p.fee || 500,
+            experience: p.experience || '10+ years',
+            clinic: p.clinic || p.hospital || p.location || 'Main Clinic',
+            avatar: p.avatar || p.photo || null,
+            _raw: p,
+          };
+        }).filter(p => p.practitionerId).slice(0, 5) : []; // Show top 5 doctors
+        
+        console.log('[AppointmentsScreen] Normalized practitioners:', normalized.length);
+        setPractitioners(normalized);
+      }
+    } catch (error) {
+      console.log('[AppointmentsScreen] Practitioners fetch error:', error);
+    } finally {
+      setLoadingDoctors(false);
+    }
   };
 
   const fetchAppointments = async () => {
@@ -128,13 +217,15 @@ export default function AppointmentsScreen({navigation}) {
         setAppointments(upcoming);
         setAppointmentHistory(history);
         
-        // Today's appointments: date is today AND time is in the future
-        const today = new Date().toISOString().slice(0, 10);
-        const todayAppts = upcoming.filter(a => {
-          const apptDate = (a.date || '').slice(0, 10);
+        // Today's appointments: use LOCAL date, include both upcoming + history
+        // (so past-time today appointments still show on the Today tab)
+        const today = getLocalDateYYYYMMDD();
+        const merged = [...upcoming, ...history];
+        const todayAppts = merged.filter(a => {
+          const apptDate = toISODateKey(a.date);
           return apptDate === today;
         });
-        console.log('[AppointmentsScreen] Today:', todayAppts.length);
+        console.log('[AppointmentsScreen] Today (local):', todayAppts.length);
         setTodayAppointments(todayAppts);
       }
     } catch (error) {
@@ -160,6 +251,13 @@ export default function AppointmentsScreen({navigation}) {
     fee: Number(a.charge) || a.consultationFee || a.fee || null,
   });
 
+  // Counts shown next to each tab label
+  const tabCounts = {
+    "Today's":    todayAppointments.length,
+    "Upcoming":   appointments.length,
+    "History":    appointmentHistory.length,
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={['bottom']}>
       <View style={s.header}>
@@ -173,12 +271,22 @@ export default function AppointmentsScreen({navigation}) {
       </View>
 
       <TouchableOpacity style={s.bookBanner} onPress={() => navigation.navigate('DoctorSearch', {})} activeOpacity={0.88}>
+        <View style={s.bookBannerDecor} />
         <View style={s.bookBannerLeft}>
+          <Text style={s.bookBannerEyebrow}>START NOW</Text>
           <Text style={s.bookBannerTitle}>Book an Appointment</Text>
-          <Text style={s.bookBannerSub}>Search from 100+ doctors near you</Text>
+          <Text style={s.bookBannerSub}>Search from 100+ top doctors near you & book instantly</Text>
+          <View style={s.bookBannerCtaRow}>
+            <Text style={s.bookBannerCtaText}>Book Now</Text>
+            <View style={s.bookBannerCtaArrow}>
+              <ArrowRightIcon size={16} color={colors.primary} />
+            </View>
+          </View>
         </View>
-        <View style={s.bookBannerIcon}>
-          <StethoscopeIcon size={26} color="#fff" />
+        <View style={s.bookBannerIconWrap}>
+          <View style={s.bookBannerIconRing}>
+            <StethoscopeIcon size={36} color="#fff" />
+          </View>
         </View>
       </TouchableOpacity>
 
@@ -187,45 +295,74 @@ export default function AppointmentsScreen({navigation}) {
         <Text style={s.searchPlaceholder}>Search doctors, specialties…</Text>
       </TouchableOpacity>
 
-      <View style={s.specSection}>
-        <View style={s.specHeader}>
-          <Text style={s.specHeading}>Browse by Specialty</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('DoctorSearch', {})}>
-            <Text style={s.viewAll}>View all</Text>
-          </TouchableOpacity>
+      {/* Featured Doctors Section */}
+      {practitioners.length > 0 && (
+        <View style={s.doctorsSection}>
+          <View style={s.specHeader}>
+            <Text style={s.specHeading}>Available Doctors</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('DoctorSearch', {})}>
+              <Text style={s.viewAll}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={practitioners}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={item => String(item.id)}
+            contentContainerStyle={s.doctorsList}
+            renderItem={({item}) => {
+              const initials = (item.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
+              const hue = (item.name?.charCodeAt(4) || 0) * 37 % 360;
+              
+              return (
+                <TouchableOpacity
+                  style={s.doctorCard}
+                  onPress={() => navigation.navigate('DoctorProfile', {doctorId: item.id})}
+                  activeOpacity={0.8}>
+                  <View style={[s.doctorAvatar, {backgroundColor: `hsl(${hue},55%,88%)`}]}>
+                    <Text style={[s.doctorAvatarText, {color: `hsl(${hue},45%,30%)`}]}>{initials}</Text>
+                  </View>
+                  <Text style={s.doctorName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={s.doctorSpecialty} numberOfLines={1}>{item.specialty}</Text>
+                  <View style={s.doctorRating}>
+                    <Text style={s.doctorRatingText}>⭐ {item.rating.toFixed(1)}</Text>
+                  </View>
+                  <Text style={s.doctorFee}>₹{item.consultationFee}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
         </View>
-        <FlatList
-          data={specialties}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.id}
-          contentContainerStyle={s.specList}
-          renderItem={({item}) => {
-            const SpecIcon = SPEC_ICON_MAP[item.iconKey] || StethoscopeIcon;
-            return (
-              <TouchableOpacity
-                style={[s.specChip, {backgroundColor: item.bgColor}]}
-                onPress={() => navigation.navigate('DoctorSearch', {specialtyId: item.id})}
-                activeOpacity={0.8}>
-                <View style={[s.specIconWrap, {backgroundColor: item.color + '20'}]}>
-                  <SpecIcon size={22} color={item.color} />
-                </View>
-                <Text style={[s.specChipName, {color: item.color}]} numberOfLines={2}>{item.name}</Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </View>
+      )}
+
+      {loadingDoctors && (
+        <View style={{alignItems: 'center', paddingVertical: 12}}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={{marginTop: 6, fontSize: 12, color: colors.textSecondary}}>Loading doctors…</Text>
+        </View>
+      )}
 
       <View style={s.tabRow}>
-        {['Today\'s', 'Upcoming', 'History'].map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[s.tab, activeTab === tab && s.tabActive]}
-            onPress={() => setActiveTab(tab)}>
-            <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
+        {['Today\'s', 'Upcoming', 'History'].map(tab => {
+          const count = tabCounts[tab] ?? 0;
+          const isActive = activeTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[s.tab, isActive && s.tabActive]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.85}>
+              <View style={s.tabInner}>
+                <Text style={[s.tabText, isActive && s.tabTextActive]}>{tab}</Text>
+                <View style={[s.tabCountBadge, isActive && s.tabCountBadgeActive, count === 0 && s.tabCountBadgeZero]}>
+                  <Text style={[s.tabCountText, isActive && s.tabCountTextActive, count === 0 && s.tabCountTextZero]}>
+                    {count}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <ScrollView 
@@ -493,12 +630,18 @@ const s = StyleSheet.create({
   headerText:        {flex: 1},
   headerTitle:       {fontSize: 20, fontWeight: '900', color: colors.textPrimary},
   headerSub:         {fontSize: 12, color: colors.textSecondary, marginTop: 2},
-  bookBanner:        {margin: spacing.base, borderRadius: radius.lg, backgroundColor: colors.primary, padding: spacing.base, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', ...shadows.md},
-  bookBannerLeft:    {flex: 1},
-  bookBannerTitle:   {fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 4},
-  bookBannerSub:     {fontSize: 12, color: 'rgba(255,255,255,0.8)'},
-  bookBannerIcon:    {width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center'},
-  searchBar:         {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.base, marginBottom: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.full, paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.border},
+  bookBanner:        {position: 'relative', overflow: 'hidden', margin: spacing.base, marginTop: spacing.md, borderRadius: radius.xl, backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.xl + 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', ...shadows.lg, borderWidth: 1, borderColor: colors.primary + '40'},
+  bookBannerDecor:   {position: 'absolute', top: -40, right: -30, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.08)'},
+  bookBannerLeft:    {flex: 1, zIndex: 1},
+  bookBannerEyebrow: {fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2, marginBottom: 6},
+  bookBannerTitle:   {fontSize: 22, fontWeight: '900', color: '#fff', marginBottom: 6, letterSpacing: 0.3},
+  bookBannerSub:     {fontSize: 13, color: 'rgba(255,255,255,0.82)', lineHeight: 18, marginBottom: spacing.md + 2, paddingRight: spacing.sm},
+  bookBannerCtaRow:  {flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#fff', paddingHorizontal: spacing.md + 2, paddingVertical: spacing.sm, borderRadius: radius.full, gap: 6},
+  bookBannerCtaText: {fontSize: 14, fontWeight: '800', color: colors.primary},
+  bookBannerCtaArrow:{width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center'},
+  bookBannerIconWrap:{alignItems: 'center', justifyContent: 'center', zIndex: 1, marginLeft: spacing.sm},
+  bookBannerIconRing:{width: 86, height: 86, borderRadius: 43, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)'},
+  searchBar:         {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.base, marginBottom: spacing.md, backgroundColor: colors.surface, borderRadius: radius.full, paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.border},
   searchPlaceholder: {fontSize: 14, color: colors.textMuted, flex: 1},
   specSection:       {marginBottom: spacing.sm},
   specHeader:        {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, marginBottom: spacing.sm},
@@ -508,10 +651,30 @@ const s = StyleSheet.create({
   specChip:          {alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: radius.lg, minWidth: 90, gap: spacing.sm},
   specIconWrap:      {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
   specChipName:      {fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 13},
+  
+  // Doctors section
+  doctorsSection:    {marginBottom: spacing.md},
+  doctorsList:       {paddingHorizontal: spacing.base, gap: spacing.md},
+  doctorCard:        {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, width: 130, alignItems: 'center', ...shadows.sm, borderWidth: 1, borderColor: colors.border},
+  doctorAvatar:      {width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm},
+  doctorAvatarText:  {fontSize: 18, fontWeight: '900'},
+  doctorName:        {fontSize: 13, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 4},
+  doctorSpecialty:   {fontSize: 10, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.sm},
+  doctorRating:      {backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full, marginBottom: spacing.xs},
+  doctorRatingText:  {fontSize: 10, fontWeight: '700', color: colors.primary},
+  doctorFee:         {fontSize: 14, fontWeight: '800', color: colors.primary},
+  
   tabRow:            {flexDirection: 'row', paddingHorizontal: spacing.base, gap: spacing.sm, marginBottom: spacing.sm},
   tab:               {paddingHorizontal: spacing.base, paddingVertical: spacing.sm, borderRadius: radius.full, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border},
   tabActive:         {backgroundColor: colors.primary, borderColor: colors.primary},
+  tabInner:          {flexDirection: 'row', alignItems: 'center', gap: 6},
   tabText:           {fontSize: 13, fontWeight: '600', color: colors.textSecondary},
   tabTextActive:     {color: '#fff', fontWeight: '700'},
+  tabCountBadge:     {minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center'},
+  tabCountBadgeActive:{backgroundColor: 'rgba(255,255,255,0.25)'},
+  tabCountBadgeZero: {backgroundColor: 'transparent', minWidth: 18, height: 18, paddingHorizontal: 0},
+  tabCountText:      {fontSize: 10, fontWeight: '800', color: colors.textPrimary},
+  tabCountTextActive:{color: '#fff'},
+  tabCountTextZero:  {color: colors.textMuted},
   list:              {paddingHorizontal: spacing.base},
 });

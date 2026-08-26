@@ -22,6 +22,7 @@ import AccountCreatedScreen  from '../screens/Onboarding/AccountCreatedScreen';
 // Main tabs
 import HomeScreen           from '../screens/Home/HomeScreen';
 import InvoicesScreen       from '../screens/Invoices/InvoicesScreen';
+import InvoiceDetailScreen  from '../screens/Invoices/InvoiceDetailScreen';
 import InvestigationsScreen from '../screens/Investigations/InvestigationsScreen';
 import ProfileScreen        from '../screens/Profile/ProfileScreen';
 
@@ -42,7 +43,9 @@ import AppointmentSuccessScreen from '../screens/Appointments/AppointmentSuccess
 
 // Medicine
 import MedicineScheduleScreen    from '../screens/Medicine/MedicineScheduleScreen';
+import MedicationAlarmsScreen    from '../screens/Medicine/MedicationAlarmsScreen';
 import PrescriptionsScreen       from '../screens/Medicine/PrescriptionsScreen';
+import PrescriptionDetailScreen  from '../screens/Medicine/PrescriptionDetailScreen';
 import CreatePrescriptionScreen  from '../screens/Medicine/CreatePrescriptionScreen';
 import AddMedicinesScreen        from '../screens/Medicine/AddMedicinesScreen';
 import ReviewPrescriptionScreen  from '../screens/Medicine/ReviewPrescriptionScreen';
@@ -190,12 +193,17 @@ export default function AppNavigator() {
 
         {/* Medicine */}
         <Stack.Screen name="MedicineSchedule"      component={MedicineScheduleScreen} />
+        <Stack.Screen name="MedicationAlarms"      component={MedicationAlarmsScreen} />
         <Stack.Screen name="Prescriptions"         component={PrescriptionsScreen} />
+        <Stack.Screen name="PrescriptionDetail"    component={PrescriptionDetailScreen} />
         <Stack.Screen name="CreatePrescription"    component={CreatePrescriptionScreen} />
         <Stack.Screen name="AddMedicines"          component={AddMedicinesScreen} />
         <Stack.Screen name="ReviewPrescription"    component={ReviewPrescriptionScreen} />
         <Stack.Screen name="AboutMedicine"         component={AboutMedicineScreen} />
         <Stack.Screen name="RestockMedicine"       component={RestockMedicineScreen} />
+
+        {/* Invoices */}
+        <Stack.Screen name="InvoiceDetail" component={InvoiceDetailScreen} />
 
         {/* Investigations */}
         <Stack.Screen name="InvestigationReport"  component={InvestigationReportScreen} />

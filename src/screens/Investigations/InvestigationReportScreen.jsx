@@ -1,11 +1,10 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Platform, PermissionsAndroid} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {shadows} from '../../theme/shadows';
-import {ArrowBackIcon, CalendarIcon, DownloadIcon} from '../../assets/icons/Icons';
-import {IconFile, IconBuildingHospital} from '@tabler/icons-react-native';
+import {ArrowBackIcon, CalendarIcon, DownloadIcon, ClipboardIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
 import {useApp} from '../../context/AppContext';
 import { InvestigationApi } from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +14,44 @@ export default function InvestigationReportScreen({navigation, route}) {
   const {report} = route.params;
   const {user} = useApp();
   const [downloading, setDownloading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [detailedReport, setDetailedReport] = useState(null);
+  const [error, setError] = useState('');
+
+  // Fetch detailed investigation report on mount
+  useEffect(() => {
+    fetchDetailedReport();
+  }, []);
+
+  const fetchDetailedReport = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      const clientId = await AsyncStorage.getItem('clientId');
+      const payload = {
+        investigationParentId: report._raw?.parentId || report.id,
+        gender: report._raw?.gender || user?.gender || 'Male'
+      };
+
+      console.log('[InvestigationReport] Fetching details with payload:', payload);
+      
+      const response = await InvestigationApi.print(clientId, payload);
+      
+      console.log('[InvestigationReport] Response:', response);
+
+      if (response.success && response.data?.data) {
+        setDetailedReport(response.data.data);
+      } else {
+        setError('Could not load report details');
+      }
+    } catch (err) {
+      console.error('[InvestigationReport] Error fetching details:', err);
+      setError('Failed to load report details');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Download PDF from server
   const handleDownloadPDF = async () => {
@@ -61,16 +98,19 @@ export default function InvestigationReportScreen({navigation, route}) {
       // Response is wrapped: { data: { investigationId, parameterlist, ... }, error, status_code }
       const fullReport = detailResponse.data.data;
 
+      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+      const lowerClinicId = clinicId.toLowerCase();
+
       // STEP 2: Build payload for PDF generation from the FULL detail object,
       // not from the list item (`report`) which is missing almost everything.
       const pdfPayload = {
         ...fullReport, // all real report fields: parameterlist, sectionName, etc.
-        Website: fullReport.Website || fullReport.website || "aureushospital.com",
+        Website: fullReport.Website || fullReport.website || (lowerClinicId === 'aureus' ? "aureushospital.com" : "smartcarehis.com"),
         clinicAddress: fullReport.clinicAddress || "Nagpur",
-        clinicEmail: fullReport.clinicEmail || "info@aureus.in",
-        clinicName: fullReport.clinicName || "RBI STAFF CLINIC",
+        clinicEmail: fullReport.clinicEmail || (lowerClinicId === 'aureus' ? "info@aureus.in" : `info@${lowerClinicId}.in`),
+        clinicName: fullReport.clinicName || (lowerClinicId === 'aureus' ? "Aureus Hospital" : "SmartCare Hospital"),
         phoneNo: fullReport.phoneNo || "0223-2820300",
-        imagePath: fullReport.imagePath || "https://saas.smartcarehis.com:8443/HISDATA/liveData/locationImage/aureus.jpg",
+        imagePath: fullReport.imagePath || `https://saas.smartcarehis.com:8443/HISDATA/liveData/locationImage/${lowerClinicId}.jpg`,
         qrCodePath: fullReport.qrCodePath || "",
         isChild: fullReport.isChild || false,
         paymentUpId: fullReport.paymentUpId || "",
@@ -220,28 +260,41 @@ export default function InvestigationReportScreen({navigation, route}) {
           <ArrowBackIcon size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{report.name}</Text>
-          <Text style={styles.headerSub}>{report.date} • {report.location}</Text>
+          <Text style={styles.headerTitle}>Investigation Report</Text>
+          <Text style={styles.headerSub}>View and download your medical report</Text>
         </View>
       </View>
 
       {/* Report Details */}
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.reportCard}>
-          <View style={styles.reportIconContainer}>
-            <IconFile size={48} color={colors.primary} />
+        {loading ? (
+          <View style={{alignItems: 'center', paddingVertical: 48}}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{marginTop: 12, fontSize: 13, color: colors.textSecondary}}>Loading report details...</Text>
           </View>
-          
-          <Text style={styles.reportTitle}>{report.name}</Text>
-          
-          <View style={styles.reportDetails}>
-            <View style={styles.detailRow}>
-              <CalendarIcon size={16} color={colors.textMuted} />
-              <Text style={styles.detailText}>{report.date}</Text>
+        ) : error ? (
+          <View style={{alignItems: 'center', paddingVertical: 48}}>
+            <Text style={{fontSize: 14, color: '#EF4444', textAlign: 'center', marginBottom: 16}}>{error}</Text>
+            <TouchableOpacity 
+              onPress={fetchDetailedReport}
+              style={{paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.primary}}>
+              <Text style={{color: '#fff', fontWeight: '700'}}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.reportCard}>
+            <View style={styles.reportIconContainer}>
+              <ClipboardIcon size={48} color={colors.primary} />
             </View>
             
-            <View style={styles.detailRow}>
-              <IconBuildingHospital size={16} color={colors.textMuted} />
+            <Text style={styles.reportTitle}>{detailedReport?.testName || report.name}</Text>
+            
+            {/* Basic Info */}
+            <View style={styles.reportDetails}>
+              {detailedReport?.sectionName && (
+                <Text style={styles.detailText}>{detailedReport.sectionName}</Text>
+              )}
+              <Text style={styles.detailText}>{report.date}</Text>
               <Text style={styles.detailText}>{report.location}</Text>
             </View>
             
@@ -250,50 +303,147 @@ export default function InvestigationReportScreen({navigation, route}) {
                 <Text style={styles.categoryText}>{report.category}</Text>
               </View>
             )}
-          </View>
-          
-          {report.status && (
-            <View style={[styles.statusBadge, 
-              report.status.toLowerCase() === 'completed' && styles.statusCompleted,
-              report.status.toLowerCase() === 'pending' && styles.statusPending
-            ]}>
-              <Text style={styles.statusText}>{report.status}</Text>
-            </View>
-          )}
-          
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>Report Information</Text>
-            <Text style={styles.infoText}>
-              Download your investigation report as a PDF document. The report includes all test parameters, results, and medical interpretations.
-            </Text>
-          </View>
-
-          {/* Download Button */}
-          <TouchableOpacity
-            style={[styles.downloadButton, downloading && styles.downloadButtonDisabled]}
-            onPress={handleDownloadPDF}
-            disabled={downloading}
-            activeOpacity={0.8}>
-            {downloading ? (
-              <>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.downloadButtonText}>Downloading...</Text>
-              </>
-            ) : (
-              <>
-                <DownloadIcon size={20} color="#fff" />
-                <Text style={styles.downloadButtonText}>Download PDF Report</Text>
-              </>
+            
+            {report.status && (
+              <View style={[styles.statusBadge, 
+                report.status.toLowerCase() === 'completed' && styles.statusCompleted,
+                report.status.toLowerCase() === 'pending' && styles.statusPending
+              ]}>
+                <Text style={styles.statusText}>{report.status}</Text>
+              </View>
             )}
-          </TouchableOpacity>
 
-          {/* Additional Info */}
-          <View style={styles.helpText}>
-            <Text style={styles.helpTextContent}>
-              💡 The PDF will be downloaded to your device. You can share it with your doctor or use it for insurance claims.
-            </Text>
+            {/* Patient Information */}
+            {detailedReport && (
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Patient Information</Text>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Name:</Text>
+                  <Text style={styles.infoValue}>{detailedReport.patientName}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>UHID:</Text>
+                  <Text style={styles.infoValue}>{detailedReport.uhid}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Age / Gender:</Text>
+                  <Text style={styles.infoValue}>{detailedReport.age} Years / {detailedReport.gender}</Text>
+                </View>
+                {detailedReport.contactNo && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Contact:</Text>
+                    <Text style={styles.infoValue}>{detailedReport.contactNo}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Test Information */}
+            {detailedReport && (
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Test Information</Text>
+                {detailedReport.practitionerName && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Practitioner:</Text>
+                    <Text style={styles.infoValue}>{detailedReport.practitionerName}</Text>
+                  </View>
+                )}
+                {detailedReport.referalName && detailedReport.referalName !== '0' && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Referred By:</Text>
+                    <Text style={styles.infoValue}>{detailedReport.referalName}</Text>
+                  </View>
+                )}
+                {detailedReport.requestedDate && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Requested:</Text>
+                    <Text style={styles.infoValue}>{detailedReport.requestedDate}</Text>
+                  </View>
+                )}
+                {detailedReport.collectedDate && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Collected:</Text>
+                    <Text style={styles.infoValue}>{detailedReport.collectedDate}</Text>
+                  </View>
+                )}
+                {detailedReport.completedDate && (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Completed:</Text>
+                    <Text style={styles.infoValue}>{detailedReport.completedDate}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Test Parameters */}
+            {detailedReport?.parameterlist && detailedReport.parameterlist.length > 0 && (
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Test Parameters ({detailedReport.parameterlist.length})</Text>
+                {detailedReport.parameterlist.slice(0, 5).map((param, index) => (
+                  <View key={index} style={styles.parameterCard}>
+                    <View style={styles.parameterHeader}>
+                      <Text style={styles.parameterName}>{param.parameterName}</Text>
+                      <View style={styles.parameterValueBox}>
+                        <Text style={styles.parameterValue}>{param.totalObtainedValue}</Text>
+                        <Text style={styles.parameterUnit}> {param.parameterUnit}</Text>
+                      </View>
+                    </View>
+                    {param.normalValue && param.normalValue !== '-' && (
+                      <Text style={styles.parameterNormal} numberOfLines={2}>
+                        Normal: {param.normalValue.substring(0, 100)}{param.normalValue.length > 100 ? '...' : ''}
+                      </Text>
+                    )}
+                    {param.criticalValueFlag && (
+                      <View style={[styles.criticalBadge, {backgroundColor: '#FEE2E2'}]}>
+                        <Text style={[styles.criticalText, {color: '#EF4444'}]}>
+                          {param.criticalValueFlag} Critical
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+                {detailedReport.parameterlist.length > 5 && (
+                  <Text style={{fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm}}>
+                    + {detailedReport.parameterlist.length - 5} more parameters in the full report
+                  </Text>
+                )}
+              </View>
+            )}
+            
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>Download Full Report</Text>
+              <Text style={styles.infoText}>
+                Download the complete investigation report as a PDF document with all test parameters, results, and medical interpretations.
+              </Text>
+            </View>
+
+            {/* Download Button */}
+            <TouchableOpacity
+              style={[styles.downloadButton, downloading && styles.downloadButtonDisabled]}
+              onPress={handleDownloadPDF}
+              disabled={downloading}
+              activeOpacity={0.8}>
+              {downloading ? (
+                <>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={styles.downloadButtonText}>Downloading...</Text>
+                </>
+              ) : (
+                <>
+                  <DownloadIcon size={20} color="#fff" />
+                  <Text style={styles.downloadButtonText}>Download PDF Report</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Additional Info */}
+            <View style={styles.helpText}>
+              <Text style={styles.helpTextContent}>
+                💡 The PDF will be saved to your device. You can share it with your doctor or use it for insurance claims.
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -303,7 +453,7 @@ const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: colors.background},
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.base, paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base, paddingTop: spacing['4xl'], paddingBottom: spacing.md,
     backgroundColor: colors.surface, ...shadows.sm, gap: spacing.md,
   },
   backBtn: {padding: 4},
@@ -341,17 +491,14 @@ const styles = StyleSheet.create({
   },
   reportDetails: {
     width: '100%',
-    gap: spacing.sm,
+    gap: spacing.xs,
     marginBottom: spacing.lg,
-  },
-  detailRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
   },
   detailText: {
     fontSize: 14,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   categoryBadge: {
     alignSelf: 'center',
@@ -433,5 +580,92 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     lineHeight: 18,
+  },
+  
+  // New styles for detailed information
+  infoSection: {
+    width: '100%',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: spacing.base,
+    marginTop: spacing.md,
+  },
+  infoSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    flex: 1,
+  },
+  infoValue: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+  },
+  parameterCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  parameterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  parameterName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  parameterValueBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  parameterValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  parameterUnit: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  parameterNormal: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  criticalBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginTop: spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  criticalText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

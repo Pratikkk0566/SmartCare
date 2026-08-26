@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
@@ -10,7 +10,7 @@ import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {AppointmentApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, StarIcon, CalendarIcon, ClockIcon, PinIcon, WalletIcon, BoltIcon, BankIcon, CashIcon, VideoIcon, PhoneIcon, HospitalBuildingIcon, LockIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, StarIcon, CalendarIcon, ClockIcon, PinIcon, VideoIcon, PhoneIcon, HospitalBuildingIcon, InfoIcon} from '../../assets/icons/Icons';
 
 const VISIT_META = {
   clinic: {label: 'In-Clinic Visit', Icon: HospitalBuildingIcon, feeKey: 'consultationFee'},
@@ -43,22 +43,25 @@ function unwrapFirst(payload) {
   return payload;
 }
 
-const PAYMENT_METHODS = [
-  {id: 'upi',        Icon: BoltIcon,   label: 'UPI',                 sub: 'Google Pay · PhonePe · Paytm'},
-  {id: 'card',       Icon: WalletIcon, label: 'Credit / Debit Card', sub: 'Visa · Mastercard · RuPay'},
-  {id: 'netbanking', Icon: BankIcon,   label: 'Net Banking',         sub: 'All major banks supported'},
-  {id: 'cash',       Icon: CashIcon,   label: 'Cash at Clinic',      sub: 'Pay when you arrive'},
-];
-
 export default function BookingConfirmScreen({navigation, route}) {
-  const {doctorId, date, isoDate, time, slot, visitType} = route.params;
+  const {doctorId, doctorData, date, isoDate, time, slot, visitType = 'clinic', apmslotid: apmslotidParam} = route.params;
   const {practitioners, bookAppointment} = useApp();
 
-  const d  = practitioners.find(doc => String(doc.id) === String(doctorId));
+  // Try to find doctor from context first, then use passed data as fallback
+  let d = practitioners.find(doc => String(doc.id) === String(doctorId));
+  if (!d && doctorData) {
+    d = doctorData; // Use the passed doctor data as fallback
+    console.log('[BookingConfirmScreen] Using passed doctor data:', d.name);
+  }
+
+  console.log('[BookingConfirmScreen] Doctor found:', !!d, 'ID:', doctorId);
+  if (!d) {
+    console.error('[BookingConfirmScreen] No doctor data available!');
+    return null; // This will prevent the blank screen and show error
+  }
   const vm = VISIT_META[visitType] || VISIT_META.clinic;
 
-  const [paymentMethod, setPaymentMethod] = useState(null);
-  const [fee,           setFee]           = useState(d?.[vm.feeKey] ?? d?.consultationFee ?? 0);
+  const [fee,           setFee]           = useState(0);
   const [apptTypeData,  setApptTypeData]  = useState(null); // full appointmentTypeDetails response
   const [loadingFee,    setLoadingFee]    = useState(false);
   const [bookingNow,    setBookingNow]    = useState(false);
@@ -78,7 +81,7 @@ export default function BookingConfirmScreen({navigation, route}) {
           'charge', 'consultationFee', 'consultation_fee', 'fee',
           'appointmentCharge', 'appointment_charge', 'opd_charges',
           'opdCharge', 'price', 'amount', 'totalCharge', 'visitCharge',
-        ], null));
+        ], 0));
         if (!isNaN(serverFee) && serverFee > 0) setFee(serverFee);
       }
       setLoadingFee(false);
@@ -86,70 +89,61 @@ export default function BookingConfirmScreen({navigation, route}) {
     fetchFee();
   }, [d]);
 
-  if (!d) return null;
-
   const initials = (d.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
   const hue      = (d.name?.charCodeAt(4) || 0) * 37 % 360;
 
   const handleConfirm = async () => {
-    if (!paymentMethod) return;
     if (bookingNow) return;
     setBookingNow(true);
     const patientId = await AsyncStorage.getItem('patientId') || '0';
 
     try {
-      // Build booking payload matching website's exact structure
-      const weekNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      // Build booking payload matching the exact API structure
       const bookingDate = isoDate || date;
-      const bookingWeekDay = new Date(bookingDate + 'T00:00:00').getDay();
 
-      // slot._raw contains the full server slot object; use its fields where available
+      // Extract slot details
       const rawSlot = slot?._raw || {};
+      
+      // Get slot ID — MUST use the day-level id (apmslotid) from the availableSlots API response
+      // This is the top-level `id` field (e.g. 96448) that authenticates the slot on the server
+      // Priority: explicit param > slot._dayId > rawSlot.apmslotid/id/diaryid > nested field fallbacks
+      const apmslotid = String(
+        apmslotidParam
+        || slot?._dayId
+        || rawSlot?.apmslotid
+        || rawSlot?.id
+        || rawSlot?.diaryid
+        || pick({...rawSlot, slotObj: slot, ...slot}, [
+             'apmslotid', 'apmslotId', 'slotId', 'slot_id', 'slotid',
+             'apmtSlotId', 'timeSlotId', 'timeslotid', 'id', 'slotNo',
+             'slotNumber', 'slotObj.slotId',
+           ], '')
+      );
 
-      const apmt_as = Number(
-        pick(apptTypeData || {}, ['apmt_as', 'aptmtype', 'apmttype', 'type_id',
-                                  'appointmentTypeId', 'appointment_type_id']) || 0,
-      ) || (visitType === 'clinic' ? 1 : visitType === 'video' ? 2 : 3);
-
-      // Try 12+ common spellings for slot id
-      const apmslotid = String(pick({...rawSlot, slotObj: slot}, [
-        'apmslotid', 'apmslotId', 'slotId', 'slot_id', 'slotid',
-        'apmtSlotId', 'timeSlotId', 'timeslotid', 'id', 'slotNo',
-        'slotNumber', 'slotObj.slotId',
-      ], ''));
-      // Try 10+ keys for start time
+      // Get start time
       const starttime = pick({...rawSlot, slotObj: slot}, [
         'starttime', 'start_time', 'time', 'slot', 'from', 'fromtime',
         'from_time', 'appttime', 'aptmttime', 'slotObj.raw24',
-      ]) || (typeof time === 'string' && time.match(/^\d{1,2}:\d{2}/) ? '' : '');
+      ]) || time || '';
 
-      // Commencing: some HIS expect YYYY-MM-DD, some YYYY-MM-DDTHH:MM:SS
-      const commencingVal = pick(rawSlot, ['commencing', 'date', 'apptdate', 'visitDate'])
-                              || bookingDate;
-      const fullCommencing = commencingVal.includes('T')
-        ? commencingVal
-        : starttime ? `${commencingVal} ${starttime}` : commencingVal;
+      // Get appointment type
+      const apmt_as = pick(apptTypeData || {}, [
+        'apmt_as', 'aptmtype', 'apmttype', 'type', 'appointmentType'
+      ], 'Walk');
 
+      // Build the exact payload structure
       const payload = {
         apmslotid,
         apmt_as,
-        charge:       fee,
-        clientId:     patientId,
-        patientId,              // some servers want both keys
-        commencing:   fullCommencing,
-        appointmentDate: bookingDate,
-        diaryuserid:  d.id,
-        doctorId:     d.id,     // duplicate for servers that want this
-        practitionerId: d.id,
+        charge: fee,
+        clientId: Number(patientId),
+        commencing: bookingDate,
+        diaryuser: d.name,
+        diaryuserid: Number(d.id),
         starttime,
-        slotId:       apmslotid,
-        weekfullname: pick(rawSlot, ['weekfullname', 'weekFullName', 'day', 'dayname'])
-                        || weekNames[isNaN(bookingWeekDay) ? 0 : bookingWeekDay],
-        // payment metadata
-        paymentMethod,
-        paid:         paymentMethod !== 'cash' ? fee : 0,
-        visitType,
       };
+
+      console.log('Booking payload:', JSON.stringify(payload, null, 2));
 
       const result = await AppointmentApi.book(patientId, payload);
 
@@ -163,7 +157,7 @@ export default function BookingConfirmScreen({navigation, route}) {
         return;
       }
 
-      // Booking succeeded — extract the real server id
+      // Booking succeeded — extract the response
       const resData = unwrapFirst(result.data) || result.data || {};
       const serverApptId = String(pick(resData, [
         'appointmentId', 'appointment_id', 'apmtid', 'aptmtid', 'id',
@@ -192,6 +186,7 @@ export default function BookingConfirmScreen({navigation, route}) {
 
       navigation.replace('AppointmentSuccess', {
         doctorId,
+        doctorData: d,
         date: dateFinal,
         time: timeFinal,
         visitType,
@@ -199,6 +194,7 @@ export default function BookingConfirmScreen({navigation, route}) {
         appointmentId: serverApptId,
       });
     } catch (err) {
+      console.error('Booking error:', err);
       Alert.alert(
         'Booking Failed',
         err?.message || 'Something went wrong while booking. Please try again.',
@@ -251,54 +247,19 @@ export default function BookingConfirmScreen({navigation, route}) {
         </View>
 
         {/* ── Price breakdown ── */}
-        <SectionLabel>Price Breakdown</SectionLabel>
+        <SectionLabel>Consultation Charge</SectionLabel>
         <View style={s.priceCard}>
           {loadingFee ? (
             <ActivityIndicator size="small" color={colors.primary} style={{paddingVertical: 12}} />
           ) : (
             <>
-              <PriceRow label="Consultation Fee" value={`₹${fee}`} />
-              {vm.savePct && (
-                <PriceRow
-                  label={`${vm.label} Discount (${vm.savePct}%)`}
-                  value={`– ₹${Math.round(fee * vm.savePct / 100)}`}
-                  green
-                />
-              )}
-              <View style={s.priceDivider} />
-              <PriceRow label="Total Payable" value={`₹${fee}`} bold />
+              <PriceRow label="Consultation Fee" value={`₹${fee}`} bold />
+              <View style={s.infoNote}>
+                <InfoIcon size={14} color={colors.textMuted} />
+                <Text style={s.infoText}>Payment to be made at the clinic</Text>
+              </View>
             </>
           )}
-        </View>
-
-        {/* ── Payment method ── */}
-        <SectionLabel>Payment Method</SectionLabel>
-        {PAYMENT_METHODS.map(pm => {
-          const active = paymentMethod === pm.id;
-          return (
-            <TouchableOpacity
-              key={pm.id}
-              style={[s.payCard, active && s.payCardActive]}
-              onPress={() => setPaymentMethod(pm.id)}
-              activeOpacity={0.85}>
-              <View style={[s.payIconWrap, active && s.payIconWrapActive]}>
-                <pm.Icon size={22} color={active ? colors.primary : colors.textSecondary} />
-              </View>
-              <View style={s.payInfo}>
-                <Text style={[s.payLabel, active && {color: colors.primary}]}>{pm.label}</Text>
-                <Text style={s.paySub}>{pm.sub}</Text>
-              </View>
-              <View style={[s.radio, active && s.radioActive]}>
-                {active && <View style={s.radioDot} />}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Disclaimer */}
-        <View style={s.disclaimerRow}>
-          <LockIcon size={13} color={colors.textMuted} />
-          <Text style={s.disclaimer}>Payments are secured and encrypted. Your details are never stored.</Text>
         </View>
 
         <View style={{height: 100}} />
@@ -307,13 +268,13 @@ export default function BookingConfirmScreen({navigation, route}) {
       {/* ── Footer ── */}
       <View style={s.footer}>
         <View style={s.footerLeft}>
-          <Text style={s.footerLabel}>Total</Text>
+          <Text style={s.footerLabel}>Payable at Clinic</Text>
           <Text style={s.footerAmt}>₹{fee}</Text>
         </View>
         <TouchableOpacity
-          style={[s.confirmBtn, (!paymentMethod || bookingNow) && s.confirmBtnDisabled]}
+          style={[s.confirmBtn, bookingNow && s.confirmBtnDisabled]}
           onPress={handleConfirm}
-          disabled={!paymentMethod || bookingNow}
+          disabled={bookingNow}
           activeOpacity={0.88}>
           {bookingNow ? (
             <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
@@ -321,7 +282,7 @@ export default function BookingConfirmScreen({navigation, route}) {
               <Text style={s.confirmBtnText}>Booking…</Text>
             </View>
           ) : (
-            <Text style={s.confirmBtnText}>Confirm & Pay</Text>
+            <Text style={s.confirmBtnText}>Confirm Booking</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -413,21 +374,8 @@ const s = StyleSheet.create({
   // Price card
   priceCard:   {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, ...shadows.sm},
   priceDivider:{height: 1, backgroundColor: colors.border, marginVertical: spacing.sm},
-
-  // Payment
-  payCard:         {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, marginBottom: spacing.sm, ...shadows.sm, borderWidth: 2, borderColor: 'transparent', gap: spacing.md},
-  payCardActive:   {borderColor: colors.primary},
-  payIconWrap:     {width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center'},
-  payIconWrapActive:{width: 42, height: 42, borderRadius: radius.md, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center'},
-  payInfo:         {flex: 1},
-  payLabel:        {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
-  paySub:          {fontSize: 11, color: colors.textMuted, marginTop: 2},
-  radio:           {width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center'},
-  radioActive:     {borderColor: colors.primary},
-  radioDot:        {width: 11, height: 11, borderRadius: 6, backgroundColor: colors.primary},
-
-  disclaimerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.md},
-  disclaimer:    {fontSize: 12, color: colors.textMuted, lineHeight: 18},
+  infoNote:    {flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border},
+  infoText:    {fontSize: 12, color: colors.textMuted, flex: 1},
 
   // Footer
   footer:           {position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, padding: spacing.base, paddingBottom: spacing['2xl'], borderTopWidth: 1, borderTopColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: spacing.base},

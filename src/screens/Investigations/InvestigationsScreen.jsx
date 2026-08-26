@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useCallback} from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl} from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Modal, Pressable} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
@@ -10,6 +10,7 @@ import {useApp} from '../../context/AppContext';
 import {InvestigationApi} from '../../API/Api';
 import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {enrichInvestigationsWithDates} from '../../utils/investigationEnrichment';
 import SearchBar from '../../components/common/SearchBar';
 import StatusChip from '../../components/common/StatusChip';
 import {
@@ -20,6 +21,7 @@ import {
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 
 const FILTERS = ['All', 'Blood Test', 'Urine Test', 'Imaging', 'Others'];
+const DATE_FILTERS = ['All Time', 'Past Week', 'Past Month', 'Past 3 Months', 'Past 6 Months'];
 
 const STATUS_ICON = {
   Approved: CheckCircleIcon,
@@ -79,6 +81,8 @@ function splitDateTime(dt = '') {
 export default function InvestigationsScreen({navigation}) {
   const {testRequests, investigations: cachedInvestigations, isOnline, refreshAllData, appReady} = useApp();
   const [filter, setFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('All Time');
+  const [showDateFilterModal, setShowDateFilterModal] = useState(false);
   const [query, setQuery] = useState('');
   const [reports, setReports] = useState(cachedInvestigations || []);
   // Only show skeleton while appReady hasn't fired yet — once the app has
@@ -132,29 +136,64 @@ export default function InvestigationsScreen({navigation}) {
         }
       }
       const mapped = raw.map((r, i) => {
+        // Log the entire raw object for the first item to see all available fields
+        if (i === 0) {
+          console.log('[Investigation RAW OBJECT]:', JSON.stringify(r, null, 2));
+        }
+        
         const name = pick(r, [
           'investigationName', 'investigation_name', 'testname', 'testName',
           'servicename', 'serviceName', 'reportName', 'itemname', 'itemName',
           'description', 'name', 'investigation', 'procedure', 'procedureName',
         ], 'Investigation');
+        
+        // Try to extract combined datetime first
         const combinedDT = pick(r, [
           'datetime', 'dateTime', 'report_date', 'reportDate', 'resultdate',
           'resultDate', 'approvedon', 'approvedOn', 'testdate', 'testDate',
-          'collectedon', 'collectedOn', 'createdon', 'createdOn',
+          'collectedon', 'collectedOn', 'createdon', 'createdOn', 'completedDate',
+          'requestedDate', 'collectedDate',
         ]);
+        
         const split = combinedDT ? splitDateTime(combinedDT) : {date: '', time: ''};
-        const date = split.date || pick(r, ['date', 'reportdate', 'report_date', 'testdate', 'test_date']);
-        const time = split.time || pick(r, ['time', 'reporttime', 'report_time', 'testtime', 'test_time']);
+        
+        // Extract date and time separately if combined didn't work
+        const date = split.date || pick(r, ['date', 'reportdate', 'report_date', 'testdate', 'test_date', 'completedDate', 'collectedDate', 'requestedDate'], '');
+        const time = split.time || pick(r, ['time', 'reporttime', 'report_time', 'testtime', 'test_time'], '');
+        
+        // Format date if it's in a different format
+        let formattedDate = date;
+        if (date && date.includes('-')) {
+          // Handle DD-MM-YYYY format from completedDate, etc.
+          const parts = date.split(' ')[0].split('-'); // Take only date part if datetime
+          if (parts.length === 3) {
+            if (parts[0].length === 4) {
+              // YYYY-MM-DD format - keep as is or convert
+              formattedDate = date.split(' ')[0]; // Just the date part
+            } else if (parts[2].length === 4) {
+              // DD-MM-YYYY format - convert to display format
+              formattedDate = date.split(' ')[0]; // Keep as is for display
+            }
+          }
+        }
+        
+        console.log(`[Investigation ${i}] name: ${name}, date: ${formattedDate}, time: ${time}, raw date fields:`, {
+          completedDate: r.completedDate,
+          requestedDate: r.requestedDate,
+          collectedDate: r.collectedDate,
+          combinedDT
+        });
+        
         return {
           id:       String(pick(r, ['id', 'investigationId', 'investigation_id', 'reportId',
-                                     'report_id', 'testId', 'test_id', 'invId']) || i),
+                                     'report_id', 'testId', 'test_id', 'invId', 'investigationrequestId']) || i),
           name,
           category: deriveCategory(name),
-          date,
+          date:     formattedDate,
           time,
           location: pick(r, ['location', 'clinicName', 'clinic', 'labName', 'lab',
                                'centerName', 'center', 'hospital', 'hospitalName',
-                               'branchName', 'branch']),
+                               'branchName', 'branch'], 'Medical Center'),
           status:   pick(r, ['status', 'reportStatus', 'report_status', 'resultStatus',
                                'approvalStatus', 'approval_status', 'testStatus'], 'Normal'),
           iconBg:   '#FEE2E2',
@@ -164,6 +203,23 @@ export default function InvestigationsScreen({navigation}) {
       mapped.sort((a, b) => toTimestamp(b.date) - toTimestamp(a.date));
       setReports(mapped);
       await StorageService.saveInvestigations(mapped);
+      
+      // Enrich reports with dates from print API in background
+      console.log('[InvestigationsScreen] Starting background enrichment...');
+      // Use patientId as clientId (they're the same in this system)
+      const clientId = patientId;
+      console.log('[InvestigationsScreen] Using patientId as clientId:', clientId);
+      if (clientId) {
+        console.log('[InvestigationsScreen] Calling enrichInvestigationsWithDates for', mapped.length, 'reports');
+        enrichInvestigationsWithDates(mapped, clientId, (enrichedReports) => {
+          console.log('[InvestigationsScreen] Received enriched reports update:', enrichedReports.length);
+          setReports(enrichedReports);
+        }).catch(err => {
+          console.error('[InvestigationsScreen] Enrichment error:', err);
+        });
+      } else {
+        console.log('[InvestigationsScreen] No clientId, skipping enrichment');
+      }
     }
     setRefreshing(false);
     setLoading(false);
@@ -178,16 +234,46 @@ export default function InvestigationsScreen({navigation}) {
     'Others':      ['Others'],
   };
 
+  // Date filtering helper
+  const isWithinDateRange = (dateStr, filterType) => {
+    if (filterType === 'All Time') return true;
+    if (!dateStr) return false;
+
+    const reportDate = new Date(dateStr);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const daysDiff = Math.floor((today - reportDate) / (1000 * 60 * 60 * 24));
+
+    switch (filterType) {
+      case 'Past Week':
+        return daysDiff <= 7;
+      case 'Past Month':
+        return daysDiff <= 30;
+      case 'Past 3 Months':
+        return daysDiff <= 90;
+      case 'Past 6 Months':
+        return daysDiff <= 180;
+      default:
+        return true;
+    }
+  };
+
   const filteredReports = reports.filter(r => {
     const matchQuery = query ? r.name.toLowerCase().includes(query.toLowerCase()) : true;
     if (!matchQuery) return false;
-    if (filter === 'All') return true;
-    return r.category === filter;
+    
+    const matchCategory = filter === 'All' || r.category === filter;
+    if (!matchCategory) return false;
+
+    const matchDate = isWithinDateRange(r.date, dateFilter);
+    return matchDate;
   });
 
   return (
+    <>
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* Fixed Header Section */}
+      {/* Fixed Compact Top Header */}
       <View style={styles.fixedHeader}>
         {/* Header */}
         <View style={styles.header}>
@@ -196,29 +282,68 @@ export default function InvestigationsScreen({navigation}) {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Investigations</Text>
-            <Text style={styles.headerSub}>Book tests & view your medical reports.</Text>
+            <Text style={styles.headerSub}>Book tests & view your medical reports</Text>
           </View>
-          <FilterIcon size={22} color={colors.textSecondary} />
+          <TouchableOpacity onPress={() => setShowDateFilterModal(true)} style={styles.filterIconBtn}>
+            <FilterIcon size={22} color={dateFilter !== 'All Time' ? colors.primary : colors.textSecondary} />
+            {dateFilter !== 'All Time' && <View style={styles.filterDot} />}
+          </TouchableOpacity>
         </View>
 
-        {/* Book a Test Banner */}
+        {/* Dominant Fixed Book Investigation Button */}
         <TouchableOpacity
-          style={styles.bookBanner}
+          style={styles.dominantBookCard}
           onPress={() => navigation.navigate('InvestigationRequest')}
-          activeOpacity={0.85}>
-          <View style={styles.bookBannerLeft}>
-            <Text style={styles.bookBannerLabel}>BOOK A TEST</Text>
-            <Text style={styles.bookBannerTitle}>Find & Book Medical Tests</Text>
-            <Text style={styles.bookBannerSub}>Compare labs · Instant approval · Home collection available</Text>
-            <View style={styles.bookBtn}>
-              <PlusIcon size={14} color="#fff" />
-              <Text style={styles.bookBtnText}>Request a Test</Text>
+          activeOpacity={0.88}>
+          <View style={styles.bookCardLeft}>
+            <View style={styles.bookCardIcon}>
+              <FlaskIcon size={20} color={colors.white} />
+            </View>
+            <View style={styles.bookCardInfo}>
+              <Text style={styles.bookCardTitle}>Book an Investigation</Text>
+              <Text style={styles.bookCardSub}>500+ Tests • Home Collection • Fast Digital Reports</Text>
             </View>
           </View>
-          <View style={styles.bookBannerRight}>
-            <FlaskIcon size={56} color={colors.primaryLight} />
+          <View style={styles.bookCardBtn}>
+            <Text style={styles.bookCardBtnText}>Book Now</Text>
+            <ArrowRightIcon size={13} color={colors.white} />
           </View>
         </TouchableOpacity>
+
+        {/* Search */}
+        <SearchBar value={query} onChangeText={setQuery} placeholder="Search by test name, date, or category" style={styles.search} />
+
+        {/* Category Filters */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+          {FILTERS.map(f => (
+            <TouchableOpacity key={f} style={[styles.chip, filter === f && styles.chipSelected]} onPress={() => setFilter(f)}>
+              <Text style={[styles.chipText, filter === f && styles.chipTextSelected]}>{f}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Active Date Filter Badge */}
+        {dateFilter !== 'All Time' && (
+          <View style={styles.activeDateFilterRow}>
+            <View style={styles.activeDateFilterBadge}>
+              <CalendarIcon size={12} color={colors.primary} />
+              <Text style={styles.activeDateFilterText}>Date: {dateFilter}</Text>
+              <TouchableOpacity onPress={() => setDateFilter('All Time')} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                <Text style={styles.activeDateFilterClear}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Main Scrollable Content */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }>
 
         {/* My Test Requests */}
         {testRequests.length > 0 && (
@@ -255,34 +380,12 @@ export default function InvestigationsScreen({navigation}) {
           </View>
         )}
 
-        {/* Search */}
-        <SearchBar value={query} onChangeText={setQuery} placeholder="Search by test name or date" style={styles.search} />
-
-        {/* Filters */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-          {FILTERS.map(f => (
-            <TouchableOpacity key={f} style={[styles.chip, filter === f && styles.chipSelected]} onPress={() => setFilter(f)}>
-              <Text style={[styles.chipText, filter === f && styles.chipTextSelected]}>{f}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''}
           </Text>
           <Text style={styles.sectionSub}>Newest first · pull to refresh</Text>
         </View>
-      </View>
-
-      {/* Scrollable Report List */}
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-        }>
 
         {loading ? (
           <>
@@ -307,11 +410,14 @@ export default function InvestigationsScreen({navigation}) {
               </View>
               <View style={styles.reportInfo}>
                 <View style={styles.reportTopRow}>
-                  <Text style={styles.reportName} numberOfLines={1}>{r.name}</Text>
+                  <Text style={styles.reportName} numberOfLines={2}>{r.name}</Text>
                   <StatusChip status={r.status} size="xs" />
                 </View>
                 <Text style={styles.reportCat}>{r.category}</Text>
-                <Text style={styles.reportDate}>{r.date} • {r.time}</Text>
+                <View style={styles.dateTimeHighlight}>
+                  <ClockIcon size={14} color={colors.primary} />
+                  <Text style={styles.reportDateHighlight}>{r.date} • {r.time}</Text>
+                </View>
                 <Text style={styles.reportLoc}>{r.location}</Text>
               </View>
               <ArrowRightIcon size={16} color={colors.textMuted} />
@@ -332,6 +438,44 @@ export default function InvestigationsScreen({navigation}) {
 
       </ScrollView>
     </SafeAreaView>
+
+      {/* Date Filter Modal */}
+      <Modal
+        visible={showDateFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateFilterModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowDateFilterModal(false)}>
+          <Pressable style={styles.dateFilterModal} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter by Date</Text>
+              <TouchableOpacity onPress={() => setShowDateFilterModal(false)} style={styles.modalCloseBtn}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalOptions}>
+              {DATE_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.dateOption, dateFilter === f && styles.dateOptionSelected]}
+                  onPress={() => {
+                    setDateFilter(f);
+                    setShowDateFilterModal(false);
+                  }}
+                  activeOpacity={0.7}>
+                  <Text style={[styles.dateOptionText, dateFilter === f && styles.dateOptionTextSelected]}>{f}</Text>
+                  {dateFilter === f && (
+                    <View style={styles.checkIcon}>
+                      <Text style={styles.checkIconText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -346,24 +490,62 @@ const styles = StyleSheet.create({
   headerTitle: {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
   headerSub: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
 
-  bookBanner: {
-    backgroundColor: colors.primary, borderRadius: radius.lg,
-    padding: spacing.base, marginBottom: spacing.base,
-    flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
+  // Dominant Fixed Book Card
+  dominantBookCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
     ...shadows.md,
   },
-  bookBannerLeft: {flex: 1},
-  bookBannerLabel: {fontSize: 10, fontWeight: '800', color: colors.primaryLight, letterSpacing: 1.5, marginBottom: 4},
-  bookBannerTitle: {fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 4},
-  bookBannerSub: {fontSize: 11, color: colors.primaryLight, lineHeight: 16, marginBottom: spacing.md},
-  bookBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md, paddingVertical: 8,
-    borderRadius: radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
+  bookCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    paddingRight: spacing.xs,
   },
-  bookBtnText: {color: '#fff', fontWeight: '700', fontSize: 13},
-  bookBannerRight: {opacity: 0.3, marginLeft: spacing.sm},
+  bookCardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookCardInfo: {flex: 1},
+  bookCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.white,
+    letterSpacing: 0.2,
+  },
+  bookCardSub: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 1,
+  },
+  bookCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  bookCardBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.white,
+  },
 
   section: {marginBottom: spacing.base},
   sectionHeader:{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, marginTop: spacing.sm},
@@ -387,15 +569,71 @@ const styles = StyleSheet.create({
   chipSelected: {backgroundColor: colors.primary, borderColor: colors.primary},
   chipText: {fontSize: 13, color: colors.textSecondary, fontWeight: '500'},
   chipTextSelected: {color: '#fff', fontWeight: '700'},
+  filterIconBtn: {padding: 4, position: 'relative'},
+  filterDot: {position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary},
+  activeDateFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  activeDateFilterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  activeDateFilterText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  activeDateFilterClear: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.primary,
+    marginLeft: 4,
+  },
+
+  // Modal styles
+  modalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl},
+  dateFilterModal: {backgroundColor: colors.surface, borderRadius: radius.xl, width: '100%', maxWidth: 320, ...shadows.lg},
+  modalHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border},
+  modalTitle: {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
+  modalCloseBtn: {width: 32, height: 32, borderRadius: 16, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center'},
+  modalCloseText: {fontSize: 18, color: colors.textMuted, fontWeight: '600'},
+  modalOptions: {padding: spacing.base},
+  dateOption: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.base, borderRadius: radius.md, marginBottom: spacing.xs},
+  dateOptionSelected: {backgroundColor: colors.primaryLight},
+  dateOptionText: {fontSize: 15, color: colors.textPrimary, fontWeight: '500'},
+  dateOptionTextSelected: {color: colors.primary, fontWeight: '700'},
+  checkIcon: {width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center'},
+  checkIconText: {color: '#fff', fontSize: 14, fontWeight: '700'},
 
   emptyState: {alignItems: 'center', paddingVertical: spacing['3xl']},
   emptyText: {fontSize: 14, color: colors.textMuted},
-  reportCard: {flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.base, ...shadows.sm, marginBottom: spacing.sm, gap: spacing.md},
+  reportCard: {flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.base, ...shadows.sm, marginBottom: spacing.sm, gap: spacing.md},
   reportIcon: {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
-  reportInfo: {flex: 1},
-  reportTopRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2},
-  reportName: {fontSize: 13, fontWeight: '700', color: colors.textPrimary, flex: 1, marginRight: spacing.sm},
+  reportInfo: {flex: 1, minWidth: 0},
+  reportTopRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, gap: spacing.sm},
+  reportName: {fontSize: 14, fontWeight: '700', color: colors.textPrimary, flex: 1, lineHeight: 20},
   reportCat: {fontSize: 11, color: colors.textMuted, marginBottom: 2},
+  dateTimeHighlight: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    backgroundColor: colors.primaryLight, 
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm, 
+    paddingVertical: 4, 
+    borderRadius: radius.sm,
+    marginBottom: 4,
+  },
+  reportDateHighlight: {fontSize: 12, color: colors.primary, fontWeight: '700'},
   reportDate: {fontSize: 12, color: colors.textSecondary},
   reportLoc: {fontSize: 12, color: colors.textSecondary},
 

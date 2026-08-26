@@ -11,14 +11,12 @@ import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {AppointmentApi, PatientApi, HospitalApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, HospitalBuildingIcon, VideoIcon, PhoneIcon, ClockIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, HospitalBuildingIcon, ClockIcon} from '../../assets/icons/Icons';
 
 const {width: SW} = Dimensions.get('window');
 
 const VISIT_TYPES = [
   {id: 'clinic', label: 'In-Clinic', Icon: HospitalBuildingIcon, feeKey: 'consultationFee', desc: 'Visit in person'},
-  {id: 'video',  label: 'Video',     Icon: VideoIcon,            feeKey: 'videoFee',        desc: 'HD video call',  savePct: 20},
-  {id: 'audio',  label: 'Audio',     Icon: PhoneIcon,            feeKey: 'audioFee',        desc: 'Phone call',     savePct: 30},
 ];
 
 const DAY_NAMES  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -156,9 +154,20 @@ const cal = StyleSheet.create({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function BookingSlotScreen({navigation, route}) {
-  const {doctorId}       = route.params;
+  const {doctorId, doctorData}       = route.params;
   const {practitioners}  = useApp();
-  const d = practitioners.find(doc => String(doc.id) === String(doctorId));
+  
+  // Try to find doctor from context first, then use passed data as fallback
+  let d = practitioners.find(doc => String(doc.id) === String(doctorId));
+  if (!d && doctorData) {
+    d = doctorData; // Use the passed doctor data as fallback
+    console.log('[BookingSlotScreen] Using passed doctor data:', d.name);
+  }
+  
+  console.log('[BookingSlotScreen] Doctor found:', !!d, 'ID:', doctorId);
+  if (d) {
+    console.log('[BookingSlotScreen] Doctor details:', d.name, 'Specialty:', d.specialty);
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -169,9 +178,9 @@ export default function BookingSlotScreen({navigation, route}) {
     toDisplayDate(today.getFullYear(), today.getMonth(), today.getDate()),
   );
   const [selectedSlot,  setSelectedSlot]  = useState(null);
-  const [selectedVisit, setSelectedVisit] = useState('clinic');
   const [slots,         setSlots]         = useState([]);
   const [loadingSlots,  setLoadingSlots]  = useState(false);
+  const selectedVisit = 'clinic';
 
   const handleDateSelect = useCallback((iso, y, m, day) => {
     setSelectedISO(iso);
@@ -213,24 +222,63 @@ export default function BookingSlotScreen({navigation, route}) {
       }
 
       // Map slots
-      if (slotsResult.success) {
-        const raw = Array.isArray(slotsResult.data) ? slotsResult.data
-                  : (slotsResult.data?.slots || slotsResult.data?.slotList || []);
+      if (slotsResult.success && slotsResult.data) {
+        console.log('[BookingSlotScreen] Slots API response:', JSON.stringify(slotsResult.data, null, 2));
+        
+        // API returns: { id, date, diaryuser, availableSlotList: ["01:00", "01:10", ...] }
+        // The top-level `id` (day/diary id) is required as `apmslotid` in the book API
+        const dayId = slotsResult.data.id || slotsResult.data.diaryid || slotsResult.data.apmslotid || '';
+        const dayMeta = {
+          id: dayId,
+          diaryuser: slotsResult.data.diaryuser || '',
+          diaryuserid: slotsResult.data.diaryuserid || '',
+          weekfullname: slotsResult.data.weekfullname || '',
+          apmtduration: slotsResult.data.apmtduration || '',
+          starttime: slotsResult.data.starttime || '',
+          endtime: slotsResult.data.endtime || '',
+          date: slotsResult.data.date || selectedISO,
+        };
+        
+        const raw = slotsResult.data.availableSlotList || 
+                    slotsResult.data.slots || 
+                    slotsResult.data.slotList ||
+                    (Array.isArray(slotsResult.data) ? slotsResult.data : []);
+        
+        console.log('[BookingSlotScreen] Raw slots:', raw.length, 'items');
+        console.log('[BookingSlotScreen] First 5:', raw.slice(0, 5));
+        console.log('[BookingSlotScreen] Day-level id (apmslotid):', dayId);
+        
         const mapped = raw.map((s, idx) => {
           if (typeof s === 'string') {
-            return {slotId: idx, display: to12h(s), raw24: s, commencing: selectedISO, weekfullname: ''};
+            return {
+              slotId: idx,
+              display: to12h(s),
+              raw24: s,
+              commencing: selectedISO,
+              weekfullname: dayMeta.weekfullname,
+              _raw: {time: s, ...dayMeta, apmslotid: dayId},
+              _dayId: dayId,
+            };
           }
           const raw24 = s.starttime || s.slot || s.time || '';
           return {
-            slotId:       s.id || s.slotId || s.apmslotid || idx,
+            slotId:       s.id || s.slotId || s.apmslotid || dayId || idx,
             display:      to12h(raw24),
             raw24,
             commencing:   s.commencing   || selectedISO,
-            weekfullname: s.weekfullname || '',
-            _raw:         s,
+            weekfullname: s.weekfullname || dayMeta.weekfullname || '',
+            _raw:         {...s, ...dayMeta, apmslotid: s.apmslotid || dayId},
+            _dayId:       dayId,
           };
         }).filter(s => s.display);
+        
+        console.log('[BookingSlotScreen] Mapped slots:', mapped.length);
+        console.log('[BookingSlotScreen] First 5 mapped:', mapped.slice(0, 5));
+        
         setSlots(mapped);
+      } else {
+        console.log('[BookingSlotScreen] No slots data or API failed');
+        setSlots([]);
       }
       setLoadingSlots(false);
     }
@@ -240,18 +288,20 @@ export default function BookingSlotScreen({navigation, route}) {
 
   if (!d) return null;
 
-  const currentVisit = VISIT_TYPES.find(v => v.id === selectedVisit);
+  const currentVisit = VISIT_TYPES[0];
   const fee          = d[currentVisit?.feeKey] ?? d.consultationFee ?? 0;
   const canContinue  = !!selectedSlot;
 
   const handleContinue = () => {
     navigation.navigate('BookingConfirm', {
       doctorId,
+      doctorData: d,
       date:      selectedLabel,
       isoDate:   selectedISO,
       time:      selectedSlot?.display || '',
       slot:      selectedSlot,
       visitType: selectedVisit,
+      apmslotid: selectedSlot?._dayId || selectedSlot?._raw?.apmslotid || '',
     });
   };
 
@@ -282,32 +332,7 @@ export default function BookingSlotScreen({navigation, route}) {
           <Text style={s.docFee}>₹{fee}</Text>
         </View>
 
-        {/* Visit Type */}
-        <SectionLabel>Visit Type</SectionLabel>
-        <View style={s.visitRow}>
-          {VISIT_TYPES.map(vt => {
-            const vtFee  = d[vt.feeKey] ?? 0;
-            const active = selectedVisit === vt.id;
-            return (
-              <TouchableOpacity
-                key={vt.id}
-                style={[s.visitCard, active && s.visitCardActive]}
-                onPress={() => setSelectedVisit(vt.id)}
-                activeOpacity={0.8}>
-                <View style={[s.visitIconWrap, active && s.visitIconWrapActive]}>
-                  <vt.Icon size={22} color={active ? colors.primary : colors.textSecondary} />
-                </View>
-                <Text style={[s.visitLabel, active && s.visitLabelActive]}>{vt.label}</Text>
-                <Text style={[s.visitFee, active && s.visitFeeActive]}>₹{vtFee}</Text>
-                {vt.savePct && (
-                  <View style={s.saveBadge}>
-                    <Text style={s.saveBadgeText}>{vt.savePct}% off</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Visit Type removed — In-Clinic only */}
 
         {/* Calendar */}
         <SectionLabel>Select Date</SectionLabel>
@@ -416,20 +441,6 @@ const s = StyleSheet.create({
   docName:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary},
   docSpec:       {fontSize: 11, color: colors.textSecondary, marginTop: 2},
   docFee:        {fontSize: 16, fontWeight: '900', color: colors.primary},
-
-  visitRow:         {flexDirection: 'row', gap: spacing.sm},
-  visitCard:        {flex: 1, alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg,
-                     padding: spacing.md, borderWidth: 2, borderColor: colors.border, gap: 4, position: 'relative'},
-  visitCardActive:  {borderColor: colors.primary, backgroundColor: colors.primaryLight},
-  visitIconWrap:     {width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background},
-  visitIconWrapActive:{width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '22'},
-  visitLabel:       {fontSize: 12, fontWeight: '700', color: colors.textSecondary},
-  visitLabelActive: {color: colors.primary},
-  visitFee:         {fontSize: 13, fontWeight: '800', color: colors.textPrimary},
-  visitFeeActive:   {color: colors.primary},
-  saveBadge:        {position: 'absolute', top: -8, right: -4, backgroundColor: colors.success,
-                     paddingHorizontal: 5, paddingVertical: 2, borderRadius: radius.full},
-  saveBadgeText:    {fontSize: 8, fontWeight: '800', color: '#fff'},
 
   emptySlots:     {alignItems: 'center', paddingVertical: 32, gap: 8},
   emptySlotsText: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},

@@ -11,7 +11,10 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {useApp} from '../../context/AppContext';
-import {InvoiceApi, AppointmentApi, InvestigationApi, PatientApi, HospitalApi} from '../../API/Api';
+import {
+  InvoiceApi, AppointmentApi, InvestigationApi, PatientApi, HospitalApi, CLINIC_OPTIONS,
+  computePrescriptionRelevance, PrescriptionRepeatApi,
+} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
@@ -139,7 +142,8 @@ export default function ProfileScreen({navigation}) {
     medicines, 
     invoices: cachedInvoices, 
     investigations: cachedInvestigations,
-    appReady
+    appReady,
+    practitioners,
   } = useApp();
 
   // Local state for fetched data
@@ -151,13 +155,53 @@ export default function ProfileScreen({navigation}) {
   const [hospitalName, setHospitalName] = useState('Aureus Hospital'); // Default to Aureus
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [activePrescCount, setActivePrescCount] = useState(0);
+
+  const countActivePrescriptions = async () => {
+    try {
+      const {PrescriptionDB, MedicineDB} = require('../../services/MedicationDatabaseService');
+      const local = await PrescriptionDB.getAll() || [];
+      const localEnriched = await Promise.all(
+        local.map(async (p) => {
+          const meds = await MedicineDB.getByPrescriptionId(p.id) || [];
+          return { ...p, medicines: meds };
+        })
+      );
+
+      let serverEnriched = [];
+      const patientId = await AsyncStorage.getItem('patientId');
+      if (patientId) {
+        const practids = (practitioners || []).map(p => p.diaryuserid || p.practitionerId).filter(Boolean);
+        const result = await PrescriptionRepeatApi.getAllForPatient(practids, patientId, { forceRefresh: false });
+        if (result?.success && Array.isArray(result.data)) {
+          serverEnriched = result.data.map(p => ({
+            ...p,
+            medicines: p.medicines || p.medicine_list || p.medicineList || [],
+          }));
+        }
+      }
+
+      const all = [...localEnriched, ...serverEnriched];
+      const activeCount = all.reduce((count, item) => {
+        const rel = computePrescriptionRelevance(item);
+        return rel.level === 'active' ? count + 1 : count;
+      }, 0);
+
+      setActivePrescCount(activeCount);
+    } catch (err) {
+      console.log('[ProfileScreen] Error counting active prescriptions:', err);
+    }
+  };
 
   // Set hospital name based on clinic ID on mount
   useEffect(() => {
     const loadClinicInfo = async () => {
       const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-      if (clinicId.toLowerCase() === 'aureus') {
-        setHospitalName('Aureus Hospital');
+      const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+      if (found) {
+        setHospitalName(found.displayName);
+      } else {
+        setHospitalName('SmartCare Hospital');
       }
     };
     loadClinicInfo();
@@ -299,24 +343,15 @@ export default function ProfileScreen({navigation}) {
       // Update hospital name
       if (hospitalRes.success && hospitalRes.data) {
         const hospital = hospitalRes.data;
-        const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-        
-        // If clinic ID is 'aureus', use branded hospital name
-        if (clinicId.toLowerCase() === 'aureus') {
-          setHospitalName('Aureus Hospital');
-        } else {
-          setHospitalName(hospital.hospitalName || hospital.clinicName || hospital.name || 'SmartCare Hospital');
-        }
+        setHospitalName(hospital.hospitalName || hospital.clinicName || hospital.name || 'SmartCare Hospital');
       } else {
         // Fallback to check clinic ID even if API fails
         const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-        if (clinicId.toLowerCase() === 'aureus') {
-          setHospitalName('Aureus Hospital');
-        } else {
-          setHospitalName('SmartCare Hospital');
-        }
+        const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+        setHospitalName(found ? found.displayName : 'SmartCare Hospital');
       }
 
+      await countActivePrescriptions();
     } catch (error) {
       console.log('[ProfileScreen] Fetch error:', error);
     } finally {
@@ -341,7 +376,7 @@ export default function ProfileScreen({navigation}) {
      onPress: () => navigation.navigate('Appointments')},
     {num: String(investigations.length), label: 'Records',    Icon: DocumentIcon,  color: colors.success, bg: colors.successLight,
      onPress: () => navigation.navigate('Investigations')},
-    {num: String(medicines.length),    label: 'Prescriptions',Icon: PillIcon,      color: colors.warning, bg: colors.warningLight,
+    {num: String(activePrescCount),    label: 'Prescriptions',Icon: PillIcon,      color: colors.warning, bg: colors.warningLight,
      onPress: () => navigation.navigate('Prescriptions')},
     {num: String(invoices.length),     label: 'Invoices',     Icon: InvoiceIcon,   color: '#8B5CF6',      bg: '#F5F3FF',
      onPress: () => navigation.navigate('Invoices')},
