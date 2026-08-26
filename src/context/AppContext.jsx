@@ -1,10 +1,11 @@
 import React, {createContext, useContext, useState, useEffect, useMemo} from 'react';
 import {AppState} from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { medicines as mockMedicines } from '../data/mockData';
 import {StorageService} from '../services/StorageService';
 import {scheduleAllMedicineReminders, configurePushNotifications, setBadgeCount} from '../services/NotificationService';
-import { AppointmentApi, PatientApi, PractitionerApi, InvoiceApi, InvestigationApi } from '../API/Api';
+import { AppointmentApi, PatientApi, PractitionerApi, InvoiceApi, InvestigationApi, PrescriptionRepeatApi } from '../API/Api';
+import { medicationEngineService } from '../services/MedicationEngineService';
+import { todayInUtc } from '../services/MedicationSchedulingEngine';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AppContext = createContext(null);
@@ -56,6 +57,21 @@ function splitFullName(full = '') {
   return {first: parts[0], middle: parts.slice(1, -1).join(' '), last: parts[parts.length - 1]};
 }
 
+// Local-date YYYY-MM-DD (no UTC drift like toISOString())
+function localDateKey(d = new Date()) {
+  const year  = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day   = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+function toDateKey(value = '') {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const p = new Date(value);
+  if (!isNaN(p.getTime())) return localDateKey(p);
+  return '';
+}
+
 // Try many possible keys on an object — return the first non-empty value
 function pick(obj, keys, fallback = '') {
   for (const k of keys) {
@@ -74,7 +90,7 @@ function toTimestamp(dateStr = '') {
 
 export function AppProvider({children}) {
   const [userProfile, setUserProfile] = useState(EMPTY_PROFILE);
-  const [medicines, setMedicines] = useState(mockMedicines);
+  const [medicines, setMedicines] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [appointmentHistory, setAppointmentHistory] = useState([]);
   const [practitioners, setPractitioners] = useState([]);
@@ -87,6 +103,18 @@ export function AppProvider({children}) {
   const [testRequests, setTestRequests] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [investigations, setInvestigations] = useState([]);
+
+  // ── Engine Medication & Alarm State ──────────────────────────────────────
+  const [engineSchedules, setEngineSchedules] = useState([]);
+  const [engineActiveMeds, setEngineActiveMeds] = useState([]);
+  const [engineAlarms, setEngineAlarms] = useState([]);
+  const [engineStats, setEngineStats] = useState({ total: 0, taken: 0, skipped: 0, pending: 0, rate: 0 });
+  const [engineTimingConfig, setEngineTimingConfig] = useState({
+    MORNING: '08:00',
+    AFTERNOON: '14:00',
+    EVENING: '20:00',
+    NIGHT: '22:00',
+  });
   
   // ── Network & sync state ──────────────────────────────────────────────────
   const [isOnline,            setIsOnline]            = useState(true);
@@ -196,7 +224,7 @@ export function AppProvider({children}) {
             seen.add(key); return true;
           });
 
-          const todayIso = new Date().toISOString().slice(0, 10);
+          const todayIso = localDateKey();
           const isUpcomingStatus = (a) => {
             const s = String(pick(a, ['status', 'appointmentStatus', 'aptstatus', 'apmtstatus'], '')).toLowerCase();
             return ['upcoming', 'approved', 'booked', 'pending', 'confirmed', 'scheduled',
@@ -207,14 +235,17 @@ export function AppProvider({children}) {
             return ['completed', 'done', 'visited', 'closed', 'finished', 'cancelled',
                     'canceled', 'no show', 'noshow', 'absent', 'rejected'].includes(s);
           };
+
           const upcoming = [];
           const history  = [];
           for (const a of allRaw) {
-            if (isUpcomingStatus(a)) { upcoming.push(a); continue; }
-            if (isHistoryStatus(a))  { history.push(a);  continue; }
+            // Always put today's appointments in UPCOMING first (so they don't get lost to history)
+            // unless they have an explicitly terminal status (completed/cancelled).
             const d = pick(a, ['date', 'appointmentDate', 'visitdate', 'apptdate', 'apmtdate',
                                'commencing', 'datetime', 'dateTime']);
-            const dIso = typeof d === 'string' ? d.slice(0, 10) : '';
+            const dIso = toDateKey(d);
+            if (isUpcomingStatus(a)) { upcoming.push(a); continue; }
+            if (isHistoryStatus(a))  { history.push(a);  continue; }
             if (dIso && dIso >= todayIso) upcoming.push(a);
             else history.push(a);
           }
@@ -225,6 +256,12 @@ export function AppProvider({children}) {
               'doctorName', 'doc_name', 'username', 'practitioner', 'doctorname',
               'consultantName', 'consultant',
             ]);
+            // Extract numeric doctor/practitioner identifier to track visited doctors
+            const doctorIdVal = [
+              a.diaryuserid, a.diaryUserId, a.practid, a.practitionerId, a.practitionerid,
+              a.doctorId, a.doctorid, a.staffId, a.staffid, a.empid, a.empId
+            ].map(v => String(v || '').trim()).find(v => v && /^\d+$/.test(v)) || '';
+
             let dateVal = pick(a, ['date', 'appointmentDate', 'appointment_date', 'visitdate',
                                    'apptdate', 'apmtdate', 'commencing']);
             let timeVal = pick(a, ['time', 'starttime', 'start_time', 'otime',
@@ -240,26 +277,28 @@ export function AppProvider({children}) {
               }
             }
             return {
-              id:        String(pick(a, ['id', 'appointmentId', 'appointment_id', 'apmtid',
-                                         'aptmtid', 'diaryid', 'bookingId', 'booking_id',
-                                         'visitId', 'opdId']) || Date.now()),
-              type:      pick(a, ['type', 'appointmentType', 'appointment_type', 'aptmtype',
-                                   'apmttype', 'visittype', 'purpose', 'department',
-                                   'specialty'], 'Consultation'),
-              date:      dateVal,
-              time:      timeVal,
-              doctor:    docName,
-              specialty: pick(a, ['specialty', 'specialization', 'speciality', 'dept',
-                                   'department', 'aptmtype']),
-              visitType: pick(a, ['visitType', 'visit_type', 'typeOfVisit', 'mode',
-                                   'visitMode', 'visit_mode'], 'In-Clinic'),
-              location:  pick(a, ['location', 'clinicName', 'clinic', 'clinic_name',
-                                   'centerName', 'hospital', 'hospitalName',
-                                   'roomname', 'room', 'branch', 'branchName']),
-              status:    pick(a, ['status', 'appointmentStatus', 'aptstatus',
-                                   'apmtstatus'], 'Upcoming'),
-              fee:       Number(pick(a, ['fee', 'charge', 'amount',
-                                          'consultationFee', 'price', 'totalCharge'], 0)) || 0,
+              id:          String(pick(a, ['id', 'appointmentId', 'appointment_id', 'apmtid',
+                                           'aptmtid', 'diaryid', 'bookingId', 'booking_id',
+                                           'visitId', 'opdId']) || Date.now()),
+              diaryuserid: doctorIdVal,
+              doctorId:    doctorIdVal,
+              type:        pick(a, ['type', 'appointmentType', 'appointment_type', 'aptmtype',
+                                     'apmttype', 'visittype', 'purpose', 'department',
+                                     'specialty'], 'Consultation'),
+              date:        dateVal,
+              time:        timeVal,
+              doctor:      docName,
+              specialty:   pick(a, ['specialty', 'specialization', 'speciality', 'dept',
+                                     'department', 'aptmtype']),
+              visitType:   pick(a, ['visitType', 'visit_type', 'typeOfVisit', 'mode',
+                                     'visitMode', 'visit_mode'], 'In-Clinic'),
+              location:    pick(a, ['location', 'clinicName', 'clinic', 'clinic_name',
+                                     'centerName', 'hospital', 'hospitalName',
+                                     'roomname', 'room', 'branch', 'branchName']),
+              status:      pick(a, ['status', 'appointmentStatus', 'aptstatus',
+                                     'apmtstatus'], 'Upcoming'),
+              fee:         Number(pick(a, ['fee', 'charge', 'amount',
+                                           'consultationFee', 'price', 'totalCharge'], 0)) || 0,
             };
           });
           const normUpcoming = normalise(upcoming).sort((x, y) =>
@@ -278,19 +317,79 @@ export function AppProvider({children}) {
 
       // ── 3) Refresh practitioners ─────────────────────────────────────────────
       try {
-        const practResult = await PractitionerApi.getAll();
+        // Use the new practitionerlist endpoint
+        const practResult = await PractitionerApi.getList("1", 0, 0);
         if (practResult.success) {
-          const list = practResult.data?.practitioners || practResult.data || [];
+          const payload = practResult.data;
+          let list = [];
+          if (Array.isArray(payload)) {
+            list = payload;
+          } else if (payload && typeof payload === 'object') {
+            // API wraps the array under many keys — try all common ones
+            const candidate = payload.practitioners
+              || payload.data
+              || payload.list
+              || payload.result
+              || payload.practitionerList
+              || payload.doctors
+              || payload.doctorList
+              || payload.items
+              // Also accept the first array-valued key if nothing matched
+              || Object.values(payload).find(v => Array.isArray(v))
+              || [];
+            list = Array.isArray(candidate) ? candidate : [];
+          }
+          
+          // Debug: Log first practitioner object to see actual field names
+          if (list.length > 0) {
+            console.log('🔍 [AppContext] RAW practitioner sample:', JSON.stringify(list[0], null, 2));
+          } else if (payload && typeof payload === 'object') {
+            console.warn('⚠️ [AppContext] Practitioner list empty, payload keys:', Object.keys(payload));
+          }
+          
           const normalisedPract = Array.isArray(list) ? list.map(p => {
-            const numericId = [p.id, p.userId, p.userid, p.user_id, p.doctorId, p.practitionerId]
+            // Try to find a valid numeric ID from multiple possible field names
+            const numericId = [
+              p.id, p.userId, p.userid, p.user_id, 
+              p.doctorId, p.practitionerId, p.practitionerid,
+              p.staffId, p.staffid, p.empId, p.empid,
+              p.diaryuserid, p.diaryUserId
+            ]
               .map(v => String(v || '').trim())
-              .find(v => v && /^\d+$/.test(v)) || String(p.id || p.userId || p.userid || '').trim();
+              .find(v => v && /^\d+$/.test(v));
+            
+            if (!numericId) {
+              console.warn('⚠️ [AppContext] Practitioner has no valid numeric ID, fields:', 
+                JSON.stringify({
+                  id: p.id, userId: p.userId, doctorId: p.doctorId, 
+                  practitionerId: p.practitionerId, diaryuserid: p.diaryuserid
+                }));
+            }
+            
+            const doctorNameVal = [
+              p.practitionername, p.practitionerName, p.name, p.doctorName, p.doctor_name,
+              p.empname, p.consultantname, p.consultantName,
+              `${p.firstname || p.firstName || ''} ${p.lastname || p.lastName || ''}`.trim()
+            ].map(v => String(v || '').trim()).find(Boolean) || '';
+
+            const specialtyVal = [
+              p.specialization_name, p.specializationName, p.specialty, p.specialization,
+              p.speciality, p.department, p.service_name
+            ].map(v => String(v || '').trim()).find(Boolean) || '';
+
+            const qualificationVal = [
+              p.owner_qualification, p.qualifications, p.qualification, p.degree
+            ].map(v => String(v || '').trim()).find(Boolean) || '';
+
             return {
-              id:              numericId,
+              id:              numericId || 'unknown',
               practitionerId:  numericId,
-              name:            p.name || `${p.firstname || p.firstName || ''} ${p.lastname || p.lastName || ''}`.trim() || 'Dr. Unknown',
-              specialty:       p.specialty || p.specialization || p.speciality || p.department || '',
-              qualifications:  p.qualifications || p.qualification || '',
+              diaryuserid:     [p.diaryuserid, p.diaryUserId, numericId]
+                                 .map(v => String(v || '').trim())
+                                 .find(v => v && /^\d+$/.test(v)) || numericId || '',
+              name:            doctorNameVal || 'Dr. Unknown',
+              specialty:       specialtyVal,
+              qualifications:  qualificationVal,
               experience:      Number(p.experience) || 0,
               rating:          Number(p.rating) || 4.5,
               reviewCount:     Number(p.reviewCount) || 0,
@@ -305,7 +404,9 @@ export function AppProvider({children}) {
               nextSlot:        p.nextSlot || '',
               about:           p.about || p.description || '',
             };
-          }) : [];
+          }).filter(p => p.practitionerId) : []; // Filter out doctors with no valid ID
+          
+          console.log(`✅ [AppContext] Loaded ${normalisedPract.length} practitioners with valid IDs`);
           setPractitioners(normalisedPract);
           await StorageService.savePractitioners(normalisedPract);
           setPractitionersLastUpdated(Date.now());
@@ -377,6 +478,18 @@ export function AppProvider({children}) {
       } catch (err) {
         console.log('[AppContext] Investigations refresh failed:', err.message);
       }
+
+      // ── 6) Refresh prescriptions & sync into MedicationEngine ──────────────────
+      try {
+        const practids = (practitioners || []).map(p => p.diaryuserid || p.practitionerId).filter(Boolean);
+        const prescResult = await PrescriptionRepeatApi.getAllForPatient(practids, patientId, { forceRefresh: false });
+        if (prescResult.success && Array.isArray(prescResult.data) && prescResult.data.length > 0) {
+          await medicationEngineService.syncPrescriptions(prescResult.data, { patientId });
+          await refreshEngineData();
+        }
+      } catch (err) {
+        console.log('[AppContext] Prescriptions sync failed:', err?.message || String(err));
+      }
     }
   };
 
@@ -434,14 +547,23 @@ export function AppProvider({children}) {
       const cachedAppointments = await StorageService.getAppointments();
       if (cachedAppointments && cachedAppointments.length > 0) {
         console.log('[AppContext] Loaded cached appointments:', cachedAppointments.length);
-        const todayIso = new Date().toISOString().slice(0, 10);
+        const todayIso = localDateKey();
         const upcoming = cachedAppointments.filter(a => {
           const s = String(a.status || '').toLowerCase();
-          return ['upcoming', 'approved', 'booked', 'pending', 'confirmed', 'scheduled'].includes(s);
+          const dIso = toDateKey(a.date);
+          // Keep as upcoming if status is upcoming-style OR if the date is today/future
+          const isUpcomingStatus = ['upcoming', 'approved', 'booked', 'pending', 'confirmed', 'scheduled',
+                                    'rescheduled', 'waiting'].includes(s);
+          return isUpcomingStatus || (dIso && dIso >= todayIso);
         }).sort((x, y) => toTimestamp(x.date) - toTimestamp(y.date));
         const history = cachedAppointments.filter(a => {
           const s = String(a.status || '').toLowerCase();
-          return !['upcoming', 'approved', 'booked', 'pending', 'confirmed', 'scheduled'].includes(s);
+          const dIso = toDateKey(a.date);
+          const isUpcomingStatus = ['upcoming', 'approved', 'booked', 'pending', 'confirmed', 'scheduled',
+                                    'rescheduled', 'waiting'].includes(s);
+          const isHistoryStatus = ['completed', 'done', 'visited', 'closed', 'finished', 'cancelled',
+                                   'canceled', 'no show', 'noshow', 'absent', 'rejected'].includes(s);
+          return isHistoryStatus || (!(isUpcomingStatus || (dIso && dIso >= todayIso)));
         }).sort((x, y) => toTimestamp(y.date) - toTimestamp(x.date));
         setAppointments(upcoming);
         setAppointmentHistory(history);
@@ -628,6 +750,128 @@ export function AppProvider({children}) {
   return newRequest;
 };
 
+  // ── Engine Medication Actions ──────────────────────────────────────────
+  const refreshEngineData = async (date = todayInUtc()) => {
+    try {
+      const [timeline, active, alarms, stats, config] = await Promise.all([
+        medicationEngineService.getTodaysTimeline(date),
+        medicationEngineService.getActiveMedications(userProfile?.patientId),
+        medicationEngineService.getUpcomingAlarms(),
+        medicationEngineService.calculateAdherenceStats(7),
+        medicationEngineService.getTimingConfig(),
+      ]);
+      setEngineSchedules(timeline);
+      setEngineActiveMeds(active);
+      setEngineAlarms(alarms);
+      setEngineStats(stats);
+      setEngineTimingConfig(config);
+    } catch (err) {
+      console.log('[AppContext] refreshEngineData error:', err.message);
+    }
+  };
+
+  const markEngineDoseTaken = async (scheduleId) => {
+    try {
+      const updatedMed = await medicationEngineService.markTaken(scheduleId);
+      await refreshEngineData();
+      const sched = engineSchedules.find(s => s.id === scheduleId);
+      const newNotif = {
+        id: Date.now().toString(),
+        type: 'medicine',
+        title: 'Dose Taken ✓',
+        message: `${sched?.medicineName || 'Medicine'} marked as taken (${sched?.doseQuantity || 1} dose)`,
+        time: 'Just now',
+        group: 'today',
+        read: true,
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+      return updatedMed;
+    } catch (err) {
+      console.warn('[AppContext] markEngineDoseTaken error:', err.message);
+      throw err;
+    }
+  };
+
+  const markEngineDoseSkipped = async (scheduleId, reason = '') => {
+    try {
+      const res = await medicationEngineService.markSkipped(scheduleId, reason);
+      await refreshEngineData();
+      return res;
+    } catch (err) {
+      console.warn('[AppContext] markEngineDoseSkipped error:', err.message);
+      throw err;
+    }
+  };
+
+  const snoozeEngineDose = async (scheduleId, minutes = 15) => {
+    try {
+      const res = await medicationEngineService.snooze(scheduleId, minutes);
+      await refreshEngineData();
+      const sched = engineSchedules.find(s => s.id === scheduleId);
+      const newNotif = {
+        id: Date.now().toString(),
+        type: 'medicine',
+        title: 'Alarm Snoozed ⏰',
+        message: `${sched?.medicineName || 'Medicine'} reminder snoozed for ${minutes} minutes`,
+        time: 'Just now',
+        group: 'today',
+        read: true,
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+      return res;
+    } catch (err) {
+      console.warn('[AppContext] snoozeEngineDose error:', err.message);
+      throw err;
+    }
+  };
+
+  const updateEngineTimingConfig = async (config) => {
+    try {
+      const updated = await medicationEngineService.updateTimingConfig(config);
+      setEngineTimingConfig(updated);
+      await refreshEngineData();
+      return updated;
+    } catch (err) {
+      console.warn('[AppContext] updateEngineTimingConfig error:', err.message);
+      throw err;
+    }
+  };
+
+  const syncPrescriptionsToEngine = async (prescriptionsList, patientId) => {
+    try {
+      const pid = patientId || userProfile?.patientId || 'PAT-1';
+      const results = await medicationEngineService.syncPrescriptions(prescriptionsList, { patientId: pid });
+      await refreshEngineData();
+      return results;
+    } catch (err) {
+      console.warn('[AppContext] syncPrescriptionsToEngine error:', err.message);
+      throw err;
+    }
+  };
+
+  // Initial engine bootstrap
+  useEffect(() => {
+    async function initEngine() {
+      try {
+        await medicationEngineService.init();
+        const pid = userProfile?.patientId || '1';
+        const practids = (practitioners || []).map(p => p.diaryuserid || p.practitionerId).filter(Boolean);
+        try {
+          const prescResult = await PrescriptionRepeatApi.getAllForPatient(practids, pid, { forceRefresh: false });
+          if (prescResult.success && Array.isArray(prescResult.data) && prescResult.data.length > 0) {
+            await medicationEngineService.syncPrescriptions(prescResult.data, { patientId: pid });
+          }
+        } catch (e) {
+          // offline fallback
+        }
+        await refreshEngineData();
+      } catch (e) {
+        console.log('[AppContext] Engine init error:', e.message);
+      }
+    }
+    initEngine();
+  }, [userProfile?.patientId, practitioners?.length]);
+
   const value = useMemo(() => ({
   userProfile,
   medicines,
@@ -654,6 +898,18 @@ export function AppProvider({children}) {
   setIsLoggedIn,
   testRequests,
   bookTestRequest,
+  // ── Engine State & Actions ────────────────────────────────────────────────
+  engineSchedules,
+  engineActiveMeds,
+  engineAlarms,
+  engineStats,
+  engineTimingConfig,
+  refreshEngineData,
+  markEngineDoseTaken,
+  markEngineDoseSkipped,
+  snoozeEngineDose,
+  updateEngineTimingConfig,
+  syncPrescriptionsToEngine,
   // ── Network & sync state ──────────────────────────────────────────────────
   isOnline,
   profileLastUpdated,
@@ -664,7 +920,8 @@ export function AppProvider({children}) {
   refreshAllData,
 }), [userProfile, medicines, appointments, appointmentHistory, practitioners, invoices, investigations, isLoggedIn, selectedLanguage,
     isOnboarded, appReady, isLanguageSelected, notifications, unreadCount, testRequests, isOnline,
-    profileLastUpdated, appointmentsLastUpdated, practitionersLastUpdated, invoicesLastUpdated, investigationsLastUpdated]);
+    profileLastUpdated, appointmentsLastUpdated, practitionersLastUpdated, invoicesLastUpdated, investigationsLastUpdated,
+    engineSchedules, engineActiveMeds, engineAlarms, engineStats, engineTimingConfig]);
   return (
     <AppContext.Provider value={value}>
       {children}
@@ -673,3 +930,4 @@ export function AppProvider({children}) {
 }
 
 export const useApp = () => useContext(AppContext);
+

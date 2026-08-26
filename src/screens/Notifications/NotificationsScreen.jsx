@@ -15,11 +15,11 @@ import {
 
 // ─── Per-type config ──────────────────────────────────────────────────────────
 const TYPE_CONFIG = {
-  medicine:    {Icon: PillIcon,     bg: '#EEE9FF', iconColor: colors.primary,  accent: colors.primary},
-  appointment: {Icon: CalendarIcon, bg: '#DCFCE7', iconColor: colors.success,  accent: colors.success},
-  report:      {Icon: FlaskIcon,    bg: '#DBEAFE', iconColor: colors.info,     accent: colors.info},
-  invoice:     {Icon: InvoiceIcon,  bg: '#FEF3C7', iconColor: colors.warning,  accent: colors.warning},
-  system:      {Icon: InfoIcon,     bg: '#F3F4F6', iconColor: colors.textMuted, accent: colors.textMuted},
+  medicine:    {Icon: PillIcon,     bg: '#FEF3C7', iconColor: '#F59E0B',  accent: '#F59E0B'},
+  appointment: {Icon: CalendarIcon, bg: '#F3F0FF', iconColor: '#8B5CF6',  accent: '#8B5CF6'},
+  report:      {Icon: FlaskIcon,    bg: '#FEF2F2', iconColor: '#EF4444',  accent: '#EF4444'},
+  invoice:     {Icon: InvoiceIcon,  bg: '#FDF2F8', iconColor: '#EC4899',  accent: '#EC4899'},
+  system:      {Icon: InfoIcon,     bg: '#EFF6FF', iconColor: '#3B82F6', accent: '#3B82F6'},
 };
 
 function getConfig(type) {
@@ -124,7 +124,7 @@ export default function NotificationsScreen({navigation}) {
             style={styles.markAllBtn}
             onPress={markAllNotificationsRead}
             activeOpacity={0.7}>
-            <CheckCircleIcon size={16} color={colors.primary} />
+            <CheckCircleIcon size={16} color="#14A098" />
             <Text style={styles.markAllText}>Mark all</Text>
           </TouchableOpacity>
         )}
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   unreadPill: {
-    backgroundColor: colors.primary,
+    backgroundColor: '#14A098',
     borderRadius: radius.full,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -203,12 +203,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: radius.full,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: '#E0F7F5',
   },
   markAllText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
+    color: '#14A098',
   },
   headerDivider: {
     height: 1,
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   },
   cardUnread: {
     borderWidth: 1.5,
-    borderColor: colors.primary + '30',
+    borderColor: '#14A09830',
     backgroundColor: colors.surface,
   },
   cardRead: {

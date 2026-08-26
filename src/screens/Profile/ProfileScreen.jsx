@@ -1,20 +1,106 @@
-import React, {useState} from 'react';
+import React, {useState, useCallback, useEffect} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform,
+  StyleSheet, Alert, Platform, Dimensions, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
+import Svg, {Path, Defs, LinearGradient as SvgLinearGradient, Stop} from 'react-native-svg';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {useApp} from '../../context/AppContext';
 import {
+  InvoiceApi, AppointmentApi, InvestigationApi, PatientApi, HospitalApi, CLINIC_OPTIONS,
+  computePrescriptionRelevance, PrescriptionRepeatApi,
+} from '../../API/Api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
   PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
   LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
-  BloodDropIcon, ScaleIcon, RulerIcon, HeartRateIcon,
+  ScaleIcon, RulerIcon, HospitalBuildingIcon, HeartRateIcon,
 } from '../../assets/icons/Icons';
+
+const {width: SCREEN_WIDTH} = Dimensions.get('window');
+const HERO_HEIGHT = 300;
+
+// ─── Wave Background Component ────────────────────────────────────────────
+// Teal gradient base with soft cyan waves that sweep diagonally across
+// the lower half, then a gentle white swoosh that curves up before meeting
+// the stats card.
+function WaveBackground() {
+  const w = SCREEN_WIDTH;
+  const h = HERO_HEIGHT;
+
+  return (
+    <View style={styles.waveContainer}>
+      {/* Teal gradient base — deeper teal at the top fading into brighter cyan */}
+      <LinearGradient
+        colors={['#0a7d7a', '#0ea5a2', '#14bfbb']}
+        locations={[0, 0.55, 1]}
+        start={{x: 0.15, y: 0}}
+        end={{x: 0.85, y: 1}}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <Svg
+        width={w}
+        height={h}
+        viewBox={`0 0 ${w} ${h}`}
+        style={StyleSheet.absoluteFill}>
+        <Defs>
+          {/* Soft cyan gradient used for the two flowing highlight waves */}
+          <SvgLinearGradient id="mint" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#5dd4d1" stopOpacity="0.35" />
+            <Stop offset="1" stopColor="#a5f3f0" stopOpacity="0.18" />
+          </SvgLinearGradient>
+          {/* Light wash for the topmost subtle highlight */}
+          <SvgLinearGradient id="topGlow" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.16" />
+            <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.04" />
+          </SvgLinearGradient>
+        </Defs>
+
+        {/* Faint upper-left highlight sweeping across the top strip */}
+        <Path
+          d={`M0,${h * 0.02}
+              C ${w * 0.28},${h * 0.16} ${w * 0.55},${-h * 0.04} ${w},${h * 0.1}
+              L ${w},0 L 0,0 Z`}
+          fill="url(#topGlow)"
+        />
+
+        {/* First (back) mint wave — positioned lower */}
+        <Path
+          d={`M0,${h * 0.75}
+              C ${w * 0.25},${h * 0.65} ${w * 0.5},${h * 0.85} ${w * 0.75},${h * 0.72}
+              C ${w * 0.88},${h * 0.65} ${w * 0.96},${h * 0.7} ${w},${h * 0.68}
+              L ${w},${h} L 0,${h} Z`}
+          fill="url(#mint)"
+        />
+
+        {/* Second (front) mint wave */}
+        <Path
+          d={`M0,${h * 0.85}
+              C ${w * 0.3},${h * 0.75} ${w * 0.6},${h * 0.95} ${w * 0.85},${h * 0.82}
+              C ${w * 0.92},${h * 0.78} ${w * 0.98},${h * 0.81} ${w},${h * 0.80}
+              L ${w},${h} L 0,${h} Z`}
+          fill="#7de3e0"
+          opacity={0.30}
+        />
+
+        {/* White swoosh curving up into the stats card */}
+        <Path
+          d={`M0,${h * 0.95}
+              C ${w * 0.35},${h * 0.88} ${w * 0.65},${h * 0.99} ${w},${h * 0.93}
+              L ${w},${h} L 0,${h} Z`}
+          fill="#F3F4F6"
+        />
+      </Svg>
+    </View>
+  );
+}
 
 // ─── Reusable row inside a menu card ────────────────────────────────────────
 function MenuRow({Icon, iconColor, iconBg, label, sub, onPress, last}) {
@@ -36,17 +122,245 @@ function MenuRow({Icon, iconColor, iconBg, label, sub, onPress, last}) {
 }
 
 // ─── Section wrapper ─────────────────────────────────────────────────────────
-function Section({title, children}) {
+function Section({title, Icon, iconColor, children}) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionTitleRow}>
+        {Icon ? <Icon size={13} color={iconColor ?? '#D97706'} /> : null}
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
       <View style={styles.sectionCard}>{children}</View>
     </View>
   );
 }
 
 export default function ProfileScreen({navigation}) {
-  const {userProfile, appointments, appointmentHistory, medicines, invoices, investigations} = useApp();
+  const {
+    userProfile: cachedProfile, 
+    appointments: cachedAppointments, 
+    appointmentHistory: cachedHistory,
+    medicines, 
+    invoices: cachedInvoices, 
+    investigations: cachedInvestigations,
+    appReady,
+    practitioners,
+  } = useApp();
+
+  // Local state for fetched data
+  const [userProfile, setUserProfile] = useState(cachedProfile || {});
+  const [appointments, setAppointments] = useState(cachedAppointments || []);
+  const [appointmentHistory, setAppointmentHistory] = useState(cachedHistory || []);
+  const [invoices, setInvoices] = useState(cachedInvoices || []);
+  const [investigations, setInvestigations] = useState(cachedInvestigations || []);
+  const [hospitalName, setHospitalName] = useState('Aureus Hospital'); // Default to Aureus
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activePrescCount, setActivePrescCount] = useState(0);
+
+  const countActivePrescriptions = async () => {
+    try {
+      const {PrescriptionDB, MedicineDB} = require('../../services/MedicationDatabaseService');
+      const local = await PrescriptionDB.getAll() || [];
+      const localEnriched = await Promise.all(
+        local.map(async (p) => {
+          const meds = await MedicineDB.getByPrescriptionId(p.id) || [];
+          return { ...p, medicines: meds };
+        })
+      );
+
+      let serverEnriched = [];
+      const patientId = await AsyncStorage.getItem('patientId');
+      if (patientId) {
+        const practids = (practitioners || []).map(p => p.diaryuserid || p.practitionerId).filter(Boolean);
+        const result = await PrescriptionRepeatApi.getAllForPatient(practids, patientId, { forceRefresh: false });
+        if (result?.success && Array.isArray(result.data)) {
+          serverEnriched = result.data.map(p => ({
+            ...p,
+            medicines: p.medicines || p.medicine_list || p.medicineList || [],
+          }));
+        }
+      }
+
+      const all = [...localEnriched, ...serverEnriched];
+      const activeCount = all.reduce((count, item) => {
+        const rel = computePrescriptionRelevance(item);
+        return rel.level === 'active' ? count + 1 : count;
+      }, 0);
+
+      setActivePrescCount(activeCount);
+    } catch (err) {
+      console.log('[ProfileScreen] Error counting active prescriptions:', err);
+    }
+  };
+
+  // Set hospital name based on clinic ID on mount
+  useEffect(() => {
+    const loadClinicInfo = async () => {
+      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+      const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+      if (found) {
+        setHospitalName(found.displayName);
+      } else {
+        setHospitalName('SmartCare Hospital');
+      }
+    };
+    loadClinicInfo();
+  }, []);
+
+  // Sync with context updates immediately
+  useEffect(() => {
+    setUserProfile(cachedProfile || {});
+  }, [cachedProfile]);
+
+  useEffect(() => {
+    setAppointments(cachedAppointments || []);
+    setAppointmentHistory(cachedHistory || []);
+  }, [cachedAppointments, cachedHistory]);
+
+  useEffect(() => {
+    setInvoices(cachedInvoices || []);
+  }, [cachedInvoices]);
+
+  useEffect(() => {
+    setInvestigations(cachedInvestigations || []);
+  }, [cachedInvestigations]);
+
+  // Auto-fetch on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      // Always use the latest cached data from context
+      setUserProfile(cachedProfile || {});
+      setAppointments(cachedAppointments || []);
+      setAppointmentHistory(cachedHistory || []);
+      setInvoices(cachedInvoices || []);
+      setInvestigations(cachedInvestigations || []);
+      
+      // Fetch fresh data every time screen is focused
+      if (appReady) {
+        fetchAllData();
+      }
+    }, [cachedProfile, cachedAppointments, cachedHistory, cachedInvoices, cachedInvestigations, appReady])
+  );
+
+  // Fetch all profile-related data
+  const fetchAllData = async () => {
+    setRefreshing(true);
+    const patientId = await AsyncStorage.getItem('patientId');
+    const mobileNo = await AsyncStorage.getItem('mobileNumber');
+    
+    if (!patientId) {
+      setRefreshing(false);
+      return;
+    }
+
+    const FROM_DATE = '2000-01-01 00:00:00';
+    const getToDate = () => {
+      return new Date().toISOString().split('T')[0] + ' 23:59:59';
+    };
+
+    try {
+      // Fetch all data in parallel
+      const [profileRes, appointmentsRes, invoicesRes, investigationsRes, hospitalRes] = await Promise.all([
+        mobileNo ? PatientApi.getByMobile(mobileNo) : Promise.resolve({success: false}),
+        AppointmentApi.getHistory(patientId),
+        InvoiceApi.getAll(patientId, FROM_DATE, getToDate()),
+        InvestigationApi.getAll(patientId, FROM_DATE, getToDate()),
+        HospitalApi.getDetails(),
+      ]);
+
+      // Update profile if fetched successfully - MERGE with existing data
+      if (profileRes.success && profileRes.data) {
+        const profile = Array.isArray(profileRes.data) ? profileRes.data[0] : profileRes.data;
+        if (profile && typeof profile === 'object') {
+          // Only update fields that have values from the API
+          const updates = {};
+          if (profile.firstName || profile.first_name || profile.fname) updates.firstName = profile.firstName || profile.first_name || profile.fname;
+          if (profile.lastName || profile.last_name || profile.lname) updates.lastName = profile.lastName || profile.last_name || profile.lname;
+          if (profile.email) updates.email = profile.email;
+          if (profile.mobileNo || profile.mobile || profile.phone) updates.phone = profile.mobileNo || profile.mobile || profile.phone;
+          if (profile.uhid || profile.UHID) updates.uhid = profile.uhid || profile.UHID;
+          if (profile.dob || profile.dateOfBirth) updates.dateOfBirth = profile.dob || profile.dateOfBirth;
+          if (profile.gender) updates.gender = profile.gender;
+          if (profile.bloodGroup || profile.blood_group) updates.bloodGroup = profile.bloodGroup || profile.blood_group;
+          
+          // Merge with existing profile - keep existing values if API doesn't provide them
+          setUserProfile(prev => ({...prev, ...updates}));
+        }
+      }
+
+      // Update appointments - handle data.data structure
+      if (appointmentsRes.success && appointmentsRes.data) {
+        // Handle nested data.data structure
+        let rawList = [];
+        if (appointmentsRes.data.data && Array.isArray(appointmentsRes.data.data)) {
+          rawList = appointmentsRes.data.data;
+        } else if (Array.isArray(appointmentsRes.data)) {
+          rawList = appointmentsRes.data;
+        } else if (appointmentsRes.data.appointments && Array.isArray(appointmentsRes.data.appointments)) {
+          rawList = appointmentsRes.data.appointments;
+        }
+        
+        if (rawList.length > 0) {
+          const now = new Date();
+          
+          const upcoming = rawList.filter(a => {
+            const dateStr = a.commencing || a.appointmentDate || a.date || '';
+            const timeStr = a.starttime || a.appointmentTime || a.time || '00:00';
+            const apptDateTime = new Date(`${dateStr}T${timeStr}`);
+            return apptDateTime > now && (!a.status || (a.status !== 'Cancelled' && a.status !== 'Completed'));
+          });
+          
+          const history = rawList.filter(a => {
+            const dateStr = a.commencing || a.appointmentDate || a.date || '';
+            const timeStr = a.starttime || a.appointmentTime || a.time || '00:00';
+            const apptDateTime = new Date(`${dateStr}T${timeStr}`);
+            return apptDateTime <= now || a.status === 'Cancelled' || a.status === 'Completed';
+          });
+
+          setAppointments(upcoming);
+          setAppointmentHistory(history);
+        }
+      }
+
+      // Update invoices
+      if (invoicesRes.success && invoicesRes.data) {
+        const serverData = invoicesRes.data;
+        const inner = serverData?.data || serverData;
+        const listObj = inner?.list || inner;
+        const rawList = listObj?.invoiceDataList || listObj?.invoices || (Array.isArray(listObj) ? listObj : []);
+        setInvoices(rawList);
+      }
+
+      // Update investigations
+      if (investigationsRes.success && investigationsRes.data) {
+        let raw = [];
+        if (Array.isArray(investigationsRes.data)) raw = investigationsRes.data;
+        else if (Array.isArray(investigationsRes.data?.reports)) raw = investigationsRes.data.reports;
+        else if (Array.isArray(investigationsRes.data?.data)) raw = investigationsRes.data.data;
+        setInvestigations(raw);
+      }
+
+      // Update hospital name
+      if (hospitalRes.success && hospitalRes.data) {
+        const hospital = hospitalRes.data;
+        setHospitalName(hospital.hospitalName || hospital.clinicName || hospital.name || 'SmartCare Hospital');
+      } else {
+        // Fallback to check clinic ID even if API fails
+        const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+        const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+        setHospitalName(found ? found.displayName : 'SmartCare Hospital');
+      }
+
+      await countActivePrescriptions();
+    } catch (error) {
+      console.log('[ProfileScreen] Fetch error:', error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = () => fetchAllData();
 
   const initials = `${userProfile.firstName?.[0] ?? ''}${userProfile.lastName?.[0] ?? ''}`.toUpperCase();
   const fullName = `${userProfile.firstName ?? ''} ${userProfile.lastName ?? ''}`.trim() || 'Your Name';
@@ -62,7 +376,7 @@ export default function ProfileScreen({navigation}) {
      onPress: () => navigation.navigate('Appointments')},
     {num: String(investigations.length), label: 'Records',    Icon: DocumentIcon,  color: colors.success, bg: colors.successLight,
      onPress: () => navigation.navigate('Investigations')},
-    {num: String(medicines.length),    label: 'Prescriptions',Icon: PillIcon,      color: colors.warning, bg: colors.warningLight,
+    {num: String(activePrescCount),    label: 'Prescriptions',Icon: PillIcon,      color: colors.warning, bg: colors.warningLight,
      onPress: () => navigation.navigate('Prescriptions')},
     {num: String(invoices.length),     label: 'Invoices',     Icon: InvoiceIcon,   color: '#8B5CF6',      bg: '#F5F3FF',
      onPress: () => navigation.navigate('Invoices')},
@@ -71,77 +385,79 @@ export default function ProfileScreen({navigation}) {
   const vitals = [
     {Icon: ScaleIcon,     color: '#8B5CF6', val: `${userProfile.weight ?? '--'} ${userProfile.weightUnit ?? 'kg'}`, label: 'Weight'},
     {Icon: RulerIcon,     color: '#3B82F6', val: `${userProfile.height ?? '--'} ${userProfile.heightUnit ?? 'cm'}`, label: 'Height'},
-    {Icon: BloodDropIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood'},
-    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bp ?? '--',                                             label: 'BP'},
+    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood Group'},
+    {Icon: HospitalBuildingIcon, color: '#10B981', val: hospitalName || 'Aureus Hospital',                          label: 'Hospital'},
   ];
 
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}>
+        contentContainerStyle={styles.scroll}
+        bounces={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }>
 
-        {/* ── HERO ─────────────────────────────────────────── */}
-        <LinearGradient
-          colors={['#6C63FF', '#8B83FF', '#a89dff']}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}
-          style={styles.hero}>
+        {/* ── HERO WITH GREEN BACKGROUND ─────────────────────────────────────────── */}
+        <View style={styles.hero}>
+          <WaveBackground />
 
-          {/* Top bar */}
-          <View style={styles.heroTopBar}>
+          <SafeAreaView edges={['top']} style={styles.heroContent}>
+            {/* Top bar */}
+            <View style={styles.heroTopBar}>
+              <TouchableOpacity
+                style={styles.heroIconBtn}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.75}>
+                <ArrowBackIcon size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+              <Text style={styles.heroTopTitle}>My Profile</Text>
+              <TouchableOpacity
+                style={styles.heroIconBtn}
+                onPress={() => navigation.navigate('Settings')}
+                activeOpacity={0.75}>
+                <SettingsGearIcon size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Avatar */}
             <TouchableOpacity
-              style={styles.heroIconBtn}
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.75}>
-              <ArrowBackIcon size={20} color={colors.primary} />
+              style={styles.avatarWrap}
+              onPress={handleAvatarPress}
+              activeOpacity={0.85}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarInitials}>{initials || 'PP'}</Text>
+              </View>
+              {/* Camera badge */}
+              <View style={styles.cameraBadge}>
+                <CameraIcon size={12} color="#fff" />
+              </View>
             </TouchableOpacity>
-            <Text style={styles.heroTopTitle}>My Profile</Text>
-            <TouchableOpacity
-              style={styles.heroIconBtn}
-              onPress={() => navigation.navigate('Settings')}
-              activeOpacity={0.75}>
-              <SettingsGearIcon size={20} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
 
-          {/* Avatar */}
-          <TouchableOpacity
-            style={styles.avatarWrap}
-            onPress={handleAvatarPress}
-            activeOpacity={0.85}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarInitials}>{initials || '?'}</Text>
+            {/* Name */}
+            <View style={styles.nameContainer}>
+              <Text style={styles.heroName}>{fullName.toUpperCase()}</Text>
             </View>
-            {/* Camera badge */}
-            <View style={styles.cameraBadge}>
-              <CameraIcon size={13} color="#fff" />
-            </View>
-          </TouchableOpacity>
 
-          {/* Name + email */}
-          <Text style={styles.heroName}>{fullName}</Text>
-          {userProfile.uhid ? (
-            <View style={styles.uhidBadge}>
-              <Text style={styles.uhidText}>UHID: {userProfile.uhid}</Text>
-            </View>
-          ) : null}
-          {userProfile.email ? (
-            <Text style={styles.heroEmail}>{userProfile.email}</Text>
-          ) : null}
-
-          {/* Blood group pill */}
-          {userProfile.bloodGroup ? (
-            <View style={styles.bloodPill}>
-              <BloodDropIcon size={12} color="#fff" />
-              <Text style={styles.bloodPillText}>{userProfile.bloodGroup}</Text>
-            </View>
-          ) : null}
-
-          {/* Bottom curve spacer */}
-          <View style={styles.heroCurve} />
-        </LinearGradient>
+            {/* UHID */}
+            {userProfile.uhid ? (
+              <View style={styles.uhidBadge}>
+                <Text style={styles.uhidText}>UHID: SCD/{userProfile.uhid}</Text>
+              </View>
+            ) : (
+              <View style={styles.uhidBadge}>
+                <Text style={styles.uhidText}>UHID: SCD/250505011</Text>
+              </View>
+            )}
+          </SafeAreaView>
+        </View>
 
         {/* ── STATS STRIP ───────────────────────────────────── */}
         <View style={styles.statsCard}>
@@ -153,7 +469,7 @@ export default function ProfileScreen({navigation}) {
                 onPress={onPress}
                 disabled={!onPress}>
                 <View style={[styles.statIcon, {backgroundColor: bg}]}>
-                  <Icon size={16} color={color} />
+                  <Icon size={20} color={color} />
                 </View>
                 <Text style={styles.statNum}>{num}</Text>
                 <Text style={styles.statLabel}>{label}</Text>
@@ -163,123 +479,75 @@ export default function ProfileScreen({navigation}) {
           ))}
         </View>
 
-        {/* ── UPCOMING APPOINTMENTS PREVIEW ─────────────────── */}
-        {appointments.length > 0 && (
-          <View style={styles.upcomingWrap}>
-            <View style={styles.upcomingHeader}>
-              <Text style={styles.upcomingTitle}>Upcoming Appointments</Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Appointments')}
-                activeOpacity={0.7}
-                hitSlop={8}>
-                <Text style={styles.upcomingSeeAll}>See all</Text>
-              </TouchableOpacity>
-            </View>
-            {appointments.slice(0, 3).map(a => (
-              <TouchableOpacity
-                key={a.id}
-                style={styles.apptCard}
-                onPress={() => navigation.navigate('Appointments')}
-                activeOpacity={0.8}>
-                <View style={[styles.apptDot, {backgroundColor: colors.primary}]} />
-                <View style={styles.apptInfo}>
-                  <Text style={styles.apptDoctor} numberOfLines={1}>
-                    {a.doctor || a.type || 'Appointment'}
-                  </Text>
-                  <Text style={styles.apptMeta} numberOfLines={1}>
-                    {[a.specialty, a.visitType, a.location].filter(Boolean).slice(0, 2).join(' · ')}
-                  </Text>
-                </View>
-                <View style={styles.apptDateTime}>
-                  <Text style={styles.apptDate}>{a.date || '—'}</Text>
-                  {a.time ? <Text style={styles.apptTime}>{a.time}</Text> : null}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* ── VITALS ROW ────────────────────────────────────── */}
+        {/* ── HEALTH SUMMARY ────────────────────────────────────── */}
         <View style={styles.vitalsCard}>
-          <Text style={styles.vitalsTitle}>Health Summary</Text>
-          <View style={styles.vitalsRow}>
-            {vitals.map(({Icon, color, val, label}) => (
-              <View key={label} style={styles.vitalItem}>
-                <View style={[styles.vitalIconWrap, {backgroundColor: color + '20'}]}>
-                  <Icon size={18} color={color} />
-                </View>
-                <Text style={styles.vitalVal}>{val}</Text>
-                <Text style={styles.vitalLabel}>{label}</Text>
-              </View>
-            ))}
+          <View style={styles.vitalsHeader}>
+            <HeartRateIcon size={16} color={colors.success} />
+            <Text style={styles.vitalsTitle}>HEALTH SUMMARY</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('PersonalInformation')} activeOpacity={0.7}>
+              <Text style={styles.viewDetails}>View details →</Text>
+            </TouchableOpacity>
           </View>
+          {loading ? (
+            <View style={{alignItems: 'center', paddingVertical: 24}}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.vitalsRow}>
+              {vitals.map(({Icon, color, val, label}) => (
+                <View key={label} style={styles.vitalItem}>
+                  <View style={[styles.vitalIconWrap, {backgroundColor: color + '15'}]}>
+                    <Icon size={22} color={color} />
+                  </View>
+                  <Text style={styles.vitalVal}>{val}</Text>
+                  <Text style={styles.vitalLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* ── MENU SECTIONS ─────────────────────────────────── */}
-        <Section title="Account">
+        {/* ── ACCOUNT SECTION ─────────────────────────────────── */}
+        <Section title="ACCOUNT" Icon={SettingsGearIcon} iconColor="#D97706">
           <MenuRow
             Icon={PersonIcon}
-            iconColor={colors.primary}
-            iconBg={colors.primaryLight}
+            iconColor={colors.success}
+            iconBg={'#D1FAE5'}
             label="Personal Information"
             sub="Name, phone, date of birth"
             onPress={() => navigation.navigate('PersonalInformation')}
           />
           <MenuRow
             Icon={DocumentIcon}
-            iconColor={colors.success}
-            iconBg={colors.successLight}
+            iconColor={'#10B981'}
+            iconBg={'#D1FAE5'}
             label="Medical History"
             sub="Past conditions & diagnoses"
             onPress={() => Alert.alert('Coming Soon', 'Medical history will be available soon.')}
           />
           <MenuRow
             Icon={HeartIcon}
-            iconColor={colors.error}
-            iconBg={'#FEE2E2'}
+            iconColor={'#F59E0B'}
+            iconBg={'#FEF3C7'}
             label="Allergies"
-            sub={userProfile.allergies?.length ? userProfile.allergies.join(', ') : 'None recorded'}
+            sub={userProfile.allergies?.length ? userProfile.allergies.join(', ') : 'Known allergies'}
             onPress={() => Alert.alert('Allergies', userProfile.allergies?.join(', ') || 'No allergies recorded.')}
-            last
-          />
-        </Section>
-
-        <Section title="Health & Records">
-          <MenuRow
-            Icon={PillIcon}
-            iconColor={colors.warning}
-            iconBg={colors.warningLight}
-            label="Prescriptions"
-            sub="View active prescriptions"
-            onPress={() => navigation.navigate('Prescriptions')}
-          />
-          <MenuRow
-            Icon={InvoiceIcon}
-            iconColor={'#8B5CF6'}
-            iconBg={'#F5F3FF'}
-            label="Invoices & Bills"
-            sub="Payment history"
-            onPress={() => navigation.navigate('Invoices')}
-            last
-          />
-        </Section>
-
-        <Section title="Security">
-          <MenuRow
-            Icon={LockIcon}
-            iconColor={colors.primary}
-            iconBg={colors.primaryLight}
-            label="App Lock"
-            sub="PIN or biometric protection"
-            onPress={() => navigation.navigate('AppLockSetup')}
           />
           <MenuRow
             Icon={ShieldIcon}
-            iconColor={colors.success}
-            iconBg={colors.successLight}
-            label="Insurance Information"
-            sub="Manage your insurance details"
+            iconColor={'#3B82F6'}
+            iconBg={'#DBEAFE'}
+            label="Insurance"
+            sub="Your insurance details"
             onPress={() => Alert.alert('Coming Soon', 'Insurance info will be available soon.')}
+          />
+          <MenuRow
+            Icon={LockIcon}
+            iconColor={'#059669'}
+            iconBg={'#D1FAE5'}
+            label="Security"
+            sub="Password & privacy"
+            onPress={() => navigation.navigate('AppLockSetup')}
             last
           />
         </Section>
@@ -287,23 +555,28 @@ export default function ProfileScreen({navigation}) {
         <Text style={styles.version}>SmartCare PHR · v0.0.1</Text>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
-const HERO_HEIGHT = 300;
-
 const styles = StyleSheet.create({
-  safe:   {flex: 1, backgroundColor: '#F4F4FB'},
-  scroll: {paddingBottom: 48},
+  container: {flex: 1, backgroundColor: '#F3F4F6'},
+  scroll: {flexGrow: 1},
 
-  // ── Hero ──────────────────────────────────────────────
+  // ── Hero with wavy green background ──────────────────────────────────────────────
   hero: {
-    minHeight: HERO_HEIGHT,
+    height: HERO_HEIGHT,
+    position: 'relative',
+    backgroundColor: '#0ea5a2',
+  },
+  heroContent: {
+    flex: 1,
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 54 : 44,
-    paddingBottom: spacing['2xl'],
     paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+  },
+  waveContainer: {
+    ...StyleSheet.absoluteFillObject,
   },
   heroTopBar: {
     flexDirection: 'row',
@@ -311,317 +584,232 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     width: '100%',
     marginBottom: spacing.lg,
+    zIndex: 10,
   },
- heroIconBtn: {
-  width: 36, height: 36,
-  borderRadius: 18,
-  backgroundColor: 'rgba(255,255,255,0.95)',
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowColor: '#000',
-  shadowOffset: {width: 0, height: 1},
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
-  elevation: 2,
-},
+  heroIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   heroTopTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: '#fff',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 
   avatarWrap: {
     position: 'relative',
     marginBottom: spacing.md,
+    zIndex: 10,
   },
   avatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: '#fff',
+    borderWidth: 4,
+    borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   avatarInitials: {
-    fontSize: 38,
+    fontSize: 40,
     fontWeight: '800',
-    color: '#fff',
+    color: '#0ea5a2',
     letterSpacing: 1,
   },
   cameraBadge: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.primaryDark,
-    borderWidth: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#0ea5a2',
+    borderWidth: 3,
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  heroName:  {fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: 0.2},
-  uhidBadge: {marginTop: 4, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)'},
-  uhidText:  {fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.9)', letterSpacing: 0.5},
-  heroEmail: {fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 3},
-
-  bloodPill: {
-    marginTop: spacing.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  nameContainer: {
+    zIndex: 10,
+    marginBottom: spacing.sm,
   },
-  bloodPillText: {fontSize: 12, fontWeight: '600', color: '#fff'},
-
-  heroCurve: {height: 0},
+  heroName:  {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: {width: 0, height: 2},
+    textShadowRadius: 4,
+  },
+  uhidBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  uhidText:  {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0a7d7a',
+    letterSpacing: 0.4,
+  },
 
   // ── Stats card ────────────────────────────────────────
   statsCard: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
+    backgroundColor: '#fff',
     borderRadius: radius.xl,
     marginHorizontal: spacing.base,
-    marginTop: -28,
-    paddingVertical: spacing.base,
-    paddingHorizontal: spacing.sm,
-    shadowColor: '#6C63FF',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xs,
+    shadowColor: '#000',
     shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 5,
+    elevation: 6,
     alignItems: 'center',
   },
-  statItem: {flex: 1, alignItems: 'center', gap: 4},
+  statItem: {flex: 1, alignItems: 'center', gap: 6},
   statIcon: {
-    width: 32, height: 32,
-    borderRadius: radius.sm,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  statNum:   {fontSize: 16, fontWeight: '800', color: colors.textPrimary},
-  statLabel: {fontSize: 10, color: colors.textMuted, textAlign: 'center'},
-  statDivider: {width: 1, height: 36, backgroundColor: colors.border},
+  statNum:   {fontSize: 20, fontWeight: '800', color: '#1F2937', letterSpacing: 0.2},
+  statLabel: {fontSize: 10, color: '#6B7280', textAlign: 'center', fontWeight: '500'},
+  statDivider: {width: 1, height: 50, backgroundColor: '#E5E7EB'},
 
-  // ── Upcoming Appointments preview ─────────────────────
-  upcomingWrap: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.base,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  upcomingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  upcomingTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.textMuted,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  upcomingSeeAll: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  apptCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm + 2,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  apptDot: {
-    width: 8, height: 8, borderRadius: 4, marginTop: 2, alignSelf: 'flex-start',
-  },
-  apptInfo: {flex: 1},
-  apptDoctor: {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
-  apptMeta:   {fontSize: 11, color: colors.textMuted, marginTop: 2},
-  apptDateTime: {alignItems: 'flex-end'},
-  apptDate:   {fontSize: 12, fontWeight: '700', color: colors.primary},
-  apptTime:   {fontSize: 11, color: colors.textSecondary, marginTop: 2},
-
-  // ── Vitals ────────────────────────────────────────────
+  // ── Vitals / Health Summary ────────────────────────────────────
   vitalsCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#fff',
     borderRadius: radius.xl,
     marginHorizontal: spacing.base,
-    marginTop: spacing.base,
-    padding: spacing.base,
+    marginTop: spacing['3xl'],
+    padding: spacing.lg,
     shadowColor: '#000',
     shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 3,
+  },
+  vitalsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    gap: 8,
   },
   vitalsTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 0.6,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6B7280',
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginBottom: spacing.md,
   },
-  vitalsRow:  {flexDirection: 'row', justifyContent: 'space-around'},
-  vitalItem:      {alignItems: 'center', gap: 4},
-  vitalIconWrap:  {width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center'},
-  vitalVal:       {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
-  vitalLabel:     {fontSize: 11, color: colors.textMuted},
-
-  // ── Sections ──────────────────────────────────────────
-  section:      {marginTop: spacing.base, marginHorizontal: spacing.base},
-  sectionTitle: {
+  viewDetails: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    color: '#0ea5a2',
+  },
+  vitalsRow:  {flexDirection: 'row', justifyContent: 'space-around'},
+  vitalItem:      {alignItems: 'center', gap: 8},
+  vitalIconWrap:  {
+    width: 56,
+    height: 56,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  vitalVal:       {fontSize: 16, fontWeight: '800', color: '#1F2937', letterSpacing: 0.2},
+  vitalLabel:     {fontSize: 11, color: '#9CA3AF', fontWeight: '500'},
+
+  // ── Sections ──────────────────────────────────────────
+  section:      {marginTop: spacing.lg, marginHorizontal: spacing.base},
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: spacing.sm,
     marginLeft: 4,
   },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   sectionCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#fff',
     borderRadius: radius.xl,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
   // ── Menu rows ─────────────────────────────────────────
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: spacing.base,
     gap: spacing.md,
   },
   menuRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#F3F4F6',
   },
   menuIconWrap: {
-    width: 38, height: 38,
-    borderRadius: radius.md,
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   menuText:  {flex: 1},
-  menuLabel: {fontSize: 14, fontWeight: '600', color: colors.textPrimary},
-  menuSub:   {fontSize: 12, color: colors.textMuted, marginTop: 2},
-
-  // ── Logout ────────────────────────────────────────────
-  logoutBtn: {
-    marginHorizontal: spacing.base,
-    marginTop: spacing.xl,
-    paddingVertical: 15,
-    borderRadius: radius.xl,
-    backgroundColor: '#FEE2E2',
-    alignItems: 'center',
-  },
-  logoutText: {fontSize: 15, fontWeight: '700', color: colors.error},
+  menuLabel: {fontSize: 15, fontWeight: '700', color: '#1F2937', letterSpacing: 0.1},
+  menuSub:   {fontSize: 12, color: '#9CA3AF', marginTop: 3, fontWeight: '500'},
 
   version: {
     textAlign: 'center',
     fontSize: 12,
-    color: colors.textMuted,
-    marginTop: spacing.base,
+    color: '#9CA3AF',
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
+    fontWeight: '500',
   },
-
-  // Logout modal
-modalBackdrop: {
-  flex: 1,
-  backgroundColor: 'rgba(0,0,0,0.45)',
-  justifyContent: 'flex-end',
-},
-modalSheet: {
-  backgroundColor: colors.surface,
-  borderTopLeftRadius: radius['2xl'],
-  borderTopRightRadius: radius['2xl'],
-  paddingHorizontal: spacing.xl,
-  paddingTop: spacing.md,
-  paddingBottom: Platform.OS === 'ios' ? 40 : 28,
-  alignItems: 'center',
-},
-modalHandle: {
-  width: 40,
-  height: 4,
-  borderRadius: 2,
-  backgroundColor: colors.border,
-  marginBottom: spacing.xl,
-},
-modalIconWrap: {
-  width: 72,
-  height: 72,
-  borderRadius: 36,
-  backgroundColor: '#FEE2E2',
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginBottom: spacing.base,
-},
-modalIconEmoji: {
-  fontSize: 34,
-},
-modalTitle: {
-  fontSize: 22,
-  fontWeight: '800',
-  color: colors.textPrimary,
-  marginBottom: spacing.xs,
-},
-modalSub: {
-  fontSize: 14,
-  color: colors.textSecondary,
-  textAlign: 'center',
-  lineHeight: 21,
-  marginBottom: spacing.xl,
-},
-modalLogoutBtn: {
-  width: '100%',
-  paddingVertical: 15,
-  borderRadius: radius.xl,
-  backgroundColor: colors.error,
-  alignItems: 'center',
-  marginBottom: spacing.sm,
-},
-modalLogoutText: {
-  fontSize: 16,
-  fontWeight: '700',
-  color: '#fff',
-},
-modalCancelBtn: {
-  width: '100%',
-  paddingVertical: 15,
-  borderRadius: radius.xl,
-  backgroundColor: '#F3F4F6',
-  alignItems: 'center',
-},
-modalCancelText: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: colors.textSecondary,
-},
 });

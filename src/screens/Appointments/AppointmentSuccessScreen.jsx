@@ -18,9 +18,15 @@ const VISIT_META = {
 };
 
 export default function AppointmentSuccessScreen({navigation, route}) {
-  const {doctorId, date, time, visitType, fee} = route.params;
+  const {doctorId, doctorData, date, time, visitType, fee, appointmentId} = route.params;
   const {practitioners} = useApp();
-  const d  = practitioners.find(doc => String(doc.id) === String(doctorId));
+
+  // Try to find doctor from context first, then use passed data as fallback (same as BookingConfirm)
+  let d = practitioners.find(doc => String(doc.id) === String(doctorId));
+  if (!d && doctorData) d = doctorData;
+  // Last-resort empty doctor so the screen never renders blank
+  if (!d) d = {id: doctorId, name: 'Your Doctor', specialty: 'Consultation', clinic: 'the clinic', qualifications: ''};
+
   const vm = VISIT_META[visitType] || VISIT_META.clinic;
 
   // ── Animations ──────────────────────────────────────────────────────────────
@@ -51,10 +57,8 @@ export default function AppointmentSuccessScreen({navigation, route}) {
     ]).start();
   }, []);
 
-  if (!d) return null;
-
-  const initials = d.name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
-  const hue      = (d.name.charCodeAt(4) * 37) % 360;
+  const initials = (d.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2) || 'DR';
+  const hue      = ((d.name || '').charCodeAt(4) || 0) * 37 % 360;
 
   // Prevent back navigation (booking is done)
   const handleGoHome = () => {
@@ -88,7 +92,9 @@ export default function AppointmentSuccessScreen({navigation, route}) {
         {/* ── Booking reference ── */}
         <Animated.View style={[s.refCard, {opacity: opacityAnim, transform: [{translateY: slideAnim}]}]}>
           <Text style={s.refLabel}>Booking Reference</Text>
-          <Text style={s.refCode}>SMC-{Date.now().toString().slice(-6).toUpperCase()}</Text>
+          <Text style={s.refCode}>
+            {appointmentId ? `SMC-${String(appointmentId).slice(-6).toUpperCase()}` : `SMC-${Date.now().toString().slice(-6).toUpperCase()}`}
+          </Text>
         </Animated.View>
 
         {/* ── Doctor info ── */}
@@ -97,11 +103,11 @@ export default function AppointmentSuccessScreen({navigation, route}) {
             <Text style={[s.docAvatarText, {color: `hsl(${hue},45%,30%)`}]}>{initials}</Text>
           </View>
           <View style={s.docInfo}>
-            <Text style={s.docName}>{d.name}</Text>
-            <Text style={s.docSpec}>{d.specialty}</Text>
+            <Text style={s.docName}>{d.name || 'Your Doctor'}</Text>
+            <Text style={s.docSpec}>{d.specialty || 'Consultation'}</Text>
             <View style={[s.docClinicRow]}>
               <PinIcon size={13} color={colors.textMuted} />
-              <Text style={s.docClinic}>{visitType === 'clinic' ? d.clinic : 'Online'}</Text>
+              <Text style={s.docClinic}>{visitType === 'clinic' ? (d.clinic || 'In-Clinic') : 'Online consultation'}</Text>
             </View>
           </View>
         </Animated.View>
@@ -110,20 +116,25 @@ export default function AppointmentSuccessScreen({navigation, route}) {
         <Animated.View style={[s.summaryCard, {opacity: opacityAnim, transform: [{translateY: slideAnim}]}]}>
           <Text style={s.summaryTitle}>Appointment Summary</Text>
 
-          <SummaryRow icon={CalendarIcon} label="Date"        value={date} />
+          <SummaryRow icon={CalendarIcon} label="Date"        value={date || '-'} />
           <SummaryDivider />
-          <SummaryRow icon={ClockIcon}    label="Time"        value={time} />
+          <SummaryRow icon={ClockIcon}    label="Time"        value={time || '-'} />
           <SummaryDivider />
           <SummaryRow icon={vm.Icon}      label="Visit Type"  value={vm.label} />
           <SummaryDivider />
-          <SummaryRow icon={WalletIcon}   label="Amount Paid" value={`₹${fee}`} highlight />
+          <SummaryRow icon={WalletIcon}   label="Payable"     value={`₹${Number(fee) || 0}`} highlight />
         </Animated.View>
 
         {/* ── What's next ── */}
         <Animated.View style={[s.nextCard, {opacity: opacityAnim, transform: [{translateY: slideAnim}]}]}>
           <Text style={s.nextTitle}>What happens next?</Text>
           <NextStep number="1" text="You'll receive a confirmation message on your registered number." />
-          <NextStep number="2" text={`Arrive at ${d.clinic} 10 minutes before your appointment time.`} />
+          <NextStep
+            number="2"
+            text={visitType === 'clinic'
+              ? `Arrive at ${d.clinic || 'the clinic'} 10 minutes before your appointment time.`
+              : 'Join the online consultation 5 minutes before the scheduled time via the app.'}
+          />
           <NextStep number="3" text="Bring your SmartCare health card or show the booking reference." />
         </Animated.View>
 

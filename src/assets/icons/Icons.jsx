@@ -50,7 +50,6 @@ import {
   IconHeartRateMonitor,
   // IconSyringe might not exist, using IconVaccine as fallback
   IconVaccine,
-  IconMapPin,
   IconPhone,
   IconMail,
   IconEye,
@@ -97,6 +96,13 @@ import {
   IconAlertCircle,
   IconX,
   IconChevronRight,
+  IconEgg,
+  IconBolt,
+  IconBuildingBank,
+  IconCash,
+  IconCopy,
+  IconVirusSearch,
+  IconClipboardHeart,
 } from '@tabler/icons-react-native';
 
 // Re-export with app-specific names for backwards compatibility
@@ -104,8 +110,9 @@ import {
 
 export const HomeIcon = IconHome;
 export const InvoiceIcon = IconFileInvoice;
-export const InvestigationsIcon = IconFlask;
-export const InvestigationNavIcon = IconClipboardCheck;
+export const InvestigationsIcon = IconVirusSearch;
+export const InvestigationNavIcon = IconVirusSearch;
+export const VirusSearchIcon = IconVirusSearch;
 export const ProfileIcon = IconUserCircle;
 export const PlusIcon = IconPlus;
 export const BellIcon = IconBell;
@@ -117,7 +124,7 @@ export const ArrowBackIcon = IconChevronLeft;
 export const CalendarIcon = IconCalendar;
 export const PillIcon = IconPill;
 export const CapsuleIcon = IconCapsule;
-export const FlaskIcon = IconFlask;
+export const FlaskIcon = IconVirusSearch;
 export const StethoscopeIcon = IconStethoscope;
 export const HeartIcon = IconHeart;
 export const ToothIcon = IconDental;
@@ -140,7 +147,8 @@ export const CameraIcon = IconCamera;
 export const SettingsGearIcon = IconSettings;
 export const PersonIcon = IconUser;
 export const MedicalCrossIcon = IconMedicalCross;
-export const ClipboardIcon = IconClipboard;
+export const ClipboardIcon = IconClipboardHeart;
+export const ClinicalNotesIcon = IconClipboardHeart;
 export const InfoIcon = IconInfoCircle;
 export const LockIcon = IconLock;
 export const BookmarkIcon = IconBookmark;
@@ -149,10 +157,11 @@ export const HomeDeliveryIcon = IconTruck;
 export const PharmacyIcon = IconBuildingHospital;
 export const MedicinesIcon = IconMedicineSyrup;
 export const WalletIcon = IconWallet;
-export const BloodDropIcon = IconDropletHalf;
+export const BloodDropIcon = IconDroplet;
 export const GlucoseIcon = IconDroplet;
 export const BeakerIcon = IconFlask;
-export const PinIcon = IconMapPin;
+export const PinIcon = IconBuildingHospital; // Using hospital icon as location fallback
+export const MapPinIcon = IconBuildingHospital; // Alias for consistency
 export const PhoneIcon = IconPhone;
 export const MailIcon = IconMail;
 export const EyeIcon = IconEye;
@@ -161,6 +170,7 @@ export const ChevronDownIcon = IconChevronDown;
 export const BabyIcon = IconBabyCarriage;
 export const EarIcon = IconEar;
 export const HospitalIcon = IconBuildingHospital;
+export const HospitalBuildingIcon = IconBuildingHospital; // Alias for consistency
 export const MicroscopeIcon = IconMicroscope;
 export const SendIcon = IconSend;
 export const WifiOffIcon = IconWifiOff;
@@ -198,7 +208,12 @@ export const ClockHour4Icon = IconClockHour4;
 export const RepeatIcon = IconRepeat;
 export const AlertCircleIcon = IconAlertCircle;
 export const XIcon = IconX;
+export const ChevronLeftIcon = IconChevronLeft;
 export const ChevronRightIcon = IconChevronRight;
+export const BoltIcon = IconBolt;
+export const BankIcon = IconBuildingBank;
+export const CashIcon = IconCash;
+export const CopyIcon = IconCopy;
 
 // Custom CheckboxIcon component (Tabler doesn't have a pre-filled checkbox variant)
 import React from 'react';

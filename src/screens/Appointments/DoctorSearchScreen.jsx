@@ -1,27 +1,20 @@
-import React, {useState, useMemo, useRef, useEffect} from 'react';
+import React, {useState, useMemo, useRef, useEffect, useCallback} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, FlatList, Dimensions,
+  TextInput, FlatList, Dimensions, ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
-import {ArrowBackIcon, SearchIcon, StarIcon, PinIcon, StethoscopeIcon, HeartIcon, ToothIcon, SkinIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, CheckIcon, SortIcon} from '../../assets/icons/Icons';
+import {PractitionerApi} from '../../API/Api';
+import {ArrowBackIcon, SearchIcon, StarIcon, PinIcon, StethoscopeIcon, HeartIcon, ToothIcon, SkinIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, CheckIcon, SortIcon, ChevronDownIcon, FilterIcon} from '../../assets/icons/Icons';
 
 // Local specialties constant — no API endpoint for this
-const specialties = [
-  {id: 's1', name: 'General Physician', Icon: StethoscopeIcon, color: '#6C63FF', bgColor: '#EEE9FF'},
-  {id: 's2', name: 'Cardiologist',      Icon: HeartIcon,       color: '#EF4444', bgColor: '#FEE2E2'},
-  {id: 's3', name: 'Dentist',           Icon: ToothIcon,       color: '#3B82F6', bgColor: '#DBEAFE'},
-  {id: 's4', name: 'Dermatologist',     Icon: SkinIcon,        color: '#22C55E', bgColor: '#DCFCE7'},
-  {id: 's5', name: 'Pediatrician',      Icon: BabyIcon,        color: '#F59E0B', bgColor: '#FEF3C7'},
-  {id: 's6', name: 'Orthopedic',        Icon: BoneIcon,        color: '#8B5CF6', bgColor: '#F5F3FF'},
-  {id: 's7', name: 'Neurologist',       Icon: BrainIcon,       color: '#EC4899', bgColor: '#FCE7F3'},
-  {id: 's8', name: 'ENT Specialist',    Icon: EarIcon,         color: '#14B8A6', bgColor: '#CCFBF1'},
-];
+// This will be replaced by dynamic specialties from API
 
 const SORT_OPTIONS = [
   {id: 'best',    label: 'Best Match'},
@@ -33,29 +26,183 @@ const SORT_OPTIONS = [
 
 export default function DoctorSearchScreen({navigation, route}) {
   const preSpecialtyId = route.params?.specialtyId || null;
-  const {practitioners} = useApp();
+  const {practitioners: cachedPractitioners} = useApp();
+  const [practitioners, setPractitioners] = useState(cachedPractitioners);
+  const [specialties, setSpecialties] = useState([]); // Dynamic specialties from API
+  const [loading, setLoading] = useState(false);
   const [query,      setQuery]      = useState('');
   const [specFilter, setSpecFilter] = useState(preSpecialtyId);
   const [sortBy,     setSortBy]     = useState('best');
   const [showSort,   setShowSort]   = useState(false);
+  const [showSpecDropdown, setShowSpecDropdown] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 300); }, []);
 
-  const filtered = useMemo(() => {
-    let list = [...practitioners];
-    if (specFilter) {
-      const spec = specialties.find(s => s.id === specFilter);
-      if (spec) list = list.filter(d => d.specialty === spec.name);
+  // Fetch practitioners on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      // Always fetch all specialties first, then filter
+      fetchAllSpecialtiesAndPractitioners();
+    }, [])
+  );
+
+  const fetchAllSpecialtiesAndPractitioners = async () => {
+    setLoading(true);
+    try {
+      // First fetch ALL practitioners to get all available specialties
+      const allResult = await PractitionerApi.getList("1", 0, 0);
+      
+      if (allResult.success) {
+        const allData = allResult.data;
+        const allList = allData?.practitionerList || [];
+        
+        // Extract ALL unique specializations for chips (never changes)
+        const uniqueSpecs = new Map();
+        allList.forEach(p => {
+          if (p.specializationid && p.specialization_name) {
+            uniqueSpecs.set(p.specializationid, {
+              id: p.specializationid,
+              name: p.specialization_name,
+              Icon: StethoscopeIcon, // Default icon
+              color: '#6C63FF',
+              bgColor: '#EEE9FF'
+            });
+          }
+        });
+        
+        const allSpecialties = Array.from(uniqueSpecs.values()).sort((a, b) => a.name.localeCompare(b.name));
+        console.log('[DoctorSearch] All specialties loaded:', allSpecialties.length);
+        setSpecialties(allSpecialties);
+        
+        // Now fetch filtered practitioners based on current filter
+        await fetchFilteredPractitioners(specFilter, allList);
+      }
+    } catch (error) {
+      console.log('[DoctorSearch] Fetch error:', error);
+      setPractitioners(cachedPractitioners);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const fetchFilteredPractitioners = async (specialtyFilter = null, allPractitioners = null) => {
+    try {
+      let list = [];
+      
+      if (allPractitioners) {
+        // Use already fetched data and filter locally
+        list = allPractitioners;
+      } else {
+        // Fetch specific specialty or all if no filter
+        const specializationid = specialtyFilter ? Number(specialtyFilter) : 0;
+        const result = await PractitionerApi.getList("1", specializationid, 0);
+        
+        if (result.success) {
+          const rawData = result.data;
+          list = rawData?.practitionerList || [];
+        }
+      }
+      
+      console.log('[DoctorSearch] Processing practitioners:', list.length);
+      
+      const normalized = Array.isArray(list) ? list.map(p => {
+        const getId = () => {
+          const candidates = [
+            p.id, p.practitionerId, p.diaryuserid, p.diaryUserId, p.userId, p.user_id,
+            p.doctorId, p.doctor_id, p.practionerId,
+          ];
+          for (const c of candidates) {
+            if (c !== undefined && c !== null && String(c).trim() !== '') return c;
+          }
+          return Math.random().toString(36).substr(2, 9);
+        };
+
+        const getName = () => {
+          const candidates = [
+            p.practitionername, p.practitionerName, p.diaryuser, p.diaryUser, p.name, p.doctorName, p.userName,
+            p.fullName, p.doctor_name, p.practitioner_name,
+          ];
+          for (const c of candidates) {
+            if (c && String(c).trim() !== '') return c;
+          }
+          return 'Unknown Doctor';
+        };
+
+        const getSpecialty = () => {
+          const candidates = [
+            p.specialization_name, p.specialization, p.specialty, p.department,
+          ];
+          for (const c of candidates) {
+            if (c && String(c).trim() !== '') return c;
+          }
+          return 'General Medicine';
+        };
+
+        const getQualifications = () => {
+          const candidates = [
+            p.owner_qualification, p.qualification, p.qualifications, p.degree,
+          ];
+          for (const c of candidates) {
+            if (c && String(c).trim() !== '') return c;
+          }
+          return 'MBBS';
+        };
+
+        const practitionerId = getId();
+        const practitionerName = getName();
+        const specialty = getSpecialty();
+        const qualifications = getQualifications();
+
+        return {
+          practitionerId,
+          id: practitionerId,
+          name: practitionerName,
+          specialty: specialty,
+          specializationid: p.specializationid,
+          qualifications: qualifications,
+          rating: Number(p.rating) || 4.5,
+          reviewCount: Number(p.reviewCount || p.review_count) || Math.floor(Math.random() * 200) + 50,
+          consultationFee: Number(p.consultationFee || p.charge || p.fee) || 500,
+          experience: Number(p.experience) || Math.floor(Math.random() * 15) + 5,
+          clinic: p.clinic || p.hospital || p.location || 'Main Clinic',
+          avatar: p.avatar || p.photo || null,
+          availability: 'Available Today',
+          nextSlot: 'Today at 2:00 PM',
+          _raw: p,
+        };
+      }).filter(p => p.practitionerId) : [];
+      
+      console.log('[DoctorSearch] Normalized practitioners:', normalized.length);
+      setPractitioners(normalized);
+    } catch (error) {
+      console.log('[DoctorSearch] Filter fetch error:', error);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    console.log('[DoctorSearch] Filtering - Input practitioners:', practitioners.length);
+    let list = [...practitioners];
+    
+    if (specFilter) {
+      console.log('[DoctorSearch] Specialty filter ID:', specFilter);
+      list = list.filter(d => {
+        const match = String(d.specializationid) === String(specFilter);
+        if (!match) console.log('[DoctorSearch] Specialty mismatch:', d.specializationid, '!=', specFilter, '|', d.specialty);
+        return match;
+      });
+    }
+    
     if (query.trim()) {
       const q = query.toLowerCase();
+      console.log('[DoctorSearch] Text query:', q);
       list = list.filter(d =>
         d.name.toLowerCase().includes(q) ||
         d.specialty.toLowerCase().includes(q) ||
         (d.clinic || '').toLowerCase().includes(q),
       );
     }
+    
     switch (sortBy) {
       case 'rating':  list.sort((a, b) => b.rating - a.rating); break;
       case 'feeLow':  list.sort((a, b) => a.consultationFee - b.consultationFee); break;
@@ -63,11 +210,12 @@ export default function DoctorSearchScreen({navigation, route}) {
       case 'exp':     list.sort((a, b) => b.experience - a.experience); break;
       default:        list.sort((a, b) => b.rating - a.rating); break;
     }
+    
+    console.log('[DoctorSearch] Final filtered list:', list.length);
     return list;
   }, [query, specFilter, sortBy, practitioners]);
 
   const activeSort = SORT_OPTIONS.find(o => o.id === sortBy);
-  const activeSpec = specialties.find(s => s.id === specFilter);
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
@@ -91,34 +239,72 @@ export default function DoctorSearchScreen({navigation, route}) {
       </View>
 
       <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.specRow} style={s.specScroll}>
-          <TouchableOpacity style={[s.specChip, !specFilter && s.specChipActive]} onPress={() => setSpecFilter(null)}>
-            <Text style={[s.specChipText, !specFilter && s.specChipTextActive]}>All</Text>
+        {/* Specialty Dropdown */}
+        <View style={s.filterRow}>
+          <TouchableOpacity style={s.filterDropdown} onPress={() => setShowSpecDropdown(v => !v)}>
+            <FilterIcon size={16} color={colors.textSecondary} />
+            <Text style={s.filterDropdownText}>
+              {specFilter 
+                ? specialties.find(s => String(s.id) === String(specFilter))?.name || 'Select Specialty'
+                : 'All Specialties'
+              }
+            </Text>
+            <ChevronDownIcon size={16} color={colors.textSecondary} />
           </TouchableOpacity>
-          {specialties.map(sp => {
-            const active = specFilter === sp.id;
-            return (
-              <TouchableOpacity
-                key={sp.id}
-                style={[s.specChip, active && {backgroundColor: sp.color, borderColor: sp.color}]}
-                onPress={() => setSpecFilter(active ? null : sp.id)}>
-                <sp.Icon size={14} color={active ? '#fff' : sp.color} />
-                <Text style={[s.specChipText, active && {color: '#fff'}]}>{sp.name}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
 
-        <View style={s.sortBar}>
-          <Text style={s.resultCount}>
-            {filtered.length} doctor{filtered.length !== 1 ? 's' : ''}{activeSpec ? ` · ${activeSpec.name}` : ''}
-          </Text>
           <TouchableOpacity style={s.sortBtn} onPress={() => setShowSort(v => !v)}>
             <SortIcon size={13} color={colors.primary} />
             <Text style={s.sortBtnText}>{activeSort?.label}</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={s.resultBar}>
+          <Text style={s.resultCount}>
+            {filtered.length} doctor{filtered.length !== 1 ? 's' : ''} found
+          </Text>
+        </View>
       </View>
+
+      {/* Specialty Dropdown */}
+      {showSpecDropdown && (
+        <>
+          {/* Background overlay to close dropdown */}
+          <TouchableOpacity 
+            style={s.dropdownOverlay} 
+            activeOpacity={1}
+            onPress={() => setShowSpecDropdown(false)}
+          />
+          <View style={s.specDropdown}>
+            <ScrollView style={s.specDropdownScroll} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity
+                style={[s.specOption, !specFilter && s.specOptionActive]}
+                onPress={() => { 
+                  setSpecFilter(null); 
+                  setShowSpecDropdown(false); 
+                }}>
+                <Text style={[s.specOptionText, !specFilter && s.specOptionTextActive]}>All Specialties</Text>
+                {!specFilter && <CheckIcon size={14} color={colors.primary} />}
+              </TouchableOpacity>
+              {specialties.map((spec, index) => {
+                const active = String(specFilter) === String(spec.id);
+                const isLast = index === specialties.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={spec.id}
+                    style={[s.specOption, active && s.specOptionActive, isLast && {borderBottomWidth: 0}]}
+                    onPress={() => { 
+                      setSpecFilter(spec.id); 
+                      setShowSpecDropdown(false); 
+                    }}>
+                    <Text style={[s.specOptionText, active && s.specOptionTextActive]}>{spec.name}</Text>
+                    {active && <CheckIcon size={14} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </>
+      )}
 
       {showSort && (
         <View style={s.sortDropdown}>
@@ -134,17 +320,27 @@ export default function DoctorSearchScreen({navigation, route}) {
         </View>
       )}
 
-      {filtered.length === 0
+      {filtered.length === 0 && !loading
         ? <EmptySearch onClear={() => { setQuery(''); setSpecFilter(null); }} />
+        : loading
+        ? (
+          <View style={{alignItems: 'center', paddingVertical: 48}}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{marginTop: 12, fontSize: 13, color: colors.textSecondary}}>Finding doctors…</Text>
+          </View>
+        )
         : (
           <FlatList
             data={filtered}
-            keyExtractor={item => item.id}
+            keyExtractor={item => String(item.id)}
             contentContainerStyle={s.list}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             renderItem={({item}) => (
-              <DoctorCard doctor={item} onPress={() => navigation.navigate('DoctorProfile', {doctorId: item.id})} />
+              <DoctorCard doctor={item} onPress={() => navigation.navigate('BookingSlot', {
+                doctorId: item.id, 
+                doctorData: item // Pass the complete doctor data
+              })} />
             )}
           />
         )
@@ -239,17 +435,31 @@ const s = StyleSheet.create({
   back:              {padding: 4},
   searchWrap:        {flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.full, paddingHorizontal: spacing.base, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border},
   searchInput:       {flex: 1, fontSize: 14, color: colors.textPrimary, padding: 0},
-  specScroll:        {flexShrink: 0, flexGrow: 0, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
-  specRow:           {paddingHorizontal: spacing.base, paddingVertical: spacing.sm, gap: spacing.sm, alignItems: 'center', flexGrow: 0},
-  specChip:          {flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.background, borderWidth: 1.5, borderColor: colors.border},
-  specChipActive:    {backgroundColor: colors.primary, borderColor: colors.primary},
-  specChipText:      {fontSize: 12, fontWeight: '600', color: colors.textSecondary},
-  specChipTextActive:{color: '#fff'},
-  sortBar:           {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
+  
+  // Filter Row
+  filterRow:         {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.base, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
+  filterDropdown:    {flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.lg, paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.border},
+  filterDropdownText:{fontSize: 14, color: colors.textPrimary, flex: 1},
+  
+  resultBar:         {paddingHorizontal: spacing.base, paddingVertical: spacing.sm, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
   resultCount:       {fontSize: 13, fontWeight: '600', color: colors.textSecondary},
-  sortBtn:           {flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full},
+  
+  // Dropdown Overlay
+  dropdownOverlay:   {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 98},
+  
+  // Specialty Dropdown
+  specDropdown:      {position: 'absolute', top: 115, left: spacing.base, right: spacing.base, backgroundColor: colors.surface, borderRadius: radius.lg, ...shadows.lg, zIndex: 99, borderWidth: 1, borderColor: colors.border, overflow: 'hidden'},
+  specDropdownScroll:{maxHeight: 250},
+  specOption:        {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border},
+  specOptionActive:  {backgroundColor: colors.primaryLight},
+  specOptionText:    {fontSize: 14, fontWeight: '500', color: colors.textPrimary, flex: 1},
+  specOptionTextActive:{fontWeight: '700', color: colors.primary},
+  
+  sortBtn:           {flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full},
   sortBtnText:       {fontSize: 12, fontWeight: '700', color: colors.primary},
-  sortDropdown:      {position: 'absolute', top: 168, right: spacing.base, backgroundColor: colors.surface, borderRadius: radius.lg, ...shadows.lg, zIndex: 99, minWidth: 180, borderWidth: 1, borderColor: colors.border},
+  
+  // Sort Dropdown (existing)
+  sortDropdown:      {position: 'absolute', top: 120, right: spacing.base, backgroundColor: colors.surface, borderRadius: radius.lg, ...shadows.lg, zIndex: 99, minWidth: 180, borderWidth: 1, borderColor: colors.border},
   sortOption:        {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border},
   sortOptionActive:  {backgroundColor: colors.primaryLight},
   sortOptionText:    {fontSize: 13, fontWeight: '500', color: colors.textPrimary},

@@ -1,9 +1,10 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator, RefreshControl, Modal, Pressable,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -12,17 +13,212 @@ import {InvoiceApi} from '../../API/Api';
 import {useApp} from '../../context/AppContext';
 import {StorageService} from '../../services/StorageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, FilterIcon, DocumentIcon, DownloadIcon, ArrowRightIcon, InvoiceIcon, WalletIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, FilterIcon, DocumentIcon, ArrowRightIcon, InvoiceIcon, WalletIcon, PersonIcon, CalendarIcon, CheckCircleIcon, XIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
+// ─── Invoice Detail Modal Component ─────────────────────────────────────────
+function InvoiceDetailModal({visible, invoice, onClose}) {
+  if (!invoice) return null;
+
+  const raw = invoice._raw || {};
+  
+  // Extract charges
+  const chargeTransactions = raw.chargeTransaction || [];
+  const paymentLogs = raw.payment_log || [];
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderLeft}>
+              <View style={[styles.modalIcon, {backgroundColor: '#0ea5a2' + '20'}]}>
+                <InvoiceIcon size={24} color="#0ea5a2" />
+              </View>
+              <View>
+                <Text style={styles.modalTitle}>Invoice Details</Text>
+                <Text style={styles.modalSubtitle}>
+                  {raw.ipdAbirvationId || `#${invoice.id}`}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+              <XIcon size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+            {/* Status Badge */}
+            <View style={styles.statusRow}>
+              <StatusChip status={invoice.status} size="md" />
+              {raw.invoice_type && (
+                <View style={[styles.typeBadge, {backgroundColor: raw.invoice_type === 'IPD' ? '#FEE2E2' : '#DBEAFE'}]}>
+                  <Text style={[styles.typeBadgeText, {color: raw.invoice_type === 'IPD' ? '#EF4444' : '#3B82F6'}]}>
+                    {raw.invoice_type}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Amount Card */}
+            <View style={styles.amountCard}>
+              <Text style={styles.amountLabel}>Total Amount</Text>
+              <Text style={styles.amountValue}>{invoice.amount}</Text>
+              <View style={styles.amountBreakdown}>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Paid Amount</Text>
+                  <Text style={[styles.breakdownValue, {color: colors.success}]}>
+                    ₹{invoice.paidAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                  </Text>
+                </View>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Balance</Text>
+                  <Text style={[styles.breakdownValue, {color: invoice.balance > 0 ? colors.warning : colors.textMuted}]}>
+                    ₹{invoice.balance.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                  </Text>
+                </View>
+                {raw.discount_amount > 0 && (
+                  <View style={styles.breakdownRow}>
+                    <Text style={styles.breakdownLabel}>Discount ({raw.discount_percent}%)</Text>
+                    <Text style={[styles.breakdownValue, {color: colors.success}]}>
+                      -₹{Number(raw.discount_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Patient Info */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>PATIENT INFORMATION</Text>
+              <InfoRow icon={PersonIcon} label="Name" value={raw.patient_name || '—'} />
+              <InfoRow icon={DocumentIcon} label="UHID" value={raw.uhid || '—'} />
+              <InfoRow icon={CalendarIcon} label="Age / Gender" value={`${raw.age || '—'} / ${raw.gender || '—'}`} />
+              <InfoRow icon={CalendarIcon} label="Contact" value={raw.contact_number || '—'} />
+            </View>
+
+            {/* Invoice Info */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>INVOICE INFORMATION</Text>
+              <InfoRow icon={CalendarIcon} label="Date & Time" value={`${invoice.date}${invoice.time ? ' · ' + invoice.time : ''}`} />
+              <InfoRow icon={PersonIcon} label="Consultant" value={raw.counsultant || '—'} />
+              {raw.counsultant_qualification && (
+                <InfoRow icon={DocumentIcon} label="Qualification" value={raw.counsultant_qualification} />
+              )}
+              {raw.refral_name && raw.refral_name !== '0' && (
+                <InfoRow icon={PersonIcon} label="Referred By" value={raw.refral_name} />
+              )}
+              <InfoRow icon={DocumentIcon} label="Prepared By" value={raw.invoice_prepared_by || '—'} />
+            </View>
+
+            {/* Payment Info */}
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>PAYMENT DETAILS</Text>
+              <InfoRow icon={WalletIcon} label="Payment Mode" value={invoice.paymentMode || '—'} />
+              {raw.transaction && (
+                <>
+                  <InfoRow icon={CalendarIcon} label="Payment Date" value={raw.transaction.payment_time?.split(' ')[0] || '—'} />
+                  {raw.transaction.payment_note && (
+                    <InfoRow icon={DocumentIcon} label="Note" value={raw.transaction.payment_note} />
+                  )}
+                </>
+              )}
+            </View>
+
+            {/* Charges Breakdown */}
+            {chargeTransactions.length > 0 && (
+              <View style={styles.infoSection}>
+                <Text style={styles.sectionLabel}>CHARGES BREAKDOWN</Text>
+                {chargeTransactions.map((charge, idx) => (
+                  <View key={idx} style={styles.chargeGroup}>
+                    <View style={styles.chargeHeader}>
+                      <Text style={styles.chargeName}>{charge.master_charge_name}</Text>
+                      <Text style={styles.chargeAmount}>
+                        ₹{Number(charge.total_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                      </Text>
+                    </View>
+                    {charge.charge_list?.map((item, i) => (
+                      <View key={i} style={styles.chargeItem}>
+                        <Text style={styles.chargeItemName}>• {item.chargename}</Text>
+                        <Text style={styles.chargeItemAmount}>
+                          ₹{Number(item.charge_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})} × {item.quantity}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Payment History */}
+            {paymentLogs.length > 1 && (
+              <View style={styles.infoSection}>
+                <Text style={styles.sectionLabel}>PAYMENT HISTORY</Text>
+                {paymentLogs.map((log, idx) => (
+                  <View key={idx} style={styles.paymentLogRow}>
+                    <View>
+                      <Text style={styles.paymentLogMode}>{log.payment_mode}</Text>
+                      <Text style={styles.paymentLogTime}>{log.payment_time?.split(' ')[0] || '—'}</Text>
+                    </View>
+                    <Text style={styles.paymentLogAmount}>
+                      ₹{Number(log.part_payment_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {raw.invoice_note && (
+              <View style={styles.noteCard}>
+                <Text style={styles.noteLabel}>Note</Text>
+                <Text style={styles.noteText}>{raw.invoice_note}</Text>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnSecondary]}
+                onPress={onClose}>
+                <Text style={styles.actionBtnTextSecondary}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Helper component for info rows
+function InfoRow({icon: Icon, label, value}) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoLeft}>
+        <Icon size={14} color={colors.textMuted} />
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
+      <Text style={styles.infoValue} numberOfLines={2}>{value}</Text>
+    </View>
+  );
+}
+
 const TABS = ['All', 'Paid', 'Pending', 'Cancelled'];
+const DATE_FILTERS = ['All Time', 'Past Week', 'Past Month', 'Past 3 Months', 'Past 6 Months'];
 
 const STATUS_COLORS = {Paid: colors.success, Pending: colors.warning, Cancelled: colors.error};
 const STATUS_BG     = {Paid: colors.successLight, Pending: colors.warningLight, Cancelled: colors.errorLight};
 
-// Fetch ALL invoices from the very beginning (year 2000) to today
-const FROM_DATE = '2000-01-01';
-function getToDate() { return new Date().toISOString().split('T')[0]; }
+// Fetch ALL invoices from the very beginning (year 2000) to today end of day
+const FROM_DATE = '2000-01-01 00:00:00';
+function getToDate() { 
+  return new Date().toISOString().split('T')[0] + ' 23:59:59';
+}
 
 // Parse any date string to a comparable timestamp (returns 0 on failure)
 function toTimestamp(dateStr = '') {
@@ -60,6 +256,9 @@ function mapInvoice(inv) {
     ? `${invType ? invType + ' · ' : ''}${consultant}`
     : (inv.description || invType || 'Consultation');
 
+  // Capture referral name
+  const referralName = inv.refral_name && inv.refral_name !== '0' ? inv.refral_name : '';
+
   return {
     id:          String(inv.location_Wise_Invoice_no || inv.invoice_id || ''),
     ipdAbr:      inv.ipdAbirvationId || '',             // e.g. "SCD/IP/25/0305"
@@ -69,6 +268,7 @@ function mapInvoice(inv) {
     consultant,
     invType,
     invSuffix,
+    referralName,
     amount:      `₹${amountNum.toLocaleString('en-IN', {minimumFractionDigits: 2})}`,
     rawAmount:   amountNum,
     balance:     balanceNum,
@@ -83,6 +283,10 @@ function mapInvoice(inv) {
 export default function InvoicesScreen({navigation}) {
   const {invoices: cachedInvoices, isOnline, refreshAllData, appReady} = useApp();
   const [activeTab,  setActiveTab]  = useState('All');
+  const [dateFilter, setDateFilter] = useState('All Time');
+  const [showDateFilterModal, setShowDateFilterModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   // Map cached context invoices through the richer local normaliser
   // Context stores a simplified shape; we need the billing-specific fields for display.
@@ -94,6 +298,7 @@ export default function InvoicesScreen({navigation}) {
       ipdAbr:      inv.ipdAbr      || '',
       time:        inv.time        || '',
       invType:     inv.invType     || '',
+      referralName: inv.referralName || '',
       paymentMode: inv.paymentMode || '',
       rawAmount:   typeof inv.rawAmount === 'number' ? inv.rawAmount
                     : Number(String(inv.amount || '0').replace(/[^\d.]/g, '')) || 0,
@@ -106,6 +311,19 @@ export default function InvoicesScreen({navigation}) {
   const [invoices,   setInvoices]   = useState(() => mapFromContext(cachedInvoices || []));
   const [loading,    setLoading]    = useState(!appReady && cachedInvoices.length === 0);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Auto-fetch on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (cachedInvoices && cachedInvoices.length > 0) {
+        setInvoices(mapFromContext(cachedInvoices));
+        setLoading(false);
+      } else if (appReady) {
+        // App is ready but no cached data - fetch immediately
+        fetchInvoices();
+      }
+    }, [cachedInvoices, appReady, mapFromContext])
+  );
 
   // Keep local state in sync when context updates (e.g. after login data fetch)
   useEffect(() => {
@@ -121,10 +339,10 @@ export default function InvoicesScreen({navigation}) {
   }, [appReady]);
 
   // Full re-fetch — only called on explicit pull-to-refresh
-  const fetchInvoices = useCallback(async () => {
+  const fetchInvoices = async () => {
     setRefreshing(true);
     let patientId = await AsyncStorage.getItem('patientId');
-    if (!patientId) { setRefreshing(false); return; }
+    if (!patientId) { setRefreshing(false); setLoading(false); return; }
 
     const result = await InvoiceApi.getAll(patientId, FROM_DATE, getToDate());
     if (result.success) {
@@ -141,35 +359,79 @@ export default function InvoicesScreen({navigation}) {
       await StorageService.saveInvoices(mapped);
     }
     setRefreshing(false);
-  }, []);
+    setLoading(false);
+  };
 
   const onRefresh = () => fetchInvoices();
 
-  const filtered = invoices.filter(inv =>
-    activeTab === 'All' ? true : inv.status === activeTab,
-  );
+  // Date filtering helper
+  const isWithinDateRange = (dateStr, filterType) => {
+    if (filterType === 'All Time') return true;
+    if (!dateStr) return false;
+
+    // Parse date string (format: "DD-MM-YYYY" or "YYYY-MM-DD")
+    let reportDate;
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        reportDate = new Date(dateStr);
+      } else {
+        // DD-MM-YYYY
+        reportDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      }
+    } else {
+      reportDate = new Date(dateStr);
+    }
+    
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const daysDiff = Math.floor((today - reportDate) / (1000 * 60 * 60 * 24));
+
+    switch (filterType) {
+      case 'Past Week':
+        return daysDiff <= 7;
+      case 'Past Month':
+        return daysDiff <= 30;
+      case 'Past 3 Months':
+        return daysDiff <= 90;
+      case 'Past 6 Months':
+        return daysDiff <= 180;
+      default:
+        return true;
+    }
+  };
+
+  const filtered = invoices.filter(inv => {
+    const matchStatus = activeTab === 'All' || inv.status === activeTab;
+    if (!matchStatus) return false;
+
+    const matchDate = isWithinDateRange(inv._isoDate || inv.date, dateFilter);
+    return matchDate;
+  });
 
   const totalPaid      = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.rawAmount, 0);
   const totalPending   = invoices.filter(i => i.status === 'Pending').reduce((s, i) => s + i.rawAmount, 0);
   const totalCancelled = invoices.filter(i => i.status === 'Cancelled').reduce((s, i) => s + i.rawAmount, 0);
 
+  const handleInvoicePress = (invoice) => {
+    navigation.navigate('InvoiceDetail', { invoice });
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-        }>
-
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
             <ArrowBackIcon size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Invoices & Bills</Text>
-          <TouchableOpacity onPress={onRefresh}>
+          <TouchableOpacity onPress={() => setShowDateFilterModal(true)} style={styles.filterIconBtn}>
             <FilterIcon size={22} color={colors.textSecondary} />
+            {dateFilter !== 'All Time' && <View style={styles.filterDot} />}
           </TouchableOpacity>
         </View>
 
@@ -185,92 +447,10 @@ export default function InvoicesScreen({navigation}) {
           ))}
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            {filtered.length} invoice{filtered.length !== 1 ? 's' : ''}
-          </Text>
-          <Text style={styles.sectionSub}>Newest first · pull to refresh</Text>
-        </View>
-
-        {/* Invoice list */}
-        {loading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{marginVertical: 48}} />
-        ) : filtered.length === 0 ? (
-          <View style={styles.empty}>
-            <View style={{width:64, height:64, borderRadius:32, backgroundColor:colors.primaryLight, alignItems:'center', justifyContent:'center', marginBottom:spacing.md}}>
-              <InvoiceIcon size={32} color={colors.primary} />
-            </View>
-            <Text style={styles.emptyTitle}>No invoices found</Text>
-            <Text style={styles.emptySub}>
-              {activeTab === 'All' ? 'No billing records on this account yet.' : `No ${activeTab.toLowerCase()} invoices.`}
-            </Text>
-          </View>
-        ) : (
-          filtered.map(inv => (
-            <TouchableOpacity
-              key={inv.id || Math.random().toString()}
-              style={styles.invRow}
-              onPress={() => Alert.alert(
-                `Invoice #${inv.id}`,
-                `Amount: ${inv.amount}\nPaid: ₹${inv.paidAmount.toLocaleString('en-IN')}\nBalance: ₹${inv.balance.toLocaleString('en-IN')}\nDate: ${inv.date}${inv.time ? ' ' + inv.time : ''}\nType: ${inv.invType || '—'}\nPayment: ${inv.paymentMode || '—'}\nStatus: ${inv.status}`,
-              )}
-              activeOpacity={0.8}>
-              <View style={[styles.invIcon, {backgroundColor: STATUS_BG[inv.status] || '#F3F4F6'}]}>
-                <DocumentIcon size={22} color={STATUS_COLORS[inv.status] || colors.textMuted} />
-              </View>
-              <View style={styles.invInfo}>
-                <View style={styles.invTopRow}>
-                  <Text style={styles.invId} numberOfLines={1}>
-                    {inv.ipdAbr || `#${inv.id}`}
-                  </Text>
-                  {inv.invType ? (
-                    <View style={[styles.typeBadge, {backgroundColor: inv.invType === 'IPD' ? '#FEE2E2' : '#DBEAFE'}]}>
-                      <Text style={[styles.typeBadgeText, {color: inv.invType === 'IPD' ? '#EF4444' : '#3B82F6'}]}>
-                        {inv.invType}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.invDate}>{inv.date}{inv.time ? ` · ${inv.time}` : ''}</Text>
-                <Text style={styles.invDesc} numberOfLines={1}>{inv.description}</Text>
-                {inv.paymentMode ? (
-                  <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
-                    <WalletIcon size={11} color={colors.textMuted} />
-                    <Text style={styles.invMeta}>{inv.paymentMode}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.invRight}>
-                <Text style={styles.invAmount}>{inv.amount}</Text>
-                <StatusChip status={inv.status} size="xs" />
-              </View>
-              <ArrowRightIcon size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          ))
-        )}
-
-        {/* Download hint */}
-        {!loading && (
-          <View style={styles.helpCard}>
-            <View style={[styles.helpIcon, {backgroundColor: colors.primaryLight}]}>
-              <DownloadIcon size={24} color={colors.primary} />
-            </View>
-            <View style={styles.helpInfo}>
-              <Text style={styles.helpTitle}>Need an Invoice?</Text>
-              <Text style={styles.helpSub}>Download your invoice and claim for insurance reimbursement.</Text>
-              <TouchableOpacity
-                style={styles.learnBtn}
-                onPress={() => Alert.alert('Download', 'PDF download feature coming soon!')}>
-                <Text style={styles.learnBtnText}>Learn More</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Summary */}
+        {/* Summary - Moved to top */}
         {!loading && invoices.length > 0 && (
           <>
-            <Text style={[styles.sectionTitle, {marginTop: spacing.base}]}>Summary</Text>
+            <Text style={[styles.sectionTitle, {marginBottom: spacing.sm}]}>Summary</Text>
             <View style={styles.summaryGrid}>
               <View style={styles.statBox}>
                 <Text style={styles.statNum}>{invoices.length}</Text>
@@ -307,14 +487,137 @@ export default function InvoicesScreen({navigation}) {
           </>
         )}
 
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {filtered.length} invoice{filtered.length !== 1 ? 's' : ''}
+          </Text>
+          <Text style={styles.sectionSub}>Newest first · pull to refresh</Text>
+        </View>
+      </View>
+
+      {/* Scrollable Invoice List */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+        }>
+
+        {/* Invoice list */}
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{marginVertical: 48}} />
+        ) : filtered.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={{width:64, height:64, borderRadius:32, backgroundColor:colors.primaryLight, alignItems:'center', justifyContent:'center', marginBottom:spacing.md}}>
+              <InvoiceIcon size={32} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>No invoices found</Text>
+            <Text style={styles.emptySub}>
+              {activeTab === 'All' ? 'No billing records on this account yet.' : `No ${activeTab.toLowerCase()} invoices.`}
+            </Text>
+          </View>
+        ) : (
+          filtered.map(inv => (
+            <TouchableOpacity
+              key={inv.id || Math.random().toString()}
+              style={styles.invRow}
+              onPress={() => handleInvoicePress(inv)}
+              activeOpacity={0.8}>
+              <View style={[styles.invIcon, {backgroundColor: STATUS_BG[inv.status] || '#F3F4F6'}]}>
+                <DocumentIcon size={22} color={STATUS_COLORS[inv.status] || colors.textMuted} />
+              </View>
+              <View style={styles.invInfo}>
+                <View style={styles.invTopRow}>
+                  <Text style={styles.invId} numberOfLines={1}>
+                    {inv.ipdAbr || `#${inv.id}`}
+                  </Text>
+                  {inv.invType ? (
+                    <View style={[styles.typeBadge, {backgroundColor: inv.invType === 'IPD' ? '#FEE2E2' : '#DBEAFE'}]}>
+                      <Text style={[styles.typeBadgeText, {color: inv.invType === 'IPD' ? '#EF4444' : '#3B82F6'}]}>
+                        {inv.invType}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.invDate}>{inv.date}{inv.time ? ` · ${inv.time}` : ''}</Text>
+                <Text style={styles.invDesc} numberOfLines={1}>{inv.description}</Text>
+                {inv.referralName ? (
+                  <View style={styles.invReferralRow}>
+                    <PersonIcon size={11} color={colors.primary} />
+                    <Text style={styles.invReferral}>Referred by: {inv.referralName}</Text>
+                  </View>
+                ) : null}
+                {inv.paymentMode ? (
+                  <View style={{flexDirection:'row', alignItems:'center', gap:4, marginTop:2}}>
+                    <WalletIcon size={11} color={colors.textMuted} />
+                    <Text style={styles.invMeta}>{inv.paymentMode}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.invRight}>
+                <Text style={styles.invAmount}>{inv.amount}</Text>
+                <StatusChip status={inv.status} size="xs" />
+              </View>
+              <ArrowRightIcon size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          ))
+        )}
+
       </ScrollView>
+
+      {/* Invoice Detail Modal */}
+      <InvoiceDetailModal
+        visible={modalVisible}
+        invoice={selectedInvoice}
+        onClose={() => setModalVisible(false)}
+      />
+
+      {/* Date Filter Modal */}
+      <Modal
+        visible={showDateFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateFilterModal(false)}>
+        <Pressable style={styles.dateModalOverlay} onPress={() => setShowDateFilterModal(false)}>
+          <Pressable style={styles.dateFilterModal} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.dateModalHeader}>
+              <Text style={styles.dateModalTitle}>Filter by Date</Text>
+              <TouchableOpacity onPress={() => setShowDateFilterModal(false)} style={styles.dateModalCloseBtn}>
+                <Text style={styles.dateModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dateModalOptions}>
+              {DATE_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.dateOption, dateFilter === f && styles.dateOptionSelected]}
+                  onPress={() => {
+                    setDateFilter(f);
+                    setShowDateFilterModal(false);
+                  }}
+                  activeOpacity={0.7}>
+                  <Text style={[styles.dateOptionText, dateFilter === f && styles.dateOptionTextSelected]}>{f}</Text>
+                  {dateFilter === f && (
+                    <View style={styles.checkIcon}>
+                      <Text style={styles.checkIconText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe:         {flex: 1, backgroundColor: colors.background},
-  scroll:       {padding: spacing.base, paddingTop: spacing['4xl'], paddingBottom: 32},
+  fixedHeader:  {backgroundColor: colors.background, paddingHorizontal: spacing.base, paddingTop: spacing['4xl'], paddingBottom: spacing.sm},
+  scrollContainer: {flex: 1},
+  scrollContent: {padding: spacing.base, paddingTop: spacing.sm, paddingBottom: 32},
   header:       {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.base},
   back:         {padding: 4},
   headerTitle:  {flex: 1, fontSize: 18, fontWeight: '700', color: colors.textPrimary},
@@ -323,6 +626,23 @@ const styles = StyleSheet.create({
   tabSelected:  {backgroundColor: colors.primary},
   tabText:      {fontSize: 13, color: colors.textSecondary, fontWeight: '500'},
   tabTextSelected: {color: '#fff', fontWeight: '700'},
+  filterIconBtn: {padding: 4, position: 'relative'},
+  filterDot: {position: 'absolute', top: 4, right: 4, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary},
+
+  // Date Filter Modal styles
+  dateModalOverlay: {flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl},
+  dateFilterModal: {backgroundColor: colors.surface, borderRadius: radius.xl, width: '100%', maxWidth: 320, ...shadows.lg},
+  dateModalHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border},
+  dateModalTitle: {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
+  dateModalCloseBtn: {width: 32, height: 32, borderRadius: 16, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center'},
+  dateModalCloseText: {fontSize: 18, color: colors.textMuted, fontWeight: '600'},
+  dateModalOptions: {padding: spacing.base},
+  dateOption: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.base, borderRadius: radius.md, marginBottom: spacing.xs},
+  dateOptionSelected: {backgroundColor: colors.primaryLight},
+  dateOptionText: {fontSize: 15, color: colors.textPrimary, fontWeight: '500'},
+  dateOptionTextSelected: {color: colors.primary, fontWeight: '700'},
+  checkIcon: {width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center'},
+  checkIconText: {color: '#fff', fontSize: 14, fontWeight: '700'},
   sectionHeader:{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md},
   sectionTitle: {fontSize: 15, fontWeight: '700', color: colors.textPrimary},
   sectionSub:   {fontSize: 11, color: colors.textMuted},
@@ -336,22 +656,270 @@ const styles = StyleSheet.create({
   invTopRow:    {flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2},
   typeBadge:    {paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4},
   typeBadgeText:{fontSize: 10, fontWeight: '800'},
-  invDate:      {fontSize: 11, color: colors.textMuted, marginTop: 1},
-  invDesc:      {fontSize: 12, color: colors.textSecondary, marginTop: 1},
+  invDate:      {fontSize: 12, color: colors.textPrimary, marginTop: 2, fontWeight: '700'},
+  invDesc:      {fontSize: 12, color: colors.textSecondary, marginTop: 2},
+  invReferralRow: {flexDirection:'row', alignItems:'center', gap:4, marginTop:3},
+  invReferral:  {fontSize: 11, color: colors.primary, fontWeight: '600'},
   invMeta:      {fontSize: 11, color: colors.textMuted, marginTop: 1},
   invRight:     {alignItems: 'flex-end', gap: 4},
   invAmount:    {fontSize: 14, fontWeight: '700', color: colors.textPrimary},
-  helpCard:     {flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.base, ...shadows.sm, gap: spacing.md, marginBottom: spacing.base},
-  helpIcon:     {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
-  helpInfo:     {flex: 1},
-  helpTitle:    {fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: 4},
-  helpSub:      {fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm},
-  learnBtn:     {borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 6, alignSelf: 'flex-start'},
-  learnBtnText: {color: colors.primary, fontSize: 12, fontWeight: '700'},
   summaryGrid:  {flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.md, ...shadows.sm, marginBottom: spacing.base},
   statBox:      {flex: 1, padding: spacing.md, alignItems: 'center'},
   statBorderLeft: {borderLeftWidth: 1, borderLeftColor: colors.border},
   statNum:      {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
   statLabel:    {fontSize: 11, color: colors.textMuted, marginTop: 2},
   statAmount:   {fontSize: 10, fontWeight: '600', marginTop: 2},
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#F9FFFE',
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    height: '90%',
+    ...shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  modalIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    padding: spacing.lg,
+    paddingBottom: 40,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  amountCard: {
+    backgroundColor: '#0ea5a2' + '10',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#0ea5a2' + '30',
+  },
+  amountLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  amountValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0ea5a2',
+    marginBottom: spacing.md,
+  },
+  amountBreakdown: {
+    gap: spacing.sm,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  breakdownLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  breakdownValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  infoSection: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.base,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: spacing.md,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  infoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+  },
+  chargeGroup: {
+    marginBottom: spacing.md,
+  },
+  chargeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  chargeName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  chargeAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0ea5a2',
+  },
+  chargeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingLeft: spacing.md,
+    marginBottom: 4,
+  },
+  chargeItemName: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  chargeItemAmount: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  paymentLogRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  paymentLogMode: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  paymentLogTime: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  paymentLogAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0ea5a2',
+  },
+  noteCard: {
+    backgroundColor: colors.warningLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  noteLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.warning,
+    marginBottom: 4,
+  },
+  noteText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: 0,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+  },
+  actionBtnPrimary: {
+    backgroundColor: '#0ea5a2',
+  },
+  actionBtnSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  actionBtnTextPrimary: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  actionBtnTextSecondary: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });
