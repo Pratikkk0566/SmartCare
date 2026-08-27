@@ -260,7 +260,8 @@ function mapInvoice(inv) {
   const referralName = inv.refral_name && inv.refral_name !== '0' ? inv.refral_name : '';
 
   return {
-    id:          String(inv.location_Wise_Invoice_no || inv.invoice_id || ''),
+    id:          String(inv.invoice_id || inv.id || inv.location_Wise_Invoice_no || ''),
+    invoiceNo:   String(inv.location_Wise_Invoice_no || inv.invoice_sequence_number || inv.invoice_no || inv.invoice_id || ''),
     ipdAbr:      inv.ipdAbirvationId || '',             // e.g. "SCD/IP/25/0305"
     date:        displayDate,
     time:        displayTime,

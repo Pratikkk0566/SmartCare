@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
@@ -28,6 +29,47 @@ import {
   DocumentIcon,
 } from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
+import {InvoiceApi} from '../../API/Api';
+import {generateInvoiceHtml, mapInvoiceRecord} from '../../utils/invoiceHtmlGenerator';
+
+// Converts binary string / stream into safe base64 without InvalidCharacterError
+function toBase64(str) {
+  if (!str) return '';
+  const trimmed = String(str).replace(/^data:application\/pdf;base64,/, '').trim();
+  // If already base64 string
+  if (trimmed.startsWith('JVBERi') || /^[A-Za-z0-9+/=]+$/.test(trimmed.slice(0, 80))) {
+    return trimmed;
+  }
+
+  // Convert binary character codes into base64
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  let i = 0;
+  const len = str.length;
+  while (i < len) {
+    const c1 = str.charCodeAt(i++) & 0xff;
+    if (i === len) {
+      out += chars.charAt(c1 >> 2);
+      out += chars.charAt((c1 & 0x3) << 4);
+      out += '==';
+      break;
+    }
+    const c2 = str.charCodeAt(i++) & 0xff;
+    if (i === len) {
+      out += chars.charAt(c1 >> 2);
+      out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xf0) >> 4));
+      out += chars.charAt((c2 & 0xf) << 2);
+      out += '=';
+      break;
+    }
+    const c3 = str.charCodeAt(i++) & 0xff;
+    out += chars.charAt(c1 >> 2);
+    out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xf0) >> 4));
+    out += chars.charAt(((c2 & 0xf) << 2) | ((c3 & 0xc0) >> 6));
+    out += chars.charAt(c3 & 0x3f);
+  }
+  return out;
+}
 
 // Helper component for info rows
 function InfoRow({icon: Icon, label, value}) {
@@ -46,6 +88,45 @@ function InfoRow({icon: Icon, label, value}) {
 export default function InvoiceDetailScreen({route, navigation}) {
   const {invoice} = route.params || {};
   const [downloading, setDownloading] = useState(false);
+  const [detailedInvoice, setDetailedInvoice] = useState({});
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // Combine tapped item data with any extra print details
+  const tappedRaw = invoice?._raw || {};
+  const raw = {...tappedRaw, ...detailedInvoice};
+
+  // Database invoice ID required by backend APIs (e.g. 2440)
+  const invoiceId = tappedRaw.invoice_id || invoice?.invoice_id || invoice?.id || raw.invoice_id || 'N/A';
+  // Human readable invoice / sequence number for display (e.g. 1078 or SCD/IP/25/0305)
+  const invoiceNo = tappedRaw.location_Wise_Invoice_no || tappedRaw.invoice_sequence_number || tappedRaw.invoice_no || invoice?.invoiceNo || invoiceId;
+  const displayId = tappedRaw.ipdAbirvationId || `#${invoiceNo}`;
+
+  // Fetch full print details on mount
+  useEffect(() => {
+    async function fetchDetails() {
+      if (!invoiceId || invoiceId === 'N/A') return;
+      try {
+        setLoadingDetails(true);
+        const invoicePid = tappedRaw.patientid || tappedRaw.patientId || tappedRaw.patient_id || invoice?.patientId || invoice?.patient_id;
+        const storedPid = (await AsyncStorage.getItem('patientId')) || (await AsyncStorage.getItem('clientId'));
+        const patientId = Number(invoicePid || storedPid || 0);
+
+        console.log('[InvoiceDetailScreen] Fetching print details for DB invoice_id:', invoiceId, 'patientId:', patientId);
+        const res = await InvoiceApi.getPrintDetails(patientId, invoiceId);
+        if (res?.success && res?.data) {
+          const detailData = res.data.data || res.data;
+          console.log('[InvoiceDetailScreen] Successfully loaded invoice print details for invoice:', invoiceId);
+          setDetailedInvoice(prev => ({...prev, ...detailData}));
+        }
+      } catch (err) {
+        console.log('[InvoiceDetailScreen] Error fetching print details:', err.message);
+      } finally {
+        setLoadingDetails(false);
+      }
+    }
+
+    fetchDetails();
+  }, [invoiceId]);
 
   if (!invoice) {
     return (
@@ -64,17 +145,12 @@ export default function InvoiceDetailScreen({route, navigation}) {
     );
   }
 
-  const raw = invoice._raw || {};
-  const invoiceId = invoice.id || raw.invoice_id || raw.location_Wise_Invoice_no || 'N/A';
-  const invoiceNo = raw.location_Wise_Invoice_no || raw.invoice_no || raw.billno || invoiceId;
-  const displayId = raw.ipdAbirvationId || `#${invoiceNo}`;
-
   // Charges breakdown & payment logs
   const chargeTransactions = raw.chargeTransaction || [];
   const paymentLogs = raw.payment_log || [];
 
   // Financial values
-  const rawAmount = Number(invoice.rawAmount ?? raw.net_amount ?? raw.totalAmount ?? 0);
+  const rawAmount = Number(invoice.rawAmount ?? raw.net_amount ?? raw.totalAmount ?? raw.invoice_amount ?? 0);
   const paidAmount = Number(invoice.paidAmount ?? raw.paid_amount ?? rawAmount);
   const balance = Number(invoice.balance ?? raw.balance_amount ?? Math.max(0, rawAmount - paidAmount));
   const discountAmount = Number(raw.discount_amount ?? 0);
@@ -82,13 +158,16 @@ export default function InvoiceDetailScreen({route, navigation}) {
 
   // Request storage permission on older Android versions if needed
   const checkStoragePermission = async () => {
-    if (Platform.OS === 'android' && Platform.Version < 33) {
+    if (Platform.OS === 'android') {
+      if (Platform.Version >= 33) {
+        return true;
+      }
       try {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
           {
             title: 'Storage Permission Required',
-            message: 'SmartCare needs access to save invoice PDF files to your device.',
+            message: 'SmartCare needs access to save invoice files to your device.',
             buttonNeutral: 'Ask Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
@@ -103,7 +182,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
     return true;
   };
 
-  // Download Invoice Receipt / Text File
+  // Download Invoice PDF and save to Form API
   const handleDownloadInvoice = async () => {
     try {
       setDownloading(true);
@@ -114,6 +193,75 @@ export default function InvoiceDetailScreen({route, navigation}) {
         return;
       }
 
+      // Prioritize the invoice's own patientId over generic stored ID so we never get another patient's data
+      const invoicePid = raw.patientid || raw.patientId || raw.patient_id || invoice?.patientId || invoice?.patient_id;
+      const storedPid = (await AsyncStorage.getItem('patientId')) || (await AsyncStorage.getItem('clientId'));
+      const patientId = Number(invoicePid || storedPid || 0);
+
+      console.log('[InvoiceDetailScreen] Using verified patientId for invoice:', patientId);
+
+      // 1. Fetch latest print details if needed
+      let fullDetail = {...raw};
+      try {
+        console.log('[InvoiceDetailScreen] Calling getPrintDetails API with patientId:', patientId, 'invoiceId:', invoiceId);
+        const printRes = await InvoiceApi.getPrintDetails(patientId, invoiceId);
+        if (printRes?.success && printRes?.data) {
+          const detailData = printRes.data.data || printRes.data;
+          fullDetail = {...fullDetail, ...detailData};
+          setDetailedInvoice(prev => ({...prev, ...detailData}));
+        }
+      } catch (err) {
+        console.log('[InvoiceDetailScreen] Could not refresh print details before download:', err.message);
+      }
+
+      // 2. Generate XHTML string code for this specific patient
+      const htmlContent = generateInvoiceHtml(fullDetail);
+      console.log('[InvoiceDetailScreen] Generated XHTML content length:', htmlContent.length);
+
+      // 3. Save Form HTML to master patient form save endpoint with unique title to prevent collisions
+      const safeInvNo = String(invoiceNo).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const formTitle = `INVOICE_${patientId}_${safeInvNo}`;
+
+      const formPayload = {
+        formTitle,
+        patientId,
+        htmlContent,
+      };
+
+      console.log('[InvoiceDetailScreen] Submitting invoice form to backend save API with patientId:', patientId, 'formTitle:', formTitle);
+      const saveRes = await InvoiceApi.saveInvoiceForm(patientId, formPayload);
+      console.log('[InvoiceDetailScreen] Save Form API result:', JSON.stringify(saveRes));
+
+      // Wait a moment for server to finish PDF conversion to disk
+      await new Promise(resolve => setTimeout(resolve, 1200));
+
+      // 4. Download document PDF from downloadDocuments API with EXACT same patientId and unique filename
+      const clinicId = (await AsyncStorage.getItem('CLINICID')) || 'aureus';
+      const returnedFileName = saveRes?.data?.fileName || saveRes?.data?.data?.fileName || saveRes?.data?.data?.documentPath;
+      
+      const primaryDocUrl = returnedFileName
+        ? (returnedFileName.startsWith('http') ? returnedFileName : `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${returnedFileName}`)
+        : `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${formTitle}.pdf`;
+
+      const secondaryDocUrl = `http://192.168.1.194:9090/HISDATA/liveData/${clinicId}/documents/${formTitle}.pdf`;
+
+      console.log('[InvoiceDetailScreen] Requesting document download with patientId:', patientId, 'file:', primaryDocUrl);
+
+      let docRes = await InvoiceApi.downloadDocuments(patientId, primaryDocUrl);
+      console.log('[InvoiceDetailScreen] DownloadDocuments primary response status:', docRes?.success);
+
+      // If primary returns empty/error, attempt with the secondary direct HISDATA port
+      let rawData = docRes?.data?.base64 || docRes?.data?.pdfData || docRes?.data?.pdfBase64 || docRes?.data?.document || docRes?.data?.data || docRes?.data?.rawData || (typeof docRes?.data === 'string' ? docRes.data : null);
+
+      if (!rawData || (typeof rawData === 'string' && rawData.length < 50)) {
+        console.log('[InvoiceDetailScreen] Retrying downloadDocuments with fallback URL:', secondaryDocUrl);
+        const retryRes = await InvoiceApi.downloadDocuments(patientId, secondaryDocUrl);
+        if (retryRes?.success && retryRes?.data) {
+          docRes = retryRes;
+          rawData = docRes?.data?.base64 || docRes?.data?.pdfData || docRes?.data?.pdfBase64 || docRes?.data?.document || docRes?.data?.data || docRes?.data?.rawData || (typeof docRes?.data === 'string' ? docRes.data : null);
+        }
+      }
+
       const downloadDir = Platform.OS === 'android'
         ? `${RNFS.DownloadDirectoryPath}/SmartCare/Invoices`
         : `${RNFS.DocumentDirectoryPath}/SmartCare/Invoices`;
@@ -122,59 +270,84 @@ export default function InvoiceDetailScreen({route, navigation}) {
         console.log('Directory exists:', err),
       );
 
-      const safeInvNo = String(invoiceNo).replace(/[^a-zA-Z0-9_-]/g, '_');
-      const timestamp = Date.now();
-      const fileName = `Invoice_${safeInvNo}_${timestamp}.txt`;
-      const filePath = `${downloadDir}/${fileName}`;
+      const cleanPatientName = String(raw.patient_name || raw.patientName || 'Patient')
+        .trim()
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .replace(/_+/g, '_');
+      const rawDate = String(raw.invoice_date_time || raw.invoiceDate || invoice.date || '')
+        .trim()
+        .split(' ')[0]
+        .replace(/[^a-zA-Z0-9-]/g, '_');
+      const cleanDate = rawDate || new Date().toISOString().split('T')[0];
 
-      const receiptContent = `
-=====================================================
-               SMARTCARE MEDICAL INVOICE
-=====================================================
-Invoice No   : ${invoiceNo}
-Encounter ID : ${displayId}
-Date & Time  : ${invoice.date || ''} ${invoice.time ? '· ' + invoice.time : ''}
-Invoice Type : ${raw.invoice_type || (raw.ipd_id ? 'IPD' : 'OPD')}
-Status       : ${invoice.status || 'Paid'}
+      const pdfFileName = `Invoice_${cleanDate}_${cleanPatientName}_${safeInvNo}.pdf`;
+      const pdfFilePath = `${downloadDir}/${pdfFileName}`;
 
-PATIENT INFORMATION:
------------------------------------------------------
-Name         : ${raw.patient_name || '—'}
-UHID         : ${raw.uhid || '—'}
-Age / Gender : ${raw.age || '—'} / ${raw.gender || '—'}
-Contact      : ${raw.contact_number || '—'}
+      let pdfSaved = false;
 
-FINANCIAL SUMMARY:
------------------------------------------------------
-Total Amount : ₹${rawAmount.toFixed(2)}
-Paid Amount  : ₹${paidAmount.toFixed(2)}
-Balance Due  : ₹${balance.toFixed(2)}
-Discount     : ₹${discountAmount.toFixed(2)} (${discountPercent}%)
+      if (docRes?.success && docRes?.data) {
+        const resData = docRes.data;
 
-PAYMENT DETAILS:
------------------------------------------------------
-Payment Mode : ${invoice.paymentMode || raw.payment_mode || 'Cash'}
-Payment Date : ${raw.transaction?.payment_time?.split(' ')[0] || invoice.date || '—'}
-Payment Note : ${raw.transaction?.payment_note || 'Settled'}
+        // 1. Check if URL is returned
+        const pdfUrl = resData.pdfUrl || resData.fileUrl || resData.url || (typeof resData === 'string' && resData.startsWith('http') ? resData : null);
+        if (pdfUrl) {
+          console.log('[InvoiceDetailScreen] Downloading PDF from URL:', pdfUrl);
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: pdfUrl,
+            toFile: pdfFilePath,
+            background: true,
+            discretionary: true,
+          }).promise;
 
-INVOICE INFORMATION:
------------------------------------------------------
-Consultant   : ${raw.counsultant || raw.doctor || '—'}
-Qualification: ${raw.counsultant_qualification || '—'}
-Referred By  : ${raw.refral_name && raw.refral_name !== '0' ? raw.refral_name : 'Direct'}
-Prepared By  : ${raw.invoice_prepared_by || '—'}
-=====================================================
-Thank you for choosing SmartCare.
-=====================================================
-      `.trim();
+          if (downloadResult.statusCode === 200) {
+            pdfSaved = true;
+          }
+        }
 
-      await RNFS.writeFile(filePath, receiptContent, 'utf8');
+        // 2. Check if base64 or raw string is returned
+        if (!pdfSaved && rawData) {
+          const base64Str = toBase64(typeof rawData === 'string' ? rawData : JSON.stringify(rawData));
+          if (base64Str && base64Str.length > 50) {
+            console.log('[InvoiceDetailScreen] Writing base64 PDF (length: ' + base64Str.length + ') to:', pdfFilePath);
+            await RNFS.writeFile(pdfFilePath, base64Str, 'base64');
+            pdfSaved = true;
+          }
+        }
+      }
 
-      Alert.alert(
-        'Download Complete',
-        `Invoice details saved to:\nDownload/SmartCare/Invoices/\n\nFile: ${fileName}`,
-        [{text: 'OK'}],
-      );
+      // Check fallback from saveRes if downloadDocuments didn't return data
+      if (!pdfSaved && saveRes?.success && saveRes?.data) {
+        const sData = saveRes.data.data || saveRes.data;
+        const pdfUrl = sData.pdfUrl || sData.fileUrl || sData.url;
+        const pdfBase64 = sData.pdfData || sData.base64 || sData.rawData;
+
+        if (pdfUrl) {
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: pdfUrl,
+            toFile: pdfFilePath,
+            background: true,
+            discretionary: true,
+          }).promise;
+          if (downloadResult.statusCode === 200) pdfSaved = true;
+        } else if (pdfBase64) {
+          const b64 = toBase64(String(pdfBase64));
+          if (b64) {
+            await RNFS.writeFile(pdfFilePath, b64, 'base64');
+            pdfSaved = true;
+          }
+        }
+      }
+
+      if (pdfSaved) {
+        Alert.alert(
+          'Download Complete',
+          `Invoice PDF successfully downloaded!\n\nLocation: Download/SmartCare/Invoices/\nFile: ${pdfFileName}`,
+          [{text: 'OK'}],
+        );
+      } else {
+        const errMsg = docRes?.error || saveRes?.error || 'Could not retrieve PDF data from server.';
+        Alert.alert('Download Issue', `Server response: ${errMsg}`);
+      }
     } catch (error) {
       console.log('[InvoiceDetailScreen] Download error:', error);
       Alert.alert('Download Error', error.message || 'Failed to save invoice.');
@@ -372,7 +545,37 @@ Thank you for choosing SmartCare.
           />
         </View>
 
-        {/* 7. PAYMENT HISTORY */}
+        {/* 7. CLINICAL DETAILS (if present) */}
+        {(() => {
+          const mapped = mapInvoiceRecord(raw) || {};
+          const clinicalFields = mapped.clinical || [];
+          if (clinicalFields.length === 0) return null;
+          return (
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>CLINICAL DETAILS</Text>
+              {clinicalFields.map((f, i) => (
+                <InfoRow key={i} icon={DocumentIcon} label={f.label} value={f.value} />
+              ))}
+            </View>
+          );
+        })()}
+
+        {/* 8. ADDITIONAL DETAILS (Dynamic Fields) */}
+        {(() => {
+          const mapped = mapInvoiceRecord(raw) || {};
+          const extraFields = mapped.extra || [];
+          if (extraFields.length === 0) return null;
+          return (
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>ADDITIONAL DETAILS</Text>
+              {extraFields.map((f, i) => (
+                <InfoRow key={i} icon={DocumentIcon} label={f.label} value={f.value} />
+              ))}
+            </View>
+          );
+        })()}
+
+        {/* 9. PAYMENT HISTORY */}
         {paymentLogs.length > 1 && (
           <View style={styles.infoSection}>
             <Text style={styles.sectionLabel}>PAYMENT HISTORY</Text>
@@ -390,7 +593,7 @@ Thank you for choosing SmartCare.
           </View>
         )}
 
-        {/* 8. Note if available */}
+        {/* 10. Note if available */}
         {raw.invoice_note && (
           <View style={styles.noteCard}>
             <Text style={styles.noteLabel}>Note</Text>

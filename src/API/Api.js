@@ -10,6 +10,7 @@ const HISAPI_BASE     = 'https://saas.smartcarehis.com:8443/hisapi_test/';
 const BILLING_BASE    = 'https://saas.smartcarehis.com:8443/billing/';
 const SMARTCARE_BASE  = 'https://saas.smartcarehis.com:8443/smartcaremain/';
 const IPD_BASE        = 'https://saas.smartcarehis.com:8443/ipd/';
+const ROOT_BASE       = 'https://saas.smartcarehis.com:8443/';
 
 // Centralized Clinic Configuration
 export const CLINIC_OPTIONS = [
@@ -105,7 +106,7 @@ async function apiCall(baseUrl, endpoint, options = {}, clientId = 0, preAuth = 
     } else {
       const text = await response.text();
       // Try parsing anyway in case content-type header is wrong
-      try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200) }; }
+      try { data = JSON.parse(text); } catch { data = { message: text?.slice(0, 200), rawData: text }; }
     }
 
     console.log('[API]', url, '→ status:', response.status);
@@ -456,14 +457,146 @@ export const InvoiceApi = {
   },
 
   // Get invoice print details (for PDF/print view)
-  // Website: GET apiHost + Port1 + '/billing/invoice/printdetails'
-  getPrintDetails: async (clientId, invoiceId) =>
-    apiCall(
+  // Endpoint: POST/GET billing/invoice/printdetails with { invoiceId, showMedicines: true, showradiologyNeuro: true }
+  getPrintDetails: async (clientId, invoiceId) => {
+    const pid = Number(clientId) || 0;
+    const invId = String(invoiceId);
+
+    // Try POST first as expected by billing/invoice/printdetails
+    const postRes = await apiCall(
       BILLING_BASE,
-      `invoice/printdetails?invoiceId=${invoiceId}`,
+      'invoice/printdetails',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          invoiceId: invId,
+          showMedicines: true,
+          showradiologyNeuro: true,
+        }),
+      },
+      pid,
+    );
+
+    if (postRes.success && postRes.data) {
+      return postRes;
+    }
+
+    // Fallback to GET query params if POST fails
+    return apiCall(
+      BILLING_BASE,
+      `invoice/printdetails?invoiceId=${invId}&showMedicines=true&showradiologyNeuro=true`,
       { method: 'GET' },
-      clientId,
-    ),
+      pid,
+    );
+  },
+
+  // Save invoice generated HTML form
+  // Endpoint: POST https://saas.smartcarehis.com:8443/master/patient/form/invoice/save/{clinicId}
+  saveInvoiceForm: async (clientId, { formTitle, patientId, htmlContent }) => {
+    const clinicId = (await getItem('CLINICID')) || 'aureus';
+    const pid = Number(clientId || patientId) || 0;
+    const patId = Number(patientId || pid) || 0;
+
+    const payload = {
+      formTitle: formTitle || `INVOICE_${patId}`,
+      patientId: patId,
+      htmlContent: htmlContent || '',
+    };
+
+    console.log(`[InvoiceApi] Saving invoice HTML form to: ${ROOT_BASE}master/patient/form/invoice/save/${clinicId}`);
+
+    return apiCall(
+      ROOT_BASE,
+      `master/patient/form/invoice/save/${clinicId}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      pid,
+    );
+  },
+
+  // Download generated document PDF from server as binary byte stream / Blob
+  // Endpoint: POST https://saas.smartcarehis.com:8443/smartcaremain/patient/downloadDocuments
+  // Body: { fileName: "https://saas.smartcarehis.com:8443/HISDATA/liveData/{clinicId}/documents/{formTitle}.pdf" }
+  downloadDocuments: async (clientId, fileName) => {
+    const pid = Number(clientId) || 0;
+    const url = `${SMARTCARE_BASE}patient/downloadDocuments`;
+    const headers = await buildHeaders(pid);
+
+    console.log(`[InvoiceApi] Calling downloadDocuments with fileName: ${fileName}, patientId: ${pid}`);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+          'Accept': 'application/pdf, application/octet-stream, application/json, */*',
+        },
+        body: JSON.stringify({
+          fileName,
+          patientId: pid,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      console.log('[InvoiceApi] downloadDocuments response contentType:', contentType);
+
+      if (contentType.includes('application/json')) {
+        const json = await response.json();
+        return { success: true, data: json };
+      }
+
+      // Read directly as ArrayBuffer (binary byte stream) to preserve raw PDF bytes
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      console.log('[InvoiceApi] downloadDocuments received raw binary bytes length:', bytes.length);
+
+      // Convert Uint8Array bytes to clean Base64
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+      let out = '';
+      let i = 0;
+      const len = bytes.length;
+      while (i < len) {
+        const c1 = bytes[i++];
+        if (i === len) {
+          out += chars.charAt(c1 >> 2);
+          out += chars.charAt((c1 & 0x3) << 4);
+          out += '==';
+          break;
+        }
+        const c2 = bytes[i++];
+        if (i === len) {
+          out += chars.charAt(c1 >> 2);
+          out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xf0) >> 4));
+          out += chars.charAt((c2 & 0xf) << 2);
+          out += '=';
+          break;
+        }
+        const c3 = bytes[i++];
+        out += chars.charAt(c1 >> 2);
+        out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xf0) >> 4));
+        out += chars.charAt(((c2 & 0xf) << 2) | ((c3 & 0xc0) >> 6));
+        out += chars.charAt(c3 & 0x3f);
+      }
+
+      return {
+        success: true,
+        data: {
+          base64: out,
+          byteLength: bytes.length,
+        },
+      };
+    } catch (error) {
+      console.log('[InvoiceApi] downloadDocuments error:', error.message);
+      return { success: false, error: error.message };
+    }
+  },
 
   // Capture payment for an invoice
   // Website: POST apiHost + Port1 + '/billing/payment/capture-payment'
