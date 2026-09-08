@@ -324,9 +324,6 @@ export default function AppointmentsScreen({navigation}) {
                   </View>
                   <Text style={s.doctorName} numberOfLines={1}>{item.name}</Text>
                   <Text style={s.doctorSpecialty} numberOfLines={1}>{item.specialty}</Text>
-                  <View style={s.doctorRating}>
-                    <Text style={s.doctorRatingText}>⭐ {item.rating.toFixed(1)}</Text>
-                  </View>
                   <Text style={s.doctorFee}>₹{item.consultationFee}</Text>
                 </TouchableOpacity>
               );
@@ -476,7 +473,7 @@ function AppointmentCard({item, showStatus, compact}) {
       <View style={c.metaRow}>
         <MetaItem icon={CalendarIcon} text={item.date} />
         <MetaItem icon={ClockIcon}    text={item.time} />
-        <MetaItem icon={isOnline ? VideoIcon : PinIcon} text={isOnline ? 'Online' : item.location} />
+        <MetaItem icon={isOnline ? VideoIcon : HospitalBuildingIcon} text={isOnline ? 'Online' : item.location} />
       </View>
       <View style={c.bottomRow}>
         <View style={c.visitTag}>
@@ -518,8 +515,8 @@ const c = StyleSheet.create({
   avatar:      {width: 46, height: 46, borderRadius: 23, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center'},
   avatarText:  {fontSize: 15, fontWeight: '800', color: colors.primary},
   info:        {flex: 1},
-  docName:     {fontSize: 14, fontWeight: '800', color: colors.textPrimary},
-  specialty:   {fontSize: 12, color: colors.textSecondary, marginTop: 2},
+  docName:     {fontSize: 14, fontWeight: '800', color: colors.textPrimary, textTransform: 'uppercase'},
+  specialty:   {fontSize: 12, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase'},
   divider:     {height: 1, backgroundColor: colors.border, marginVertical: spacing.md},
   metaRow:     {flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap'},
   metaItem:    {flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, minWidth: 100},
@@ -546,8 +543,8 @@ const c = StyleSheet.create({
   avatarSmall:        {width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center'},
   avatarTextSmall:    {fontSize: 14, fontWeight: '800', color: colors.primary},
   infoCompact:        {flex: 1},
-  docNameCompact:     {fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 2},
-  specialtyCompact:   {fontSize: 11, color: colors.textSecondary, marginBottom: 4},
+  docNameCompact:     {fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 2, textTransform: 'uppercase'},
+  specialtyCompact:   {fontSize: 11, color: colors.textSecondary, marginBottom: 4, textTransform: 'uppercase'},
   feeCompactInline:   {fontSize: 12, fontWeight: '700', color: colors.primary},
   
   // Highlighted date/time box
@@ -650,7 +647,7 @@ const s = StyleSheet.create({
   specList:          {paddingHorizontal: spacing.base, gap: spacing.sm},
   specChip:          {alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: radius.lg, minWidth: 90, gap: spacing.sm},
   specIconWrap:      {width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center'},
-  specChipName:      {fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 13},
+  specChipName:      {fontSize: 10, fontWeight: '700', textAlign: 'center', lineHeight: 13, textTransform: 'uppercase'},
   
   // Doctors section
   doctorsSection:    {marginBottom: spacing.md},
@@ -658,8 +655,8 @@ const s = StyleSheet.create({
   doctorCard:        {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, width: 130, alignItems: 'center', ...shadows.sm, borderWidth: 1, borderColor: colors.border},
   doctorAvatar:      {width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm},
   doctorAvatarText:  {fontSize: 18, fontWeight: '900'},
-  doctorName:        {fontSize: 13, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 4},
-  doctorSpecialty:   {fontSize: 10, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.sm},
+  doctorName:        {fontSize: 13, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 4, textTransform: 'uppercase'},
+  doctorSpecialty:   {fontSize: 10, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.sm, textTransform: 'uppercase'},
   doctorRating:      {backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.full, marginBottom: spacing.xs},
   doctorRatingText:  {fontSize: 10, fontWeight: '700', color: colors.primary},
   doctorFee:         {fontSize: 14, fontWeight: '800', color: colors.primary},

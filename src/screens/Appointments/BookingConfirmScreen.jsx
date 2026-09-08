@@ -226,11 +226,6 @@ export default function BookingConfirmScreen({navigation, route}) {
           <View style={s.docInfo}>
             <Text style={s.docName}>{d.name}</Text>
             <Text style={s.docSpec}>{d.specialty} · {d.qualifications}</Text>
-            <View style={s.ratingRow}>
-              <StarIcon size={12} color="#F59E0B" />
-              <Text style={s.ratingText}>{d.rating.toFixed(1)}</Text>
-              <Text style={s.reviewsText}>({d.reviewCount.toLocaleString()} reviews)</Text>
-            </View>
           </View>
         </View>
 
@@ -243,7 +238,7 @@ export default function BookingConfirmScreen({navigation, route}) {
           <Divider />
           <DetailRow icon={vm.Icon}      label="Visit Type" value={vm.label} tag={vm.savePct ? `${vm.savePct}% off` : null} />
           <Divider />
-          <DetailRow icon={PinIcon}      label="Location"   value={visitType === 'clinic' ? d.clinic : 'Online consultation'} />
+          <DetailRow icon={HospitalBuildingIcon} label="Location"   value={visitType === 'clinic' ? d.clinic : 'Online consultation'} />
         </View>
 
         {/* ── Price breakdown ── */}
@@ -362,8 +357,8 @@ const s = StyleSheet.create({
   docAvatar:    {width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center'},
   docAvatarText:{fontSize: 18, fontWeight: '900'},
   docInfo:      {flex: 1, gap: 3},
-  docName:      {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
-  docSpec:      {fontSize: 11, color: colors.textSecondary},
+  docName:      {fontSize: 15, fontWeight: '800', color: colors.textPrimary, textTransform: 'uppercase'},
+  docSpec:      {fontSize: 11, color: colors.textSecondary, textTransform: 'uppercase'},
   ratingRow:    {flexDirection: 'row', alignItems: 'center', gap: 4},
   ratingText:   {fontSize: 12, fontWeight: '700', color: colors.textPrimary},
   reviewsText:  {fontSize: 11, color: colors.textMuted},

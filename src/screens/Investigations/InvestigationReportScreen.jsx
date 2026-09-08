@@ -128,15 +128,22 @@ export default function InvestigationReportScreen({navigation, route}) {
       console.log('📥 PDF Response:', pdfResponse);
 
       if (pdfResponse.success && pdfResponse.data) {
-        // Create directory structure: Download/SmartCare/Investigation/
-        const downloadDir = Platform.OS === 'android' 
-          ? `${RNFS.DownloadDirectoryPath}/SmartCare/Investigation`
-          : `${RNFS.DocumentDirectoryPath}/SmartCare/Investigation`;
+        // Use Downloads directory for all platforms and versions
+        let downloadDir = `${RNFS.DownloadDirectoryPath}/SmartCare/Investigation`;
 
-        // Ensure directory exists
-        await RNFS.mkdir(downloadDir, {
-          NSURLIsExcludedFromBackupKey: false // iOS: allow iCloud backup
-        }).catch(err => console.log('Directory already exists or error:', err));
+        // Ensure directory exists with better error handling
+        try {
+          await RNFS.mkdir(downloadDir, {
+            NSURLIsExcludedFromBackupKey: false // iOS: allow iCloud backup
+          });
+          console.log('📁 Created directory:', downloadDir);
+        } catch (err) {
+          if (!err.message.includes('already exists')) {
+            console.log('📁 Directory creation error:', err);
+            // Fallback to Downloads root directory
+            downloadDir = RNFS.DownloadDirectoryPath;
+          }
+        }
 
         // Generate filename with timestamp and patient name
         const timestamp = new Date().getTime();
@@ -163,7 +170,7 @@ export default function InvestigationReportScreen({navigation, route}) {
           if (downloadResult.statusCode === 200) {
             Alert.alert(
               'Download Complete',
-              `PDF saved to:\nDownload/SmartCare/Investigation/\n\nFile: ${fileName}`,
+              `PDF saved to:\nInternal Storage > Download > SmartCare > Investigation\n\nFile: ${fileName}`,
               [
                 { text: 'OK', style: 'default' }
               ]
@@ -178,7 +185,7 @@ export default function InvestigationReportScreen({navigation, route}) {
           
           Alert.alert(
             'Download Complete',
-            `PDF saved to:\nDownload/SmartCare/Investigation/\n\nFile: ${fileName}`,
+            `PDF saved to:\nInternal Storage > Download > SmartCare > Investigation\n\nFile: ${fileName}`,
             [
               { text: 'OK', style: 'default' }
             ]
@@ -198,26 +205,23 @@ export default function InvestigationReportScreen({navigation, route}) {
     }
   };
 
-  // Request storage permission for Android
+  // Request storage permission for Downloads directory
   const requestStoragePermission = async () => {
     if (Platform.OS !== 'android') return true;
 
     try {
       console.log('🔐 Android API Level:', Platform.Version);
       
-      // Android 13+ (API 33+) - Use scoped storage, no permission needed for app-specific directories
-      // But we're writing to public Downloads, so we check if we can write
+      // Android 13+ has scoped storage for Downloads
       if (Platform.Version >= 33) {
-        console.log('🔐 Android 13+: Using scoped storage (no permission needed for Downloads)');
-        // Android 13+ doesn't need WRITE_EXTERNAL_STORAGE for public Downloads folder
-        // The system automatically grants access
+        console.log('🔐 Android 13+: Using Downloads directory (scoped storage)');
         return true;
       }
       
-      // Android 10-12 (API 29-32) and below
-      console.log('🔐 Android 10-12: Checking if permission already granted...');
+      // Android 10-12 needs WRITE_EXTERNAL_STORAGE for Downloads
+      console.log('🔐 Android 10-12: Checking WRITE_EXTERNAL_STORAGE permission...');
       
-      // First check if permission is already granted
+      // Check if permission is already granted
       const checkResult = await PermissionsAndroid.check(
         PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
       );
@@ -225,11 +229,11 @@ export default function InvestigationReportScreen({navigation, route}) {
       console.log('🔐 Permission already granted?', checkResult);
       
       if (checkResult) {
-        console.log('🔐 Permission already granted, no need to request');
+        console.log('🔐 Permission already granted, proceeding');
         return true;
       }
       
-      // Permission not granted, request it
+      // Request permission
       console.log('🔐 Requesting WRITE_EXTERNAL_STORAGE permission...');
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,

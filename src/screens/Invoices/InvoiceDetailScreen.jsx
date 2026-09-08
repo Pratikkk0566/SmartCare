@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,13 @@ import {
   PermissionsAndroid,
   Share,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {colors} from '../../theme/colors';
-import {spacing} from '../../theme/spacing';
-import {radius} from '../../theme/radius';
-import {shadows} from '../../theme/shadows';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { radius } from '../../theme/radius';
+import { shadows } from '../../theme/shadows';
 import {
   ArrowBackIcon,
   DownloadIcon,
@@ -29,8 +29,8 @@ import {
   DocumentIcon,
 } from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
-import {InvoiceApi} from '../../API/Api';
-import {generateInvoiceHtml, mapInvoiceRecord} from '../../utils/invoiceHtmlGenerator';
+import { InvoiceApi } from '../../API/Api';
+import { generateInvoiceHtml, mapInvoiceRecord } from '../../utils/invoiceHtmlGenerator';
 
 // Converts binary string / stream into safe base64 without InvalidCharacterError
 function toBase64(str) {
@@ -72,7 +72,7 @@ function toBase64(str) {
 }
 
 // Helper component for info rows
-function InfoRow({icon: Icon, label, value}) {
+function InfoRow({ icon: Icon, label, value }) {
   if (!value || value === '— / —') return null;
   return (
     <View style={styles.infoRow}>
@@ -85,15 +85,15 @@ function InfoRow({icon: Icon, label, value}) {
   );
 }
 
-export default function InvoiceDetailScreen({route, navigation}) {
-  const {invoice} = route.params || {};
+export default function InvoiceDetailScreen({ route, navigation }) {
+  const { invoice } = route.params || {};
   const [downloading, setDownloading] = useState(false);
   const [detailedInvoice, setDetailedInvoice] = useState({});
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Combine tapped item data with any extra print details
   const tappedRaw = invoice?._raw || {};
-  const raw = {...tappedRaw, ...detailedInvoice};
+  const raw = { ...tappedRaw, ...detailedInvoice };
 
   // Database invoice ID required by backend APIs (e.g. 2440)
   const invoiceId = tappedRaw.invoice_id || invoice?.invoice_id || invoice?.id || raw.invoice_id || 'N/A';
@@ -116,7 +116,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
         if (res?.success && res?.data) {
           const detailData = res.data.data || res.data;
           console.log('[InvoiceDetailScreen] Successfully loaded invoice print details for invoice:', invoiceId);
-          setDetailedInvoice(prev => ({...prev, ...detailData}));
+          setDetailedInvoice(prev => ({ ...prev, ...detailData }));
         }
       } catch (err) {
         console.log('[InvoiceDetailScreen] Error fetching print details:', err.message);
@@ -136,7 +136,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
             <ArrowBackIcon size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Invoice Details</Text>
-          <View style={{width: 40}} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No invoice details found.</Text>
@@ -156,24 +156,31 @@ export default function InvoiceDetailScreen({route, navigation}) {
   const discountAmount = Number(raw.discount_amount ?? 0);
   const discountPercent = Number(raw.discount_percent ?? 0);
 
-  // Request storage permission on older Android versions if needed
+  // Request storage permission for Downloads directory
   const checkStoragePermission = async () => {
     if (Platform.OS === 'android') {
+      // Android 13+ uses scoped storage for Downloads
       if (Platform.Version >= 33) {
-        return true;
+        return true; // No permission needed for Downloads on Android 13+
       }
+      
+      // For Android 10-12, check/request WRITE_EXTERNAL_STORAGE
       try {
-        const granted = await PermissionsAndroid.request(
+        const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+        if (granted) return true;
+        
+        // Request permission if not granted
+        const result = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
           {
             title: 'Storage Permission Required',
-            message: 'SmartCare needs access to save invoice files to your device.',
+            message: 'SmartCare needs access to save invoice files to your Downloads folder.',
             buttonNeutral: 'Ask Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
           },
         );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
+        return result === PermissionsAndroid.RESULTS.GRANTED;
       } catch (err) {
         console.warn('Permission error:', err);
         return false;
@@ -201,14 +208,14 @@ export default function InvoiceDetailScreen({route, navigation}) {
       console.log('[InvoiceDetailScreen] Using verified patientId for invoice:', patientId);
 
       // 1. Fetch latest print details if needed
-      let fullDetail = {...raw};
+      let fullDetail = { ...raw };
       try {
         console.log('[InvoiceDetailScreen] Calling getPrintDetails API with patientId:', patientId, 'invoiceId:', invoiceId);
         const printRes = await InvoiceApi.getPrintDetails(patientId, invoiceId);
         if (printRes?.success && printRes?.data) {
           const detailData = printRes.data.data || printRes.data;
-          fullDetail = {...fullDetail, ...detailData};
-          setDetailedInvoice(prev => ({...prev, ...detailData}));
+          fullDetail = { ...fullDetail, ...detailData };
+          setDetailedInvoice(prev => ({ ...prev, ...detailData }));
         }
       } catch (err) {
         console.log('[InvoiceDetailScreen] Could not refresh print details before download:', err.message);
@@ -238,7 +245,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
       // 4. Download document PDF from downloadDocuments API with EXACT same patientId and unique filename
       const clinicId = (await AsyncStorage.getItem('CLINICID')) || 'aureus';
       const returnedFileName = saveRes?.data?.fileName || saveRes?.data?.data?.fileName || saveRes?.data?.data?.documentPath;
-      
+
       const primaryDocUrl = returnedFileName
         ? (returnedFileName.startsWith('http') ? returnedFileName : `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${returnedFileName}`)
         : `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${formTitle}.pdf`;
@@ -262,13 +269,22 @@ export default function InvoiceDetailScreen({route, navigation}) {
         }
       }
 
-      const downloadDir = Platform.OS === 'android'
-        ? `${RNFS.DownloadDirectoryPath}/SmartCare/Invoices`
-        : `${RNFS.DocumentDirectoryPath}/SmartCare/Invoices`;
+      let downloadDir = `${RNFS.DownloadDirectoryPath}/SmartCare/Invoices`;
 
-      await RNFS.mkdir(downloadDir, {NSURLIsExcludedFromBackupKey: false}).catch(err =>
-        console.log('Directory exists:', err),
-      );
+      // Create directory with proper error handling
+      try {
+        await RNFS.mkdir(downloadDir, { NSURLIsExcludedFromBackupKey: false });
+        console.log('[InvoiceDetailScreen] Created directory:', downloadDir);
+      } catch (err) {
+        if (err.message.includes('already exists')) {
+          console.log('[InvoiceDetailScreen] Directory already exists:', downloadDir);
+        } else {
+          console.log('[InvoiceDetailScreen] Directory creation error:', err);
+          // Try fallback to Downloads root if subfolder fails
+          const fallbackDir = RNFS.DownloadDirectoryPath;
+          downloadDir = fallbackDir;
+        }
+      }
 
       const cleanPatientName = String(raw.patient_name || raw.patientName || 'Patient')
         .trim()
@@ -341,8 +357,8 @@ export default function InvoiceDetailScreen({route, navigation}) {
       if (pdfSaved) {
         Alert.alert(
           'Download Complete',
-          `Invoice PDF successfully downloaded!\n\nLocation: Download/SmartCare/Invoices/\nFile: ${pdfFileName}`,
-          [{text: 'OK'}],
+          `Invoice PDF successfully downloaded!\n\nLocation: Internal Storage > Download > SmartCare > Invoices\nFile: ${pdfFileName}`,
+          [{ text: 'OK' }],
         );
       } else {
         const errMsg = docRes?.error || saveRes?.error || 'Could not retrieve PDF data from server.';
@@ -388,7 +404,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
         </View>
 
         <TouchableOpacity
-          style={[styles.topDownloadBtn, downloading && {opacity: 0.6}]}
+          style={[styles.topDownloadBtn, downloading && { opacity: 0.6 }]}
           onPress={handleDownloadInvoice}
           disabled={downloading}
           activeOpacity={0.75}>
@@ -412,12 +428,12 @@ export default function InvoiceDetailScreen({route, navigation}) {
             <View
               style={[
                 styles.typeBadge,
-                {backgroundColor: raw.invoice_type === 'IPD' ? '#FEE2E2' : '#DBEAFE'},
+                { backgroundColor: raw.invoice_type === 'IPD' ? '#FEE2E2' : '#DBEAFE' },
               ]}>
               <Text
                 style={[
                   styles.typeBadgeText,
-                  {color: raw.invoice_type === 'IPD' ? '#EF4444' : '#3B82F6'},
+                  { color: raw.invoice_type === 'IPD' ? '#EF4444' : '#3B82F6' },
                 ]}>
                 {raw.invoice_type}
               </Text>
@@ -429,13 +445,13 @@ export default function InvoiceDetailScreen({route, navigation}) {
         <View style={styles.amountCard}>
           <Text style={styles.amountLabel}>Total Amount</Text>
           <Text style={styles.amountValue}>
-            {invoice.amount || `₹${rawAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}`}
+            {invoice.amount || `₹${rawAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
           </Text>
           <View style={styles.amountBreakdown}>
             <View style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>Paid Amount</Text>
-              <Text style={[styles.breakdownValue, {color: colors.success}]}>
-                ₹{paidAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+              <Text style={[styles.breakdownValue, { color: colors.success }]}>
+                ₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={styles.breakdownRow}>
@@ -443,16 +459,16 @@ export default function InvoiceDetailScreen({route, navigation}) {
               <Text
                 style={[
                   styles.breakdownValue,
-                  {color: balance > 0 ? colors.warning : colors.textMuted},
+                  { color: balance > 0 ? colors.warning : colors.textMuted },
                 ]}>
-                ₹{balance.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </Text>
             </View>
             {discountAmount > 0 && (
               <View style={styles.breakdownRow}>
                 <Text style={styles.breakdownLabel}>Discount ({discountPercent}%)</Text>
-                <Text style={[styles.breakdownValue, {color: colors.success}]}>
-                  -₹{discountAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                <Text style={[styles.breakdownValue, { color: colors.success }]}>
+                  -₹{discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </Text>
               </View>
             )}
@@ -481,14 +497,14 @@ export default function InvoiceDetailScreen({route, navigation}) {
                 <View style={styles.chargeHeader}>
                   <Text style={styles.chargeName}>{charge.master_charge_name || `Charge #${idx + 1}`}</Text>
                   <Text style={styles.chargeAmount}>
-                    ₹{Number(charge.total_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                    ₹{Number(charge.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Text>
                 </View>
                 {charge.charge_list?.map((item, i) => (
                   <View key={i} style={styles.chargeItem}>
                     <Text style={styles.chargeItemName}>• {item.chargename || 'Service'}</Text>
                     <Text style={styles.chargeItemAmount}>
-                      ₹{Number(item.charge_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})} × {item.quantity || 1}
+                      ₹{Number(item.charge_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} × {item.quantity || 1}
                     </Text>
                   </View>
                 ))}
@@ -586,7 +602,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
                   <Text style={styles.paymentLogTime}>{log.payment_time?.split(' ')[0] || '—'}</Text>
                 </View>
                 <Text style={styles.paymentLogAmount}>
-                  ₹{Number(log.part_payment_amount || log.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                  ₹{Number(log.part_payment_amount || log.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </Text>
               </View>
             ))}
@@ -601,7 +617,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
           </View>
         )}
 
-        <View style={{height: 30}} />
+        <View style={{ height: 30 }} />
       </ScrollView>
 
       {/* Bottom Floating Bar */}

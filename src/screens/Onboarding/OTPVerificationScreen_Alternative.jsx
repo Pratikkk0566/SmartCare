@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Keyboard, Platform,
+  StyleSheet, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Rect, Circle, Path, Polyline } from 'react-native-svg';
@@ -48,8 +48,6 @@ export default function OTPVerificationScreen({ navigation, route }) {
   const [timer, setTimer] = useState(RESEND_SECONDS);
   const [canResend, setCanResend] = useState(false);
   const inputRef = useRef(null);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [inputKey, setInputKey] = useState(0); // Force re-render of TextInput
 
   useEffect(() => {
     if (timer === 0) { setCanResend(true); return; }
@@ -57,55 +55,30 @@ export default function OTPVerificationScreen({ navigation, route }) {
     return () => clearTimeout(id);
   }, [timer]);
 
-  // Keyboard visibility listeners
+  // Simple focus management
   useEffect(() => {
-    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
-      setKeyboardVisible(true);
-    });
-    
-    const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardVisible(false);
-    });
-
-    return () => {
-      keyboardDidShow?.remove();
-      keyboardDidHide?.remove();
-    };
-  }, []);
-
-  // Auto-focus when screen mounts or when we need to restore focus
-  useEffect(() => {
-    const focusTimeout = setTimeout(() => {
+    const timeout = setTimeout(() => {
       inputRef.current?.focus();
-    }, 100);
-
-    return () => clearTimeout(focusTimeout);
-  }, [inputKey]); // Re-run when inputKey changes (forced re-render)
-
-  // Focus restoration when keyboard hides
-  useEffect(() => {
-    if (!keyboardVisible && otp.length < OTP_LENGTH) {
-      // Small delay to prevent immediate re-focus issues
-      const timeout = setTimeout(() => {
-        // Force recreate the TextInput by changing key
-        setInputKey(prev => prev + 1);
-      }, 100);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [keyboardVisible, otp.length]);
+    }, 300);
+    
+    return () => clearTimeout(timeout);
+  }, []);
 
   const handleResend = async () => {
     setTimer(RESEND_SECONDS);
     setCanResend(false);
     setOtp('');
     setError('');
+    
     const result = await OTPApi.resendOTP(phone);
     if (!result.success) {
       setError(result.error || 'Failed to resend OTP.');
     }
-    // Force recreate input to ensure it's focusable
-    setInputKey(prev => prev + 1);
+    
+    // Refocus after resend
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
   };
 
   const handleOTPChange = v => {
@@ -114,20 +87,12 @@ export default function OTPVerificationScreen({ navigation, route }) {
     setError('');
   };
 
-  const handleInputPress = () => {
-    if (!keyboardVisible) {
-      // If keyboard is not visible, recreate the input to make it focusable
-      setInputKey(prev => prev + 1);
-    } else {
-      // If keyboard is visible, just try to focus
-      inputRef.current?.focus();
-    }
-  };
-
   const handleVerify = useCallback(async () => {
     if (otp.length < OTP_LENGTH || loading) return;
+    
     setLoading(true);
     setError('');
+    
     try {
       // Call real verify OTP API
       const result = await OTPApi.verifyOTP(phone, otp);
@@ -195,7 +160,9 @@ export default function OTPVerificationScreen({ navigation, route }) {
 
   // Auto-verify when all 4 digits entered
   useEffect(() => {
-    if (otp.length === OTP_LENGTH) handleVerify();
+    if (otp.length === OTP_LENGTH) {
+      handleVerify();
+    }
   }, [otp, handleVerify]);
 
   return (
@@ -214,14 +181,13 @@ export default function OTPVerificationScreen({ navigation, route }) {
         {/* Simple, reliable OTP input */}
         <View style={styles.otpInputContainer}>
           <TextInput
-            key={inputKey} // Force re-render when inputKey changes
             ref={inputRef}
-            style={styles.simpleOtpInput}
+            style={styles.otpInput}
             value={otp}
             onChangeText={handleOTPChange}
             keyboardType="numeric"
             maxLength={OTP_LENGTH}
-            placeholder="Enter 4-digit OTP"
+            placeholder="Enter OTP"
             placeholderTextColor={colors.textSecondary}
             textAlign="center"
             textContentType="oneTimeCode"
@@ -247,7 +213,9 @@ export default function OTPVerificationScreen({ navigation, route }) {
 
         <TouchableOpacity
           style={[styles.btn, (otp.length < OTP_LENGTH || loading) && styles.btnDisabled]}
-          onPress={handleVerify} disabled={otp.length < OTP_LENGTH || loading} activeOpacity={0.85}>
+          onPress={handleVerify} 
+          disabled={otp.length < OTP_LENGTH || loading} 
+          activeOpacity={0.85}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Verify OTP</Text>}
         </TouchableOpacity>
 
@@ -281,7 +249,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   
-  simpleOtpInput: {
+  otpInput: {
     backgroundColor: colors.background,
     borderWidth: 2,
     borderColor: colors.border,

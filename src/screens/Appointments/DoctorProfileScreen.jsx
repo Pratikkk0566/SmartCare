@@ -72,24 +72,6 @@ export default function DoctorProfileScreen({navigation, route}) {
             {d.specialty}
           </Text>
           <Text style={s.heroQual}>{d.qualifications}</Text>
-
-          {/* Rating badge */}
-          <View style={s.ratingBadge}>
-            <StarIcon size={14} color="#F59E0B" />
-            <Text style={s.ratingVal}>{d.rating.toFixed(1)}</Text>
-            <Text style={s.ratingCount}>({d.reviewCount.toLocaleString()} reviews)</Text>
-          </View>
-        </View>
-
-        {/* ── Stats row ── */}
-        <View style={s.statsRow}>
-          <StatBox value={`${d.experience}+`} label="Years Exp." />
-          <View style={s.statDivider} />
-          <StatBox value={`${(d.patients / 1000).toFixed(1)}K`} label="Patients" />
-          <View style={s.statDivider} />
-          <StatBox value={d.reviewCount >= 1000 ? `${(d.reviewCount / 1000).toFixed(1)}K` : d.reviewCount} label="Reviews" />
-          <View style={s.statDivider} />
-          <StatBox value={d.rating.toFixed(1)} label="Rating" accent />
         </View>
 
         {/* ── Availability ── */}
@@ -226,8 +208,8 @@ const s = StyleSheet.create({
   backBtn:   {position: 'absolute', top: spacing['4xl'], left: spacing.base, padding: 8, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: radius.full},
   avatar:    {width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md, borderWidth: 3, borderColor: '#fff'},
   avatarText:{fontSize: 30, fontWeight: '900'},
-  heroName:  {fontSize: 22, fontWeight: '900', color: colors.textPrimary, marginBottom: 4, textAlign: 'center'},
-  heroSpec:  {fontSize: 14, fontWeight: '700', marginBottom: 4, textAlign: 'center'},
+  heroName:  {fontSize: 22, fontWeight: '900', color: colors.textPrimary, marginBottom: 4, textAlign: 'center', textTransform: 'uppercase'},
+  heroSpec:  {fontSize: 14, fontWeight: '700', marginBottom: 4, textAlign: 'center', textTransform: 'uppercase'},
   heroQual:  {fontSize: 12, color: colors.textSecondary, marginBottom: spacing.md, textAlign: 'center'},
   ratingBadge:{flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, ...shadows.sm},
   ratingVal: {fontSize: 13, fontWeight: '800', color: colors.textPrimary},

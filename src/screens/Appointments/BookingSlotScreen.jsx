@@ -327,7 +327,13 @@ export default function BookingSlotScreen({navigation, route}) {
           </View>
           <View style={s.docInfo}>
             <Text style={s.docName}>{d.name}</Text>
-            <Text style={s.docSpec}>{d.specialty}{d.clinic ? ` · ${d.clinic}` : ''}</Text>
+            <Text style={s.docSpec}>{d.specialty}</Text>
+            {d.clinic ? (
+              <View style={s.docClinicRow}>
+                <HospitalBuildingIcon size={12} color={colors.textMuted} />
+                <Text style={s.docClinic}>{d.clinic}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={s.docFee}>₹{fee}</Text>
         </View>
@@ -438,8 +444,10 @@ const s = StyleSheet.create({
   docAvatar:     {width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center'},
   docAvatarText: {fontSize: 15, fontWeight: '900'},
   docInfo:       {flex: 1},
-  docName:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary},
-  docSpec:       {fontSize: 11, color: colors.textSecondary, marginTop: 2},
+  docName:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary, textTransform: 'uppercase'},
+  docSpec:       {fontSize: 11, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase'},
+  docClinicRow:  {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3},
+  docClinic:     {fontSize: 11, color: colors.textMuted},
   docFee:        {fontSize: 16, fontWeight: '900', color: colors.primary},
 
   emptySlots:     {alignItems: 'center', paddingVertical: 32, gap: 8},

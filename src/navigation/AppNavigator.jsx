@@ -14,8 +14,6 @@ import WelcomeScreen         from '../screens/Onboarding/WelcomeScreen';
 import LanguageSelectScreen  from '../screens/Onboarding/LanguageSelectScreen';
 import PhoneLoginScreen      from '../screens/Onboarding/PhoneLoginScreen';
 import PhoneNumberEntry      from '../screens/Onboarding/PhoneNumberEntry';
-import AadhaarLoginScreen    from '../screens/Onboarding/AadhaarLoginScreen';
-import RegisterScreen        from '../screens/Onboarding/RegisterScreen';
 import OTPVerificationScreen from '../screens/Onboarding/OTPVerificationScreen';
 import AccountCreatedScreen  from '../screens/Onboarding/AccountCreatedScreen';
 
@@ -169,8 +167,6 @@ export default function AppNavigator() {
         <Stack.Screen name="LanguageSelect"   component={LanguageSelectScreen} />
         <Stack.Screen name="PhoneLogin"       component={PhoneLoginScreen} />
         <Stack.Screen name="PhoneNumberEntry" component={PhoneNumberEntry} />
-        <Stack.Screen name="AadhaarLogin"     component={AadhaarLoginScreen} />
-        <Stack.Screen name="Register"         component={RegisterScreen} />
         <Stack.Screen name="OTPVerification"  component={OTPVerificationScreen} />
         <Stack.Screen name="AccountCreated"   component={AccountCreatedScreen} />
 

@@ -106,7 +106,7 @@ export default function AppointmentSuccessScreen({navigation, route}) {
             <Text style={s.docName}>{d.name || 'Your Doctor'}</Text>
             <Text style={s.docSpec}>{d.specialty || 'Consultation'}</Text>
             <View style={[s.docClinicRow]}>
-              <PinIcon size={13} color={colors.textMuted} />
+              <HospitalBuildingIcon size={13} color={colors.textMuted} />
               <Text style={s.docClinic}>{visitType === 'clinic' ? (d.clinic || 'In-Clinic') : 'Online consultation'}</Text>
             </View>
           </View>
@@ -215,8 +215,8 @@ const s = StyleSheet.create({
   docAvatar:     {width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center'},
   docAvatarText: {fontSize: 18, fontWeight: '900'},
   docInfo:       {flex: 1, gap: 3},
-  docName:       {fontSize: 15, fontWeight: '800', color: colors.textPrimary},
-  docSpec:       {fontSize: 12, color: colors.textSecondary},
+  docName:       {fontSize: 15, fontWeight: '800', color: colors.textPrimary, textTransform: 'uppercase'},
+  docSpec:       {fontSize: 12, color: colors.textSecondary, textTransform: 'uppercase'},
   docClinicRow:  {flexDirection: 'row', alignItems: 'center', gap: 4},
   docClinic:     {fontSize: 11, color: colors.textMuted},
 

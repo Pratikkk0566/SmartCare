@@ -11,17 +11,15 @@ import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {PractitionerApi} from '../../API/Api';
-import {ArrowBackIcon, SearchIcon, StarIcon, PinIcon, StethoscopeIcon, HeartIcon, ToothIcon, SkinIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, CheckIcon, SortIcon, ChevronDownIcon, FilterIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, SearchIcon, StarIcon, PinIcon, HospitalBuildingIcon, StethoscopeIcon, HeartIcon, ToothIcon, SkinIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, CheckIcon, SortIcon, ChevronDownIcon, FilterIcon} from '../../assets/icons/Icons';
 
 // Local specialties constant — no API endpoint for this
 // This will be replaced by dynamic specialties from API
 
 const SORT_OPTIONS = [
-  {id: 'best',    label: 'Best Match'},
-  {id: 'rating',  label: 'Top Rated'},
+  {id: 'best',    label: 'All Doctors'},
   {id: 'feeLow',  label: 'Fee: Low–High'},
   {id: 'feeHigh', label: 'Fee: High–Low'},
-  {id: 'exp',     label: 'Experience'},
 ];
 
 export default function DoctorSearchScreen({navigation, route}) {
@@ -360,14 +358,9 @@ function DoctorCard({doctor: d, onPress}) {
       </View>
       <View style={dc.info}>
         <Text style={dc.name}>{d.name}</Text>
-        <Text style={dc.spec}>{d.specialty} · {d.experience} yrs exp</Text>
-        <View style={dc.ratingRow}>
-          <StarIcon size={12} color="#F59E0B" />
-          <Text style={dc.rating}>{d.rating.toFixed(1)}</Text>
-          <Text style={dc.reviews}>({d.reviewCount.toLocaleString()} reviews)</Text>
-        </View>
+        <Text style={dc.spec}>{d.specialty}</Text>
         <View style={dc.clinicRow}>
-          <PinIcon size={12} color={colors.textMuted} />
+          <HospitalBuildingIcon size={12} color={colors.textMuted} />
           <Text style={dc.clinic} numberOfLines={1}>{d.clinic}</Text>
         </View>
         <View style={[dc.availBadge, {backgroundColor: isToday ? colors.successLight : colors.warningLight}]}>
@@ -405,8 +398,8 @@ const dc = StyleSheet.create({
   avatar:     {width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', flexShrink: 0},
   avatarText: {fontSize: 17, fontWeight: '900'},
   info:       {flex: 1, gap: 4},
-  name:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary},
-  spec:       {fontSize: 12, color: colors.textSecondary},
+  name:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary, textTransform: 'uppercase'},
+  spec:       {fontSize: 12, color: colors.textSecondary, textTransform: 'uppercase'},
   ratingRow:  {flexDirection: 'row', alignItems: 'center', gap: 4},
   rating:     {fontSize: 12, fontWeight: '700', color: colors.textPrimary},
   reviews:    {fontSize: 11, color: colors.textMuted},
@@ -439,7 +432,7 @@ const s = StyleSheet.create({
   // Filter Row
   filterRow:         {flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.base, paddingVertical: spacing.md, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
   filterDropdown:    {flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.background, borderRadius: radius.lg, paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.border},
-  filterDropdownText:{fontSize: 14, color: colors.textPrimary, flex: 1},
+  filterDropdownText:{fontSize: 14, color: colors.textPrimary, flex: 1, textTransform: 'uppercase'},
   
   resultBar:         {paddingHorizontal: spacing.base, paddingVertical: spacing.sm, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border},
   resultCount:       {fontSize: 13, fontWeight: '600', color: colors.textSecondary},
@@ -452,7 +445,7 @@ const s = StyleSheet.create({
   specDropdownScroll:{maxHeight: 250},
   specOption:        {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.base, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border},
   specOptionActive:  {backgroundColor: colors.primaryLight},
-  specOptionText:    {fontSize: 14, fontWeight: '500', color: colors.textPrimary, flex: 1},
+  specOptionText:    {fontSize: 14, fontWeight: '500', color: colors.textPrimary, flex: 1, textTransform: 'uppercase'},
   specOptionTextActive:{fontWeight: '700', color: colors.primary},
   
   sortBtn:           {flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full},

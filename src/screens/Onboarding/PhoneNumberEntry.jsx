@@ -2,6 +2,7 @@ import React, {useState, useRef} from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image,
+  ScrollView,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
@@ -48,72 +49,80 @@ export default function PhoneNumberEntry({navigation}) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView 
+        style={styles.flex} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
-        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} hitSlop={8}>
           <ArrowBackIcon size={22} color={colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.body}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
 
           {/* Logo */}
           <View style={styles.logoRow}>
-            <Image source={appLogo} style={styles.logoImg} />
+            <Image source={appLogo} style={styles.logoImg} resizeMode="contain" />
             <Text style={styles.appName}>SmartCare PHR</Text>
           </View>
 
           <Text style={styles.title}>Enter your{'\n'}mobile number</Text>
-          <Text style={styles.subtitle}>We'll send you a 6-digit OTP to verify</Text>
+          <Text style={styles.subtitle}>We'll send you a 4-digit OTP to verify</Text>
 
-          <Text style={styles.label}>Mobile Number</Text>
-          <TouchableOpacity
-            style={[styles.inputRow, error ? styles.inputRowError : null]}
-            onPress={() => inputRef.current?.focus()}
-            activeOpacity={1}>
-            <View style={styles.prefix}>
-              <Text style={styles.prefixText}>+91</Text>
-            </View>
-            <View style={styles.divider} />
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="Enter 10-digit number"
-              placeholderTextColor={colors.textMuted}
-              value={phone}
-              onChangeText={v => {
-                setError('');
-                setPhone(v.replace(/\D/g, '').slice(0, 10));
-              }}
-              keyboardType="phone-pad"
-              maxLength={10}
-              returnKeyType="done"
-              onSubmitEditing={handleContinue}
-              autoFocus
-            />
-          </TouchableOpacity>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Mobile Number</Text>
+            <TouchableOpacity
+              style={[styles.inputRow, error ? styles.inputRowError : null]}
+              onPress={() => inputRef.current?.focus()}
+              activeOpacity={1}>
+              <View style={styles.prefix}>
+                <Text style={styles.prefixText}>+91</Text>
+              </View>
+              <View style={styles.divider} />
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                placeholder="Enter 10-digit number"
+                placeholderTextColor={colors.textMuted}
+                value={phone}
+                onChangeText={v => {
+                  setError('');
+                  setPhone(v.replace(/\D/g, '').slice(0, 10));
+                }}
+                keyboardType="phone-pad"
+                maxLength={10}
+                returnKeyType="done"
+                onSubmitEditing={handleContinue}
+                autoFocus
+              />
+            </TouchableOpacity>
 
-          {error.length > 0 && <Text style={styles.errorText}>{error}</Text>}
+            {error.length > 0 && <Text style={styles.errorText}>{error}</Text>}
 
-          <TouchableOpacity
-            style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
-            onPress={handleContinue}
-            disabled={!isValid || loading}
-            activeOpacity={0.85}>
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.btnText}>Send OTP</Text>}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
+              onPress={handleContinue}
+              disabled={!isValid || loading}
+              activeOpacity={0.85}>
+              {loading
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.btnText}>Send OTP</Text>}
+            </TouchableOpacity>
 
-          <Text style={styles.note}>OTP will be sent to this number for verification</Text>
+            <Text style={styles.note}>OTP will be sent to this number for verification</Text>
 
-          <Text style={styles.terms}>
-            {'By continuing, you agree to our '}
-            <Text style={styles.termsLink}>Terms & Conditions</Text>
-            {' and '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
-          </Text>
+            <Text style={styles.terms}>
+              {'By continuing, you agree to our '}
+              <Text style={styles.termsLink}>Terms & Conditions</Text>
+              {' and '}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+          </View>
 
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -123,31 +132,35 @@ const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: colors.surface},
   flex: {flex: 1},
   back: {padding: spacing.base, paddingBottom: 0, alignSelf: 'flex-start'},
-  body: {
-    flex: 1,
-    alignItems: 'center',
+  scrollContent: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing['3xl'],
+    alignItems: 'center',
   },
   logoRow: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: spacing.md,
   },
-  logoImg: {width: 260, height: 260, marginBottom: -20},
-  appName: {fontSize: 22, fontWeight: '800', color: colors.primary},
+  logoImg: {width: 100, height: 100},
+  appName: {fontSize: 20, fontWeight: '800', color: colors.primary, marginTop: -4},
   title: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '800',
     color: colors.textPrimary,
     textAlign: 'center',
-    lineHeight: 34,
-    marginBottom: spacing.sm,
+    lineHeight: 32,
+    marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  inputContainer: {
+    width: '100%',
+    alignItems: 'center',
   },
   label: {
     alignSelf: 'flex-start',
@@ -201,6 +214,6 @@ const styles = StyleSheet.create({
   btnDisabled: {opacity: 0.5},
   btnText: {fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3},
   note: {fontSize: 13, color: colors.textSecondary, textAlign: 'center'},
-  terms: {fontSize: 12, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginTop: spacing.sm},
+  terms: {fontSize: 12, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginTop: spacing.md},
   termsLink: {color: colors.primary, fontWeight: '600'},
 });

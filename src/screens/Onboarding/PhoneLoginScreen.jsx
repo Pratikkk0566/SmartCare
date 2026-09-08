@@ -11,33 +11,16 @@ import {
   Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import Svg, {Path, Circle} from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {PhoneIcon, PersonIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
+import {PhoneIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
 import {CLINIC_OPTIONS} from '../../API/Api';
 
 const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
-function AadhaarOptionIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 60 60" fill="none">
-      <Path
-        d="M30 50 C17 50 8 41 8 30 C8 19 17 10 30 10 C43 10 52 19 52 30"
-        stroke="#D97706" strokeWidth={4} strokeLinecap="round" />
-      <Path
-        d="M30 43 C21 43 15 37 15 30 C15 23 21 17 30 17 C39 17 45 23 45 30"
-        stroke="#D97706" strokeWidth={4} strokeLinecap="round" />
-      <Path
-        d="M30 36 C25.5 36 22 33 22 30 C22 27 25.5 24 30 24 C34.5 24 38 27 38 30"
-        stroke="#D97706" strokeWidth={4} strokeLinecap="round" />
-      <Circle cx="30" cy="30" r="3.5" fill="#D97706" />
-    </Svg>
-  );
-}
 
 const OPTIONS = [
   {
@@ -47,22 +30,6 @@ const OPTIONS = [
     iconStyle: 'primary',
     render: () => <PhoneIcon size={20} color={colors.primary} />,
     route: 'PhoneNumberEntry',
-  },
-  {
-    key: 'aadhaar',
-    label: 'Login with Aadhaar',
-    sub: 'Login using your Aadhaar number',
-    iconStyle: 'warning',
-    render: () => <AadhaarOptionIcon />,
-    route: 'AadhaarLogin',
-  },
-  {
-    key: 'register',
-    label: 'Create Account',
-    sub: 'Sign up by creating a new account',
-    iconStyle: 'primary',
-    render: () => <PersonIcon size={20} color={colors.primary} />,
-    route: 'Register',
   },
 ];
 
