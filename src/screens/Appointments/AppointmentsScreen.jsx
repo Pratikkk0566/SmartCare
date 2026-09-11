@@ -311,7 +311,7 @@ export default function AppointmentsScreen({navigation}) {
             keyExtractor={item => String(item.id)}
             contentContainerStyle={s.doctorsList}
             renderItem={({item}) => {
-              const initials = (item.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
+              const initials = (item.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
               const hue = (item.name?.charCodeAt(4) || 0) * 37 % 360;
               
               return (

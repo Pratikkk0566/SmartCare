@@ -120,13 +120,6 @@ const confirmLogout = async () => {
             sub="Biometric or PIN security"
             onPress={() => navigation.navigate('AppLockSetup')}
           />
-          <Divider />
-          <SettingRow
-            icon={SettingsGearIcon}
-            label="Language"
-            sub="Change your preferred language"
-            onPress={() => navigation.navigate('LanguageSelect')}
-          />
         </View>
 
         {/* Notifications */}

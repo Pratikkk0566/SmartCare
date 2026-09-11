@@ -46,7 +46,7 @@ export default function DoctorProfileScreen({navigation, route}) {
     );
   }
 
-  const initials  = d.name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
+  const initials  = d.name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const hue       = (d.name.charCodeAt(4) * 37) % 360;
   const avatarBg  = `hsl(${hue},55%,88%)`;
   const avatarFg  = `hsl(${hue},45%,30%)`;

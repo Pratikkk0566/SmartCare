@@ -212,12 +212,22 @@ export function generateInvoiceHtml(rawOrMappedData) {
     patientRows.push({ label: 'City / State', value: location });
   }
 
-  // table-row / table-cell instead of flex kv-row, so column alignment is fixed
-  // regardless of label/value length.
-  const patientInfoHtml = patientRows.map(r => `
-    <div class="kv-row">
-      <div class="kv-label">${r.label}</div>
-      <div class="kv-value">${r.value || '-'}</div>
+  // Two-per-row grid instead of one full-width label...value row: pairing
+  // fields side by side keeps label and value close together instead of
+  // stretching a single pair across the whole page width with a big gap.
+  const patientPairs = [];
+  for (let i = 0; i < patientRows.length; i += 2) {
+    patientPairs.push([patientRows[i], patientRows[i + 1]]);
+  }
+
+  const kvCell = (r) => r
+    ? `<div class="kv-cell"><span class="kv-label">${r.label}</span><span class="kv-value">${r.value || '-'}</span></div>`
+    : '<div class="kv-cell"></div>';
+
+  const patientInfoHtml = patientPairs.map(([a, b]) => `
+    <div class="kv-grid-row">
+      ${kvCell(a)}
+      ${kvCell(b)}
     </div>
   `).join('');
 
@@ -472,26 +482,33 @@ export function generateInvoiceHtml(rawOrMappedData) {
       border-bottom: 2px solid #0ea5a2;
     }
 
-    /* ===== Patient info rows: table instead of flex kv-row ===== */
-    .kv-row {
+    /* ===== Patient info: 2-column grid, label sits directly next to its
+       value instead of a full-width row with a big gap between them ===== */
+    .kv-grid-row {
       display: table;
       width: 100%;
-      padding: 3px 0;
+      table-layout: fixed;
+      margin-bottom: 7px;
+    }
+    .kv-cell {
+      display: table-cell;
+      width: 50%;
+      vertical-align: top;
+      padding-right: 12px;
     }
     .kv-label {
-      display: table-cell;
-      width: 45%;
+      display: inline-block;
+      min-width: 62px;
       color: #6B7280;
       font-weight: 500;
       font-size: 10px;
       vertical-align: top;
     }
     .kv-value {
-      display: table-cell;
-      width: 55%;
+      display: inline-block;
       font-weight: bold;
-      text-align: right;
       font-size: 10px;
+      color: #1F2937;
       white-space: pre-line;
       vertical-align: top;
     }
@@ -602,46 +619,28 @@ export function generateInvoiceHtml(rawOrMappedData) {
     .hidden { display: none; }
 
     /*
-      Sticky header/content/footer using the classic CSS-table trick (no
-      flexbox, consistent with the rest of this file): the outer table is
-      exactly one page's content height (297mm - 2x10mm @page margin =
-      277mm). The header and footer rows size to their own content; the
-      middle row has height:100% so it soaks up any leftover space, which
-      pins the footer to the true bottom of the page on short invoices.
-      If Charges Breakdown makes the middle row taller than the page, the
-      table simply grows past 277mm and the document flows onto additional
-      pages — that section is the only one meant to grow; everything else
-      (header, patient info, payment history, summary, footer) stays
-      compact and is protected from splitting mid-block by
-      page-break-inside: avoid below.
+      NOTE: page-row-header / page-row-content / page-row-footer are kept as
+      plain sequential blocks (not a fixed-height sticky-footer table) —
+      forcing a 277mm table height in a earlier version left a large blank
+      gap below the footer instead of pinning it to the bottom, so that
+      approach is reverted. The footer simply follows the content directly.
+      The real, load-bearing protections are page-break-inside: avoid on
+      .section/.amount-panel/.charges-table tr and table-header-group on
+      the charges table's thead (below) — those keep every block except
+      Charges Breakdown intact across a page break without depending on
+      any fixed page-height assumption.
     */
-    .page-table {
-      display: table;
-      width: 100%;
-      height: 277mm;
-    }
-    .page-row {
-      display: table-row;
-    }
-    .page-cell {
-      display: table-cell;
-      vertical-align: top;
-    }
     .page-row-header,
     .page-row-footer {
       page-break-inside: avoid;
-    }
-    .page-row-content {
-      height: 100%;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div id="invoiceRoot" class="page-table">
-      <!-- Header row: banner + status, pinned to top -->
-      <div class="page-row page-row-header">
-        <div class="page-cell">
+    <div id="invoiceRoot">
+      <!-- Header: banner + status -->
+      <div class="page-row-header">
       <!-- Banner -->
       <div class="banner">
         <div class="banner-left">
@@ -667,14 +666,11 @@ export function generateInvoiceHtml(rawOrMappedData) {
           <div id="statusReferredBy" class="referred-by">${d.referredBy ? ('Referred By - ' + escapeXml(d.referredBy)) : ''}</div>
         </div>
       </div>
-        </div>
       </div>
 
-      <!-- Content row: everything below the header. Only Charges Breakdown
-           is allowed to grow large inside here; the other blocks are kept
-           compact and page-break-protected via .section / .amount-panel CSS. -->
-      <div class="page-row page-row-content">
-        <div class="page-cell">
+      <!-- Content: everything below the header. Only Charges Breakdown is
+           allowed to grow large here; the other blocks are kept compact and
+           page-break-protected via .section / .amount-panel CSS. -->
       <div class="content">
         <!-- Patient Information -->
         <div class="section section-patient">
@@ -737,14 +733,10 @@ export function generateInvoiceHtml(rawOrMappedData) {
           ${amountSummaryHtml}
         </div>
       </div>
-        </div>
-      </div>
 
-      <!-- Footer row: pinned to the true bottom of the page -->
-      <div class="page-row page-row-footer">
-        <div class="page-cell">
+      <!-- Footer -->
+      <div class="page-row-footer">
       <div class="footer">Powered by SmartCare</div>
-        </div>
       </div>
     </div>
   </div>

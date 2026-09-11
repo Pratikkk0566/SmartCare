@@ -8,15 +8,17 @@ import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {InvestigationApi} from '../../API/Api';
-import {StorageService} from '../../services/StorageService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {enrichInvestigationsWithDates} from '../../utils/investigationEnrichment';
 import SearchBar from '../../components/common/SearchBar';
 import StatusChip from '../../components/common/StatusChip';
+// ── SQLITE INTEGRATION ──────────────────────────────────────────────────────
+import { useSQLiteData } from '../../hooks/useSQLiteData';
+// ────────────────────────────────────────────────────────────────────────────
 import {
   ArrowBackIcon, FilterIcon, ShieldIcon, FlaskIcon,
   PlusIcon, ClockIcon, CheckCircleIcon, ArrowRightIcon,
   BloodDropIcon, BeakerIcon, LungsIcon, ClipboardIcon, HomeDeliveryIcon, HospitalBuildingIcon,
+  CalendarIcon,
 } from '../../assets/icons/Icons';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 
@@ -79,67 +81,168 @@ function splitDateTime(dt = '') {
 }
 
 export default function InvestigationsScreen({navigation}) {
-  const {testRequests, investigations: cachedInvestigations, isOnline, refreshAllData, appReady} = useApp();
+  const {testRequests, isOnline, refreshAllData, appReady, userProfile} = useApp();
+  
+  // ── SQLITE INTEGRATION ──────────────────────────────────────────────────
+  const {
+    getInvestigations,
+    saveInvestigations,
+    searchInvestigations,
+    getInvestigationsByCategory,
+    getInvestigationsByDateRange,
+    getProfile,
+    isInitialized,
+  } = useSQLiteData();
+  // ────────────────────────────────────────────────────────────────────────
+  
   const [filter, setFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All Time');
   const [showDateFilterModal, setShowDateFilterModal] = useState(false);
   const [query, setQuery] = useState('');
-  const [reports, setReports] = useState(cachedInvestigations || []);
-  // Only show skeleton while appReady hasn't fired yet — once the app has
-  // finished its initial load sequence, we show whatever data we have (or empty state).
-  const [loading, setLoading] = useState(!appReady && cachedInvestigations.length === 0);
+  const [reports, setReports] = useState([]);
+  
+  // Show loading while SQLite is initializing
+  const [loading, setLoading] = useState(!isInitialized);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Auto-fetch on screen focus
+  // Load investigations from SQLite on screen focus
   useFocusEffect(
     useCallback(() => {
-      if (cachedInvestigations.length > 0) {
-        setReports(cachedInvestigations);
-        setLoading(false);
-      } else if (appReady) {
-        // App is ready but no cached data - fetch immediately
-        fetchReports();
+      let mounted = true;
+      
+      async function loadInvestigations() {
+        try {
+          if (!isInitialized) {
+            console.log('[InvestigationsScreen] SQLite not initialized yet');
+            return;
+          }
+          
+          if (!mounted) return;
+          
+          console.log('[InvestigationsScreen] 🔄 Starting to load investigations...');
+          
+          // Try to get from SQLite first
+          const patientId = userProfile?.patientId || userProfile?.patient_id || userProfile?.uhid;
+          const cachedInvestigations = await getInvestigations(patientId);
+          console.log('[InvestigationsScreen] 📦 Found', cachedInvestigations?.length || 0, 'cached investigations');
+          
+          if (cachedInvestigations && cachedInvestigations.length > 0) {
+            if (!mounted) return;
+            console.log('[InvestigationsScreen] ✅ OFFLINE MODE: Using cached data (', cachedInvestigations.length, 'investigations)');
+            setReports(cachedInvestigations);
+            setLoading(false);
+          } else {
+            // No cached data, try to fetch from API if we have patient ID
+            const patientId = userProfile?.patientId || userProfile?.patient_id || userProfile?.uhid;
+            if (patientId) {
+              console.log('[InvestigationsScreen] 🌐 No cached data, trying to fetch from API for patient:', patientId);
+              if (!mounted) return;
+              setLoading(true);
+              
+              try {
+                await fetchReports();
+              } catch (error) {
+                console.log('[InvestigationsScreen] ❌ API failed (no internet), but no cached data available');
+                console.log('[InvestigationsScreen] 📱 User needs internet connection for first-time setup');
+                if (!mounted) return;
+                setLoading(false);
+                // Show message to user that they need internet for first setup
+              }
+            } else {
+              console.log('[InvestigationsScreen] ⚠️ No patient ID available, cannot fetch from API');
+              if (!mounted) return;
+              setLoading(false);
+            }
+          }
+        } catch (error) {
+          console.error('[InvestigationsScreen] ❌ ERROR in loadInvestigations:', error);
+          if (mounted) setLoading(false);
+        }
       }
-    }, [cachedInvestigations, appReady])
+      
+      loadInvestigations();
+      
+      return () => {
+        mounted = false;
+      };
+    }, [isInitialized, userProfile?.patientId])  // Add userProfile.patientId dependency
   );
 
-  // Sync from context — covers the case where AppContext finishes fetching
-  // after this screen is already mounted.
+  // Update loading state based on SQLite status
   useEffect(() => {
-    if (cachedInvestigations.length > 0) {
-      setReports(cachedInvestigations);
-      setLoading(false);
-    }
-  }, [cachedInvestigations]);
-
-  // Once the app is ready (initial load done), always stop the skeleton —
-  // even if there are no investigations to show.
-  useEffect(() => {
-    if (appReady) setLoading(false);
-  }, [appReady]);
+    setLoading(!isInitialized);
+  }, [isInitialized]);
 
   // Full re-fetch — only called on explicit pull-to-refresh
   const fetchReports = async () => {
     setRefreshing(true);
-    const patientId = await AsyncStorage.getItem('patientId');
-    if (!patientId) { setRefreshing(false); setLoading(false); return; }
-    const result = await InvestigationApi.getAll(patientId, FROM_DATE, getToDate());
-    if (result.success) {
-      let raw = [];
-      if (Array.isArray(result.data)) raw = result.data;
-      else if (Array.isArray(result.data?.reports)) raw = result.data.reports;
-      else if (Array.isArray(result.data?.data)) raw = result.data.data;
-      else if (Array.isArray(result.data?.list)) raw = result.data.list;
-      else if (result.data && typeof result.data === 'object') {
-        for (const v of Object.values(result.data)) {
-          if (Array.isArray(v)) { raw = v; break; }
-        }
+    
+    try {
+      // Get patient ID from AppContext userProfile
+      console.log('[InvestigationsScreen] Using userProfile:', JSON.stringify(userProfile, null, 2));
+      
+      // Try different possible patient ID fields
+      const patientId = userProfile?.patientId || userProfile?.patient_id || userProfile?.uhid || userProfile?.id;
+      console.log('[InvestigationsScreen] Resolved patient ID:', patientId);
+      
+      if (!patientId) { 
+        console.log('[InvestigationsScreen] ❌ No patient ID found in userProfile');
+        setRefreshing(false); 
+        setLoading(false); 
+        return; 
       }
-      const mapped = raw.map((r, i) => {
-        // Log the entire raw object for the first item to see all available fields
-        if (i === 0) {
-          console.log('[Investigation RAW OBJECT]:', JSON.stringify(r, null, 2));
+      
+      console.log('[InvestigationsScreen] 🚀 Fetching investigations for patient:', patientId);
+      const result = await InvestigationApi.getAll(patientId, FROM_DATE, getToDate());
+      console.log('[InvestigationsScreen] API Result:', {
+        success: result.success,
+        dataType: typeof result.data,
+        dataKeys: result.data ? Object.keys(result.data) : 'no data'
+      });
+      
+      if (result.success) {
+        console.log('[InvestigationsScreen] 📋 API returned successful response');
+        console.log('[InvestigationsScreen] Raw result.data:', JSON.stringify(result.data, null, 2));
+        
+        let raw = [];
+        if (Array.isArray(result.data)) {
+          raw = result.data;
+          console.log('[InvestigationsScreen] ✅ Found array directly in result.data');
+        } else if (Array.isArray(result.data?.reports)) {
+          raw = result.data.reports;
+          console.log('[InvestigationsScreen] ✅ Found array in result.data.reports');
+        } else if (Array.isArray(result.data?.data)) {
+          raw = result.data.data;
+          console.log('[InvestigationsScreen] ✅ Found array in result.data.data');
+        } else if (Array.isArray(result.data?.list)) {
+          raw = result.data.list;
+          console.log('[InvestigationsScreen] ✅ Found array in result.data.list');
+        } else if (result.data && typeof result.data === 'object') {
+          console.log('[InvestigationsScreen] 🔍 Searching for arrays in result.data object...');
+          for (const [key, value] of Object.entries(result.data)) {
+            if (Array.isArray(value)) { 
+              raw = value; 
+              console.log('[InvestigationsScreen] ✅ Found array in result.data.' + key);
+              break; 
+            }
+          }
         }
+        
+        console.log('[InvestigationsScreen] 📊 Processing', raw.length, 'raw investigation records');
+        
+        if (raw.length === 0) {
+          console.log('[InvestigationsScreen] ⚠️ No investigation data found in API response');
+          setReports([]);
+          setRefreshing(false);
+          setLoading(false);
+          return;
+        }
+        
+        const mapped = raw.map((r, i) => {
+          // Log the entire raw object for the first item to see all available fields
+          if (i === 0) {
+            console.log('[Investigation RAW OBJECT]:', JSON.stringify(r, null, 2));
+          }
         
         const name = pick(r, [
           'investigationName', 'investigation_name', 'testname', 'testName',
@@ -202,7 +305,17 @@ export default function InvestigationsScreen({navigation}) {
       });
       mapped.sort((a, b) => toTimestamp(b.date) - toTimestamp(a.date));
       setReports(mapped);
-      await StorageService.saveInvestigations(mapped);
+      
+      // ── SAVE TO SQLITE FOR OFFLINE CACHING ─────────────────────────
+      try {
+        console.log('[InvestigationsScreen] � Saving', mapped.length, 'investigations to SQLite...');
+        await saveInvestigations(mapped, patientId);
+        console.log('[InvestigationsScreen] ✅ Saved investigations to SQLite successfully');
+      } catch (error) {
+        console.error('[InvestigationsScreen] ❌ Failed to save to SQLite:', error);
+        // Continue anyway - at least the data is displayed
+      }
+      // ──────────────────────────────────────────────────────────────────
       
       // Enrich reports with dates from print API in background
       console.log('[InvestigationsScreen] Starting background enrichment...');
@@ -211,18 +324,40 @@ export default function InvestigationsScreen({navigation}) {
       console.log('[InvestigationsScreen] Using patientId as clientId:', clientId);
       if (clientId) {
         console.log('[InvestigationsScreen] Calling enrichInvestigationsWithDates for', mapped.length, 'reports');
-        enrichInvestigationsWithDates(mapped, clientId, (enrichedReports) => {
+        enrichInvestigationsWithDates(mapped, clientId, async (enrichedReports) => {
           console.log('[InvestigationsScreen] Received enriched reports update:', enrichedReports.length);
           setReports(enrichedReports);
+          
+          // Save enriched reports back to SQLite
+          try {
+            console.log('[InvestigationsScreen] 📦 SAVING ENRICHED REPORTS: Now saving', enrichedReports.length, 'enriched reports with detailed content to SQLite...');
+            await saveInvestigations(enrichedReports, patientId);
+            console.log('[InvestigationsScreen] ✅ SUCCESS: Saved enriched investigations with full details to SQLite for offline access!');
+            
+            // Verify the enriched save
+            const verification = await getInvestigations(patientId);
+            console.log('[InvestigationsScreen] 🔍 VERIFICATION: SQLite now contains', verification?.length || 0, 'enriched investigations');
+          } catch (error) {
+            console.error('[InvestigationsScreen] ❌ CRITICAL: Failed to save enriched reports to SQLite:', error);
+            console.error('[InvestigationsScreen] This means offline report details will not work!');
+          }
         }).catch(err => {
           console.error('[InvestigationsScreen] Enrichment error:', err);
         });
       } else {
         console.log('[InvestigationsScreen] No clientId, skipping enrichment');
       }
+    } else {
+      // API call failed
+      console.error('[InvestigationsScreen] ❌ API call failed:', result.error || 'Unknown error');
+      console.log('[InvestigationsScreen] Full API result:', JSON.stringify(result, null, 2));
     }
-    setRefreshing(false);
-    setLoading(false);
+    } catch (error) {
+      console.error('[InvestigationsScreen] Failed to fetch reports:', error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
   };
 
   const onRefresh = () => fetchReports();
@@ -377,7 +512,7 @@ export default function InvestigationsScreen({navigation}) {
                 );
               })}
             </ScrollView>
-          </View>
+          </View> 
         )}
 
         <View style={styles.sectionHeader}>

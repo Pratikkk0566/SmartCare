@@ -22,9 +22,12 @@
     "react-native": "0.86.0",
     "react-native-fs": "^2.20.0",
     "react-native-linear-gradient": "2.8.3",
+    "react-native-nitro-modules": "^0.37.1",
+    "react-native-nitro-sqlite": "^9.7.0",
     "react-native-push-notification": "^8.1.1",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.4.0",
+    "react-native-sqlite-2": "^3.6.3",
     "react-native-svg": "^15.15.5"
   },
   "devDependencies": {

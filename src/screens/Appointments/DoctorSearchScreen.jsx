@@ -348,7 +348,7 @@ export default function DoctorSearchScreen({navigation, route}) {
 }
 
 function DoctorCard({doctor: d, onPress}) {
-  const initials = d.name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2);
+  const initials = d.name.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const hue      = (d.name.charCodeAt(4) * 37) % 360;
   const isToday  = d.availability === 'Available Today';
   return (
@@ -359,10 +359,6 @@ function DoctorCard({doctor: d, onPress}) {
       <View style={dc.info}>
         <Text style={dc.name}>{d.name}</Text>
         <Text style={dc.spec}>{d.specialty}</Text>
-        <View style={dc.clinicRow}>
-          <HospitalBuildingIcon size={12} color={colors.textMuted} />
-          <Text style={dc.clinic} numberOfLines={1}>{d.clinic}</Text>
-        </View>
         <View style={[dc.availBadge, {backgroundColor: isToday ? colors.successLight : colors.warningLight}]}>
           <Text style={[dc.availText, {color: isToday ? colors.success : colors.warning}]}>{d.nextSlot}</Text>
         </View>
@@ -403,7 +399,6 @@ const dc = StyleSheet.create({
   ratingRow:  {flexDirection: 'row', alignItems: 'center', gap: 4},
   rating:     {fontSize: 12, fontWeight: '700', color: colors.textPrimary},
   reviews:    {fontSize: 11, color: colors.textMuted},
-  clinic:     {fontSize: 11, color: colors.textMuted},
   availBadge: {alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full},
   availText:  {fontSize: 10, fontWeight: '700'},
   right:      {alignItems: 'flex-end', gap: 4, flexShrink: 0},

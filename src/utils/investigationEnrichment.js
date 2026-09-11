@@ -34,6 +34,8 @@ export async function enrichInvestigationsWithDates(reports, clientId, onUpdate)
         const details = printResult.data.data;
         const completedDate = details.completedDate || details.collectedDate || details.requestedDate || '';
         
+        console.log(`[Enrichment ${i}] 📋 Got detailed report content:`, details ? 'YES' : 'NO');
+        
         let date = '';
         let time = '';
         
@@ -49,11 +51,12 @@ export async function enrichInvestigationsWithDates(reports, clientId, onUpdate)
           ...enrichedReports[i],
           date,
           time,
+          reportContent: details, // 🎯 SAVE FULL REPORT CONTENT FOR OFFLINE ACCESS
           _enriched: true,
         };
         
         successCount++;
-        console.log(`[Enrichment ${i}/${reports.length}] Success: ${date} ${time}`);
+        console.log(`[Enrichment ${i}/${reports.length}] Success: ${date} ${time} + report content saved`);
         
         // Update UI every 2 reports for progressive loading
         if ((i + 1) % 2 === 0 && onUpdate) {

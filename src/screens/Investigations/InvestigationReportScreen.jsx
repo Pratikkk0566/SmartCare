@@ -9,6 +9,7 @@ import {useApp} from '../../context/AppContext';
 import { InvestigationApi } from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
+import { useSQLiteData } from '../../hooks/useSQLiteData';
 
 export default function InvestigationReportScreen({navigation, route}) {
   const {report} = route.params;
@@ -17,6 +18,9 @@ export default function InvestigationReportScreen({navigation, route}) {
   const [loading, setLoading] = useState(true);
   const [detailedReport, setDetailedReport] = useState(null);
   const [error, setError] = useState('');
+  
+  // SQLite hook for offline access
+  const { getInvestigations } = useSQLiteData();
 
   // Fetch detailed investigation report on mount
   useEffect(() => {
@@ -28,9 +32,38 @@ export default function InvestigationReportScreen({navigation, route}) {
       setLoading(true);
       setError('');
       
+      console.log('[InvestigationReport] 🔍 Trying to load report details...');
+      console.log('[InvestigationReport] Report data:', report);
+      
+      // FIRST: Try to get enriched data from SQLite (offline mode)
+      const patientId = user?.patientId || user?.patient_id || user?.uhid;
+      if (patientId) {
+        console.log('[InvestigationReport] 📦 Checking SQLite for cached report details...');
+        const cachedInvestigations = await getInvestigations(patientId);
+        
+        if (cachedInvestigations && cachedInvestigations.length > 0) {
+          // Find this specific investigation by ID
+          const cachedReport = cachedInvestigations.find(inv => 
+            inv.id === report.id || 
+            inv.investigation_id === report.investigation_id ||
+            inv.parentId === report.parentId
+          );
+          
+          if (cachedReport && cachedReport.reportContent) {
+            console.log('[InvestigationReport] ✅ OFFLINE MODE: Found cached report details!');
+            setDetailedReport(cachedReport.reportContent);
+            setLoading(false);
+            return; // Use cached data, no API call needed
+          }
+        }
+      }
+      
+      console.log('[InvestigationReport] 🌐 No cached details, trying API...');
+      
+      // FALLBACK: If no cached data, try API call
       const clientId = await AsyncStorage.getItem('clientId');
       const payload = {
-        investigationParentId: report._raw?.parentId || report.id,
+        investigationParentId: report._raw?.parentId || report.id || report.parentId,
         gender: report._raw?.gender || user?.gender || 'Male'
       };
 
@@ -41,13 +74,15 @@ export default function InvestigationReportScreen({navigation, route}) {
       console.log('[InvestigationReport] Response:', response);
 
       if (response.success && response.data?.data) {
+        console.log('[InvestigationReport] ✅ API SUCCESS: Got fresh report details');
         setDetailedReport(response.data.data);
       } else {
-        setError('Could not load report details');
+        console.log('[InvestigationReport] ❌ API failed and no cached data available');
+        setError('Could not load report details - no internet connection and no cached data');
       }
     } catch (err) {
       console.error('[InvestigationReport] Error fetching details:', err);
-      setError('Failed to load report details');
+      setError('Failed to load report details - check internet connection');
     } finally {
       setLoading(false);
     }

@@ -57,7 +57,7 @@ export default function AppointmentSuccessScreen({navigation, route}) {
     ]).start();
   }, []);
 
-  const initials = (d.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2) || 'DR';
+  const initials = (d.name || '').replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'DR';
   const hue      = ((d.name || '').charCodeAt(4) || 0) * 37 % 360;
 
   // Prevent back navigation (booking is done)
