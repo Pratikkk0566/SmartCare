@@ -2,11 +2,22 @@
  * SQLite Initialization Hook
  * -------------------------
  * React hook to initialize SQLite database and handle migration on app startup.
+ * 
+ * DEPRECATED: This hook is deprecated in favor of the Phase 2-10 architecture.
+ * Database initialization now happens through:
+ * - useDatabase() hook (Phase 3)
+ * - SqliteStorageService (Phase 3)
+ * - db.js getDatabase() singleton (Phase 2)
+ * 
+ * This file is kept for reference but should NOT be used.
+ * TODO: Remove after confirming Phase 2-10 architecture is stable.
  */
 
 import { useEffect, useState } from 'react';
-import { Database } from '../database/Database';
-import { prescriptionMigrationService } from '../services/PrescriptionMigrationService';
+// DISABLED: Old Database.js system conflicts with new db.js
+// import { Database } from '../database/Database';
+import { getDatabase } from '../database/db'; // Use new Phase 2 architecture
+import { runMigrations } from '../database/migration'; // Use new Phase 2 migrations
 
 export function useSQLiteInit() {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -19,28 +30,21 @@ export function useSQLiteInit() {
 
   const initializeSQLite = async () => {
     try {
-      console.log('[SQLiteInit] Initializing SQLite database...');
+      console.log('[SQLiteInit] Initializing SQLite database (Phase 2-10 architecture)...');
       
-      // Initialize database
-      await Database.init();
+      // UPDATED: Use new Phase 2 database initialization
+      await getDatabase();
       console.log('[SQLiteInit] Database initialized successfully');
 
-      // Check migration status
-      const migrationCompleted = await prescriptionMigrationService.isMigrationCompleted();
+      // UPDATED: Use new Phase 2 migration system
+      console.log('[SQLiteInit] Running data migration...');
+      const migrationResult = await runMigrations();
+      setMigrationStatus(migrationResult);
       
-      if (!migrationCompleted) {
-        console.log('[SQLiteInit] Running data migration...');
-        const migrationResult = await prescriptionMigrationService.performMigration();
-        setMigrationStatus(migrationResult);
-        
-        if (!migrationResult.success) {
-          console.error('[SQLiteInit] Migration failed:', migrationResult.error);
-        } else {
-          console.log('[SQLiteInit] Migration completed successfully');
-        }
+      if (!migrationResult.success && !migrationResult.alreadyCompleted) {
+        console.error('[SQLiteInit] Migration failed:', migrationResult.error);
       } else {
-        console.log('[SQLiteInit] Migration already completed');
-        setMigrationStatus({ success: true, alreadyCompleted: true });
+        console.log('[SQLiteInit] Migration completed successfully');
       }
 
       setIsInitialized(true);

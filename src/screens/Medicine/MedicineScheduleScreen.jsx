@@ -409,27 +409,7 @@ export default function MedicineScheduleScreen({navigation}) {
               </View>
             </View>
           </View>
-
-          {/* Next Alarm Banner */}
-          {nextUpcomingDose && (
-            <View style={styles.nextAlarmBanner}>
-              <BellIcon size={16} color="#0284C7" />
-              <View style={{flex: 1}}>
-                <Text style={styles.nextAlarmLabel}>
-                  Next Alarm: {nextUpcomingDose.medicineName} ({nextUpcomingDose.scheduledTime12h || nextUpcomingDose.scheduledTime})
-                </Text>
-                <Text style={styles.nextAlarmTiming}>
-                  {nextUpcomingDose.timingInstruction || 'Take on time with water'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.quickTakeBtn}
-                onPress={() => handleMarkTaken(nextUpcomingDose)}>
-                <Text style={styles.quickTakeText}>Take Now</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+         </View>          
 
         {/* Search Input */}
         <View style={styles.searchRow}>
@@ -990,17 +970,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#0284C7',
     marginTop: 2,
-  },
-  quickTakeBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-  },
-  quickTakeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
   },
 
   // Search

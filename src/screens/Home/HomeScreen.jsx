@@ -24,7 +24,7 @@ const PERIOD_COLORS = {
 const quickActions = [
   {label: 'Book Appointment', Icon: CalendarIcon, color: '#8B5CF6', bg: '#F3F0FF', nav: 'Appointments'},
   {label: 'Prescription',     Icon: PillIcon,       color: '#F59E0B', bg: '#FEF3C7', nav: 'Prescriptions'},
-  {label: 'Clinical Notes',   Icon: ClipboardIcon,  color: '#3B82F6', bg: '#EFF6FF', nav: 'ClinicalNotes'},
+  {label: 'Medicine Schedule',Icon: ClockIcon,      color: '#3B82F6', bg: '#EFF6FF', nav: 'MedicineSchedule'},
   {label: 'Investigations',   Icon: FlaskIcon,      color: '#EF4444', bg: '#FEF2F2', nav: 'Investigations'},
 ];
 
@@ -292,7 +292,7 @@ export default function HomeScreen({navigation}) {
           <View style={styles.sectionHeader}>
             <MedicinesIcon size={29} color="#14A098" />
             <Text style={styles.sectionTitle}>Today's Medicines</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('MedicineSchedule')}>
+            <TouchableOpacity onPress={() => navigation.navigate('TodaysMedicine')}>
               <Text style={styles.viewAll}>View all {'>'}</Text>
             </TouchableOpacity>
           </View>

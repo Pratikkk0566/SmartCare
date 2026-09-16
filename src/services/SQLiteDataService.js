@@ -3,14 +3,21 @@
  * ------------------
  * Primary data service that completely replaces AsyncStorage
  * Provides unified interface for all app data with patient-scoped operations
+ * 
+ * UPDATED: Now uses db.js (Phase 2-10 architecture) instead of Database.js
  */
 
-import { Database } from '../database/Database';
+import { getDatabase } from '../database/db';
+// Note: Repositories are legacy and use the old Database.js system
+// We'll keep them for now but they won't be actively used
+// TODO: Phase 15 - Remove old repositories after migration complete
 import PatientRepository from '../database/repositories/PatientRepository';
 import InvestigationRepository from '../database/repositories/InvestigationRepository';
 import PrescriptionRepository from '../database/repositories/PrescriptionRepository';
 import MedicineRepository from '../database/repositories/MedicineRepository';
 import ScheduledDoseRepository from '../database/repositories/ScheduledDoseRepository';
+import MedicationAlarmRepository from '../database/repositories/MedicationAlarmRepository';
+import { localAlarmManager } from './LocalAlarmManager';
 
 export class SQLiteDataService {
   constructor() {
@@ -19,6 +26,7 @@ export class SQLiteDataService {
     this.prescriptionRepo = new PrescriptionRepository();
     this.medicineRepo = new MedicineRepository();
     this.scheduledDoseRepo = new ScheduledDoseRepository();
+    this.alarmRepo = new MedicationAlarmRepository();
     
     this.isInitialized = false;
     this.currentPatientId = null;
@@ -26,13 +34,28 @@ export class SQLiteDataService {
 
   /**
    * Initialize the service
+   * UPDATED: Now uses db.js singleton pattern (Phase 2-10)
    */
   async init() {
-    if (this.isInitialized) return;
+    if (this.isInitialized) {
+      console.log('[SQLiteDataService] Already initialized, skipping');
+      return;
+    }
     
-    await Database.init();
-    this.isInitialized = true;
-    console.log('[SQLiteDataService] Initialized successfully');
+    try {
+      // Use the new db.js singleton (Phase 2-10 architecture)
+      await getDatabase();
+      console.log('[SQLiteDataService] Database connection established');
+      
+      // Initialize the local alarm manager
+      await localAlarmManager.init();
+      
+      this.isInitialized = true;
+      console.log('[SQLiteDataService] ✅ Initialized successfully with alarm system');
+    } catch (error) {
+      console.error('[SQLiteDataService] ❌ Initialization failed:', error);
+      throw new Error(`Database initialization failed: ${error.message}`);
+    }
   }
 
   /**
@@ -475,6 +498,144 @@ export class SQLiteDataService {
     } catch (e) {
       return results[0].setting_value;
     }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // MEDICATION ALARM SYSTEM METHODS
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get today's medication schedule with alarm information
+   */
+  async getTodaysScheduleWithAlarms(patientId = null) {
+    await this.init();
+    
+    const id = patientId || this.currentPatientId;
+    if (!id) {
+      throw new Error('Patient ID is required to get schedule');
+    }
+
+    console.log(`[SQLiteDataService] Getting today's schedule with alarms for patient ${id}`);
+    
+    // Get today's doses
+    const todaysDoses = await this.scheduledDoseRepo.getTodaysDoses(id);
+    
+    // Get associated alarms
+    const todaysAlarms = await this.alarmRepo.getTodaysAlarms(id);
+    
+    // Combine dose and alarm data
+    const schedule = todaysDoses.map(dose => {
+      const alarm = todaysAlarms.find(a => a.dose_id === dose.dose_id);
+      return {
+        ...dose,
+        alarm: alarm || null,
+        hasAlarm: !!alarm,
+        alarmStatus: alarm?.status || 'none'
+      };
+    });
+    
+    return schedule;
+  }
+
+  /**
+   * Take a medicine dose (with alarm cancellation)
+   */
+  async takeMedicine(doseId, notes = '') {
+    await this.init();
+    
+    console.log('[SQLiteDataService] Taking medicine - dose:', doseId);
+    return this.scheduledDoseRepo.markDoseAsTaken(doseId, null, notes);
+  }
+
+  /**
+   * Skip a medicine dose (with alarm cancellation)
+   */
+  async skipMedicine(doseId, notes = '') {
+    await this.init();
+    
+    console.log('[SQLiteDataService] Skipping medicine - dose:', doseId);
+    return this.scheduledDoseRepo.markDoseAsSkipped(doseId, notes);
+  }
+
+  /**
+   * Snooze a medicine alarm
+   */
+  async snoozeMedicine(alarmId, snoozeMinutes = 15) {
+    await this.init();
+    
+    console.log('[SQLiteDataService] Snoozing alarm:', alarmId, 'for', snoozeMinutes, 'minutes');
+    return localAlarmManager.snoozeAlarm(alarmId, snoozeMinutes);
+  }
+
+  /**
+   * Get medication adherence statistics
+   */
+  async getMedicationAdherence(patientId = null, startDate = null, endDate = null) {
+    await this.init();
+    
+    const id = patientId || this.currentPatientId;
+    if (!id) {
+      throw new Error('Patient ID is required for adherence stats');
+    }
+
+    return this.scheduledDoseRepo.getAdherenceStats(startDate, endDate);
+  }
+
+  /**
+   * Get medication history
+   */
+  async getMedicationHistory(patientId = null, limit = 50) {
+    await this.init();
+    
+    const id = patientId || this.currentPatientId;
+    if (!id) {
+      throw new Error('Patient ID is required for medication history');
+    }
+
+    const query = `
+      SELECT 
+        mh.*,
+        pm.medicine_name,
+        md.scheduled_date,
+        md.scheduled_time
+      FROM medication_history mh
+      JOIN medicine_doses md ON mh.dose_id = md.dose_id
+      JOIN prescription_medicines pm ON mh.medicine_id = pm.medicine_id
+      WHERE mh.patient_id = ?
+      ORDER BY mh.timestamp DESC
+      LIMIT ?
+    `;
+    
+    return this.alarmRepo.query(query, [id, limit]);
+  }
+
+  /**
+   * Schedule alarms for upcoming medications
+   */
+  async scheduleUpcomingAlarms(patientId = null, days = 14) {
+    await this.init();
+    
+    const id = patientId || this.currentPatientId;
+    if (!id) {
+      throw new Error('Patient ID is required to schedule alarms');
+    }
+
+    console.log('[SQLiteDataService] Scheduling upcoming alarms for patient:', id);
+    return localAlarmManager.scheduleUpcomingAlarms(id, days);
+  }
+
+  /**
+   * Get alarm statistics
+   */
+  async getAlarmStats(patientId = null) {
+    await this.init();
+    
+    const id = patientId || this.currentPatientId;
+    if (!id) {
+      throw new Error('Patient ID is required for alarm stats');
+    }
+
+    return this.alarmRepo.getAlarmStats(id);
   }
 }
 

@@ -88,7 +88,7 @@ export default function PrescriptionsScreen({navigation}) {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedPrescriptionId, setExpandedPrescriptionId] = useState(null);
-  const [relevanceFilter, setRelevanceFilter] = useState('all'); // 'all' | 'active'
+  const [relevanceFilter, setRelevanceFilter] = useState('all'); // 'all' | 'active' - Show all by default
   const [dateFilter, setDateFilter] = useState('All Time');
   const [showDateFilterModal, setShowDateFilterModal] = useState(false);
 
@@ -472,6 +472,9 @@ export default function PrescriptionsScreen({navigation}) {
   };
 
   const getStatusLabel = (status) => {
+    if (!status || typeof status !== 'string') {
+      return 'Unknown';
+    }
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -636,7 +639,7 @@ export default function PrescriptionsScreen({navigation}) {
             </Text>
           </View>
         ) : (
-          filteredServer.map((presc) => {
+          filteredServer.map((presc, index) => {
             const { cardClass, chipBg, chipFg, chipLabel } = relevanceStyle(
               presc.relevanceLevel,
               presc.daysSinceModified
@@ -658,16 +661,19 @@ export default function PrescriptionsScreen({navigation}) {
             const handleOpen = () => {
               navigation.navigate('PrescriptionDetail', {prescription: presc});
             };
+            const prescId = presc.id || presc.prescriptionId || `server-${index}`;
             return (
               <TouchableOpacity
-                key={'srv-' + presc.id}
+                key={'srv-' + prescId}
                 style={[
                   styles.prescCard,
                   styles.prescCardServer,
                   cardStyleClass,
+                  presc.relevanceLevel === 'expired' && styles.prescCardExpired,
+                  (presc.relevanceLevel === 'active' || presc.relevanceLevel === 'expiring') && styles.prescCardActive,
                 ]}
                 onPress={handleOpen}
-                activeOpacity={0.8}
+                activeOpacity={presc.relevanceLevel === 'expired' ? 0.4 : 0.8}
               >
                 <View style={styles.prescCardContent}>
                   <View style={[styles.prescIcon, {backgroundColor: chipBg}]}>
@@ -750,15 +756,17 @@ export default function PrescriptionsScreen({navigation}) {
                 </Text>
               </View>
             ) : (
-              filteredLocal.map((presc) => {
+              filteredLocal.map((presc, index) => {
                 const isExpanded = expandedPrescriptionId === presc.id;
+                const prescId = presc.id || presc.prescriptionId || `local-${index}`;
                 return (
                   <View 
-                    key={'loc-' + presc.id}
+                    key={'loc-' + prescId}
                     style={[
                       styles.prescCard, 
-                      presc.status === 'active' && styles.prescCardActive,
                       isExpanded && styles.prescCardExpanded,
+                      (presc.relevanceLevel === 'expired' || presc.status === 'expired' || presc.status === 'completed') && styles.prescCardExpired,
+                      presc.status === 'active' && styles.prescCardActive,
                     ]}
                   >
                     <TouchableOpacity
@@ -1184,6 +1192,9 @@ const styles = StyleSheet.create({
   },
   prescCardExpanded: {
     ...shadows.lg,
+  },
+  prescCardExpired: {
+    opacity: 0.6,
   },
   prescCardContent: {
     flexDirection: 'row',

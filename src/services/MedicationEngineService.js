@@ -17,14 +17,14 @@ import {
   mapApiPrescription,
   runMedicationEngineSelfTests,
 } from './MedicationSchedulingEngine';
-import { AsyncStorageMedicationStore } from './AsyncStorageMedicationStore';
+import { SqliteMedicationStore } from './SqliteMedicationStore';
 import { MedicationNotificationManager } from './MedicationNotificationManager';
 import { PrescriptionRepeatApi } from '../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class MedicationEngineService {
   constructor() {
-    this.store = new AsyncStorageMedicationStore();
+    this.store = new SqliteMedicationStore();
     this.notificationManager = new MedicationNotificationManager();
     this.engine = new MedicationSchedulingEngine({
       store: this.store,

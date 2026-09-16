@@ -18,9 +18,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
-  PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
-  LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
-  ScaleIcon, RulerIcon, HospitalBuildingIcon, HeartRateIcon,
+  PillIcon, PersonIcon, ArrowRightIcon,
+  InvoiceIcon, ArrowBackIcon,
+  ScaleIcon, RulerIcon, HospitalBuildingIcon,
 } from '../../assets/icons/Icons';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
@@ -152,7 +152,7 @@ export default function ProfileScreen({navigation}) {
   const [appointmentHistory, setAppointmentHistory] = useState(cachedHistory || []);
   const [invoices, setInvoices] = useState(cachedInvoices || []);
   const [investigations, setInvestigations] = useState(cachedInvestigations || []);
-  const [hospitalName, setHospitalName] = useState('Aureus Hospital'); // Default to Aureus
+  const [hospitalName, setHospitalName] = useState('Test Server'); // Default to Test Server
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activePrescCount, setActivePrescCount] = useState(0);
@@ -197,11 +197,18 @@ export default function ProfileScreen({navigation}) {
   useEffect(() => {
     const loadClinicInfo = async () => {
       const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-      const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
-      if (found) {
-        setHospitalName(found.displayName);
+      
+      if (clinicId.toLowerCase() === 'aureus') {
+        setHospitalName('Test Server');
+      } else if (clinicId.toLowerCase() === 'aureus2024') {
+        setHospitalName('Aureus Hospital');
       } else {
-        setHospitalName('SmartCare Hospital');
+        const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+        if (found) {
+          setHospitalName(found.displayName);
+        } else {
+          setHospitalName('SmartCare Hospital');
+        }
       }
     };
     loadClinicInfo();
@@ -343,12 +350,29 @@ export default function ProfileScreen({navigation}) {
       // Update hospital name
       if (hospitalRes.success && hospitalRes.data) {
         const hospital = hospitalRes.data;
-        setHospitalName(hospital.hospitalName || hospital.clinicName || hospital.name || 'SmartCare Hospital');
+        const hospitalNameFromApi = hospital.hospitalName || hospital.clinicName || hospital.name;
+        
+        // Check if this is aureus or aureus2024 tenant
+        const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+        if (clinicId.toLowerCase() === 'aureus') {
+          setHospitalName('Test Server');
+        } else if (clinicId.toLowerCase() === 'aureus2024') {
+          setHospitalName('Aureus Hospital');
+        } else {
+          setHospitalName(hospitalNameFromApi || 'SmartCare Hospital');
+        }
       } else {
         // Fallback to check clinic ID even if API fails
         const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-        const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
-        setHospitalName(found ? found.displayName : 'SmartCare Hospital');
+        
+        if (clinicId.toLowerCase() === 'aureus') {
+          setHospitalName('Test Server');
+        } else if (clinicId.toLowerCase() === 'aureus2024') {
+          setHospitalName('Aureus Hospital');
+        } else {
+          const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+          setHospitalName(found ? found.displayName : 'SmartCare Hospital');
+        }
       }
 
       await countActivePrescriptions();
@@ -385,8 +409,7 @@ export default function ProfileScreen({navigation}) {
   const vitals = [
     {Icon: ScaleIcon,     color: '#8B5CF6', val: `${userProfile.weight ?? '--'} ${userProfile.weightUnit ?? 'kg'}`, label: 'Weight'},
     {Icon: RulerIcon,     color: '#3B82F6', val: `${userProfile.height ?? '--'} ${userProfile.heightUnit ?? 'cm'}`, label: 'Height'},
-    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood Group'},
-    {Icon: HospitalBuildingIcon, color: '#10B981', val: hospitalName || 'Aureus Hospital',                          label: 'Hospital'},
+    {Icon: HospitalBuildingIcon, color: '#10B981', val: hospitalName === 'Aureus Hospital' ? 'Test Server' : (hospitalName || 'Test Server'), label: 'Hospital'},
   ];
 
 
@@ -482,7 +505,7 @@ export default function ProfileScreen({navigation}) {
         {/* ── HEALTH SUMMARY ────────────────────────────────────── */}
         <View style={styles.vitalsCard}>
           <View style={styles.vitalsHeader}>
-            <HeartRateIcon size={16} color={colors.success} />
+            <PersonIcon size={16} color={colors.success} />
             <Text style={styles.vitalsTitle}>HEALTH SUMMARY</Text>
             <TouchableOpacity onPress={() => navigation.navigate('PersonalInformation')} activeOpacity={0.7}>
               <Text style={styles.viewDetails}>View details →</Text>
@@ -511,43 +534,11 @@ export default function ProfileScreen({navigation}) {
         <Section title="ACCOUNT" Icon={SettingsGearIcon} iconColor="#D97706">
           <MenuRow
             Icon={PersonIcon}
-            iconColor={colors.success}
-            iconBg={'#D1FAE5'}
-            label="Personal Information"
-            sub="Name, phone, date of birth"
-            onPress={() => navigation.navigate('PersonalInformation')}
-          />
-          <MenuRow
-            Icon={DocumentIcon}
-            iconColor={'#10B981'}
-            iconBg={'#D1FAE5'}
-            label="Medical History"
-            sub="Past conditions & diagnoses"
-            onPress={() => Alert.alert('Coming Soon', 'Medical history will be available soon.')}
-          />
-          <MenuRow
-            Icon={HeartIcon}
-            iconColor={'#F59E0B'}
-            iconBg={'#FEF3C7'}
-            label="Allergies"
-            sub={userProfile.allergies?.length ? userProfile.allergies.join(', ') : 'Known allergies'}
-            onPress={() => Alert.alert('Allergies', userProfile.allergies?.join(', ') || 'No allergies recorded.')}
-          />
-          <MenuRow
-            Icon={ShieldIcon}
             iconColor={'#3B82F6'}
             iconBg={'#DBEAFE'}
-            label="Insurance"
-            sub="Your insurance details"
-            onPress={() => Alert.alert('Coming Soon', 'Insurance info will be available soon.')}
-          />
-          <MenuRow
-            Icon={LockIcon}
-            iconColor={'#059669'}
-            iconBg={'#D1FAE5'}
-            label="Security"
-            sub="Password & privacy"
-            onPress={() => navigation.navigate('AppLockSetup')}
+            label="Personal Information"
+            sub="Manage your profile, contact details & preferences"
+            onPress={() => navigation.navigate('PersonalInformation')}
             last
           />
         </Section>

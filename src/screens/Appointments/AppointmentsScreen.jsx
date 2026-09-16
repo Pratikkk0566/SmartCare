@@ -1,6 +1,6 @@
 import React, {useState, useCallback} from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, RefreshControl, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, RefreshControl, ActivityIndicator, Modal, Pressable,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
@@ -11,13 +11,15 @@ import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
 import {AppointmentApi, PractitionerApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ArrowBackIcon, SearchIcon, CalendarIcon, ClockIcon, PinIcon, StethoscopeIcon, VideoIcon, DocumentIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, ArrowRightIcon} from '../../assets/icons/Icons';
+import {ArrowBackIcon, SearchIcon, CalendarIcon, ClockIcon, PinIcon, StethoscopeIcon, VideoIcon, DocumentIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon, ArrowRightIcon, FilterIcon} from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
 
 // Local specialties — no API endpoint exists for this list
 const SPEC_ICON_MAP = {
   StethoscopeIcon, HeartIcon, ToothIcon, SkinCareIcon, BabyIcon, BoneIcon, BrainIcon, EarIcon,
 };
+
+const DATE_FILTERS = ['All Time', 'Past Week', 'Past Month', 'Past 3 Months', 'Past 6 Months'];
 
 const specialties = [
   {id: 's1', name: 'General Physician', iconKey: 'StethoscopeIcon', color: '#6C63FF', bgColor: '#EEE9FF'},
@@ -51,6 +53,8 @@ function toISODateKey(value = '') {
 export default function AppointmentsScreen({navigation}) {
   const {appointments: cachedAppointments, appointmentHistory: cachedHistory, appReady} = useApp();
   const [activeTab, setActiveTab] = useState('Today\'s');
+  const [dateFilter, setDateFilter] = useState('All Time');
+  const [showDateFilterModal, setShowDateFilterModal] = useState(false);
   const [appointments, setAppointments] = useState([]);
   const [todayAppointments, setTodayAppointments] = useState([]);
   const [appointmentHistory, setAppointmentHistory] = useState([]);
@@ -238,6 +242,34 @@ export default function AppointmentsScreen({navigation}) {
 
   const onRefresh = () => fetchAppointments();
 
+  // Date filtering helper
+  const isWithinDateRange = (dateStr, filterType) => {
+    if (filterType === 'All Time') return true;
+    
+    if (!dateStr) return false;
+    
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const reportDate = new Date(dateStr);
+    if (isNaN(reportDate.getTime())) return false;
+    
+    const daysDiff = Math.floor((today - reportDate) / (1000 * 60 * 60 * 24));
+    
+    switch (filterType) {
+      case 'Past Week':
+        return daysDiff <= 7;
+      case 'Past Month':
+        return daysDiff <= 30;
+      case 'Past 3 Months':
+        return daysDiff <= 90;
+      case 'Past 6 Months':
+        return daysDiff <= 180;
+      default:
+        return true;
+    }
+  };
+
   // Normalize appointment data from API
   const normalizeAppointment = (a) => ({
     id: String(a.id || a.appointmentId || Math.random()),
@@ -251,11 +283,16 @@ export default function AppointmentsScreen({navigation}) {
     fee: Number(a.charge) || a.consultationFee || a.fee || null,
   });
 
+  // Filter and sort appointment history by date (latest first)
+  const filteredHistory = appointmentHistory
+    .filter(appt => isWithinDateRange(appt.date, dateFilter))
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
   // Counts shown next to each tab label
   const tabCounts = {
     "Today's":    todayAppointments.length,
     "Upcoming":   appointments.length,
-    "History":    appointmentHistory.length,
+    "History":    filteredHistory.length,
   };
 
   return (
@@ -268,6 +305,12 @@ export default function AppointmentsScreen({navigation}) {
           <Text style={s.headerTitle}>Appointments</Text>
           <Text style={s.headerSub}>Manage & book your visits</Text>
         </View>
+        {activeTab === 'History' && (
+          <TouchableOpacity onPress={() => setShowDateFilterModal(true)} style={s.filterIconBtn}>
+            <FilterIcon size={22} color={dateFilter !== 'All Time' ? colors.primary : colors.textSecondary} />
+            {dateFilter !== 'All Time' && <View style={s.filterDot} />}
+          </TouchableOpacity>
+        )}
       </View>
 
       <TouchableOpacity style={s.bookBanner} onPress={() => navigation.navigate('DoctorSearch', {})} activeOpacity={0.88}>
@@ -379,6 +422,19 @@ export default function AppointmentsScreen({navigation}) {
           </View>
         ) : (
           <>
+            {/* Active Date Filter Badge for History tab */}
+            {activeTab === 'History' && dateFilter !== 'All Time' && (
+              <View style={s.activeDateFilterRow}>
+                <View style={s.activeDateFilterBadge}>
+                  <CalendarIcon size={12} color={colors.primary} />
+                  <Text style={s.activeDateFilterText}>Date: {dateFilter}</Text>
+                  <TouchableOpacity onPress={() => setDateFilter('All Time')} hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}>
+                    <Text style={s.activeDateFilterClear}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             {activeTab === 'Today\'s' && (
               todayAppointments.length > 0
                 ? todayAppointments.map(a => <AppointmentCard key={a.id} item={a} compact />)
@@ -394,22 +450,59 @@ export default function AppointmentsScreen({navigation}) {
                     cta="Book Now" onCta={() => navigation.navigate('DoctorSearch', {})} />
             )}
             {activeTab === 'History' && (
-              appointmentHistory.length > 0
-                ? appointmentHistory.map(a => <AppointmentCard key={a.id} item={a} showStatus compact />)
-                : <EmptyState icon={DocumentIcon} title="No past appointments"
-                    sub="Your completed and cancelled appointments will appear here." />
+              filteredHistory.length > 0
+                ? filteredHistory.map(a => <AppointmentCard key={a.id} item={a} showStatus compact />)
+                : <EmptyState icon={DocumentIcon} title={dateFilter !== 'All Time' ? "No appointments found" : "No past appointments"}
+                    sub={dateFilter !== 'All Time' ? `No appointments found for ${dateFilter.toLowerCase()}.` : "Your completed and cancelled appointments will appear here."} />
             )}
           </>
         )}
         <View style={{height: 24}} />
       </ScrollView>
+
+      {/* Date Filter Modal */}
+      <Modal
+        visible={showDateFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateFilterModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Filter by Date</Text>
+              <TouchableOpacity onPress={() => setShowDateFilterModal(false)} hitSlop={8}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={s.filterOptions}>
+              {DATE_FILTERS.map(filter => (
+                <Pressable
+                  key={filter}
+                  style={[s.filterOption, dateFilter === filter && s.filterOptionActive]}
+                  onPress={() => {
+                    setDateFilter(filter);
+                    setShowDateFilterModal(false);
+                  }}
+                >
+                  <Text style={[s.filterOptionText, dateFilter === filter && s.filterOptionTextActive]}>
+                    {filter}
+                  </Text>
+                  {dateFilter === filter && <Text style={s.filterCheck}>✓</Text>}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 function AppointmentCard({item, showStatus, compact}) {
   const isOnline = item.visitType === 'Video Consult' || item.visitType === 'Audio Call';
-  const initials = item.doctor?.replace('Dr. ', '').split(' ').map(w => w[0]).join('').slice(0, 2) || '??';
+  const initials = item.doctor?.replace('Dr. ', '').split(' ').map(w => w[0]?.toUpperCase()).join('').slice(0, 2) || '??';
   
   if (compact) {
     return (
@@ -674,4 +767,36 @@ const s = StyleSheet.create({
   tabCountTextActive:{color: '#fff'},
   tabCountTextZero:  {color: colors.textMuted},
   list:              {paddingHorizontal: spacing.base},
+  
+  // Filter styles
+  filterIconBtn:     {padding: spacing.sm, position: 'relative'},
+  filterDot:         {position: 'absolute', top: 8, right: 8, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary},
+  
+  // Active filter badge
+  activeDateFilterRow: {paddingHorizontal: spacing.base, marginBottom: spacing.sm},
+  activeDateFilterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  activeDateFilterText: {fontSize: 12, fontWeight: '600', color: colors.primary},
+  activeDateFilterClear: {fontSize: 12, fontWeight: '700', color: colors.primary, marginLeft: 4},
+  
+  // Modal styles
+  modalOverlay:      {flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'},
+  modalContent:      {backgroundColor: colors.background, borderRadius: radius.xl, margin: spacing.xl, minWidth: 280, maxWidth: 320},
+  modalHeader:       {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border},
+  modalTitle:        {fontSize: 16, fontWeight: '700', color: colors.textPrimary},
+  modalClose:        {fontSize: 18, color: colors.textSecondary, fontWeight: '700'},
+  filterOptions:     {padding: spacing.lg, paddingTop: spacing.md},
+  filterOption:      {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.base, borderRadius: radius.md, marginBottom: spacing.xs},
+  filterOptionActive:{backgroundColor: colors.primaryLight},
+  filterOptionText:  {fontSize: 14, color: colors.textPrimary, fontWeight: '500'},
+  filterOptionTextActive: {color: colors.primary, fontWeight: '600'},
+  filterCheck:       {fontSize: 16, color: colors.primary, fontWeight: '700'},
 });

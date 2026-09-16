@@ -6,7 +6,7 @@
  */
 
 import BaseRepository from '../BaseRepository';
-import { generateId, getCurrentTimestamp } from '../Database';
+import { generateId, getCurrentTimestamp } from '../db';
 
 export class InvestigationRepository extends BaseRepository {
   constructor() {
@@ -17,40 +17,60 @@ export class InvestigationRepository extends BaseRepository {
    * Override findById to use investigation_id instead of id
    */
   async findById(investigationId) {
-    const sql = `SELECT * FROM ${this.tableName} WHERE investigation_id = ?`;
-    return this.queryFirst(sql, [investigationId]);
+    try {
+      const sql = `SELECT * FROM ${this.tableName} WHERE investigation_id = ?`;
+      const result = await this.queryFirst(sql, [investigationId]);
+      return result ? this.transformFromDb(result) : null;
+    } catch (error) {
+      console.error('[InvestigationRepository] findById error:', error);
+      return null;
+    }
   }
 
   /**
    * Override exists to use investigation_id instead of id
    */
   async exists(investigationId) {
-    const sql = `SELECT 1 FROM ${this.tableName} WHERE investigation_id = ? LIMIT 1`;
-    const result = await this.queryFirst(sql, [investigationId]);
-    return !!result;
+    try {
+      const sql = `SELECT 1 FROM ${this.tableName} WHERE investigation_id = ? LIMIT 1`;
+      const result = await this.queryFirst(sql, [investigationId]);
+      return !!result;
+    } catch (error) {
+      console.error('[InvestigationRepository] exists error:', error);
+      return false;
+    }
   }
 
   /**
    * Override update to use investigation_id instead of id
    */
   async update(investigationId, data) {
-    const updateData = {
-      ...data,
-      updated_at: getCurrentTimestamp(),
-    };
+    try {
+      const dbData = this.transformToDb(data);
+      const updateData = {
+        ...dbData,
+        updated_at: getCurrentTimestamp(),
+      };
 
-    const columns = Object.keys(updateData);
-    const setClause = columns.map(col => `${col} = ?`).join(', ');
-    const values = [...columns.map(col => updateData[col]), investigationId];
+      // Remove investigation_id from update data to avoid conflicts
+      delete updateData.investigation_id;
 
-    const sql = `UPDATE ${this.tableName} SET ${setClause} WHERE investigation_id = ?`;
-    const result = await this.execute(sql, values);
-    
-    if (result.changes === 0) {
-      throw new Error(`Investigation with id ${investigationId} not found`);
+      const columns = Object.keys(updateData);
+      const setClause = columns.map(col => `${col} = ?`).join(', ');
+      const values = [...columns.map(col => updateData[col]), investigationId];
+
+      const sql = `UPDATE ${this.tableName} SET ${setClause} WHERE investigation_id = ?`;
+      const result = await this.execute(sql, values);
+      
+      if (result.changes === 0) {
+        throw new Error(`Investigation with id ${investigationId} not found`);
+      }
+
+      return this.findById(investigationId);
+    } catch (error) {
+      console.error('[InvestigationRepository] update error:', error);
+      throw error;
     }
-
-    return this.findById(investigationId);
   }
 
   /**
@@ -63,19 +83,29 @@ export class InvestigationRepository extends BaseRepository {
       id: dbRow.investigation_id,
       investigation_id: dbRow.investigation_id,
       patientId: dbRow.patient_id,
+      patient_id: dbRow.patient_id,
       name: dbRow.investigation_name,
+      investigation_name: dbRow.investigation_name,
       category: dbRow.category,
       status: dbRow.status,
       date: dbRow.investigation_date,
+      investigation_date: dbRow.investigation_date,
       time: dbRow.investigation_time,
+      investigation_time: dbRow.investigation_time,
       resultUrl: dbRow.report_url,
       printUrl: dbRow.report_url,
+      report_url: dbRow.report_url,
       localPath: dbRow.local_report_path,
+      local_report_path: dbRow.local_report_path,
       labName: dbRow.lab_name,
-      doctorName: dbRow.practitioner_name,
+      lab_name: dbRow.lab_name,
       location: dbRow.lab_name || 'Medical Center',
+      doctorName: dbRow.practitioner_name,
+      practitioner_name: dbRow.practitioner_name,
       notes: dbRow.notes,
       iconBg: '#FEE2E2',
+      created_at: dbRow.created_at,
+      updated_at: dbRow.updated_at,
       _raw: dbRow
     };
   }
@@ -108,7 +138,13 @@ export class InvestigationRepository extends BaseRepository {
     investigation.created_at = getCurrentTimestamp();
     investigation.updated_at = getCurrentTimestamp();
 
-    await this.insert(investigation);
+    const columns = Object.keys(investigation);
+    const placeholders = columns.map(() => '?').join(', ');
+    const values = columns.map(col => investigation[col]);
+
+    const sql = `INSERT INTO ${this.tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+    
+    await this.execute(sql, values);
     return this.transformFromDb(investigation);
   }
 
@@ -119,128 +155,22 @@ export class InvestigationRepository extends BaseRepository {
     const investigationId = data[idField] || data.investigation_id;
     
     if (!investigationId) {
-      return this.insert(data, false); // Insert without generating ID
+      return this.createInvestigation(data);
     }
 
     const exists = await this.exists(investigationId);
     if (exists) {
       return this.update(investigationId, data);
     } else {
-      return this.insert(data, false); // Don't generate new ID
+      return this.createInvestigation(data);
     }
-  }
-
-  /**
-   * Override exists method to use investigation_id
-   */
-  async exists(investigationId) {
-    const result = await this.findWhere({ investigation_id: investigationId });
-    return result && result.length > 0;
-  }
-
-  /**
-   * Override insert method to handle investigation_id properly
-   */
-  async insert(data, generateId = true) {
-    try {
-      console.log('[InvestigationRepository] INSERT - data received:', data);
-      
-      // Transform data for database storage
-      const dbData = this.transformToDb(data);
-      console.log('[InvestigationRepository] INSERT - transformed to DB format:', dbData);
-      
-      // Use parent insert but without auto-generating ID since we use investigation_id
-      const result = await super.insert(dbData, false);
-      console.log('[InvestigationRepository] INSERT - result:', result);
-      
-      return result;
-    } catch (error) {
-      console.error('[InvestigationRepository] INSERT failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Override update method to use investigation_id
-   */
-  async update(investigationId, data) {
-    try {
-      console.log('[InvestigationRepository] UPDATE - ID:', investigationId, 'data:', data);
-      
-      // Transform data for database storage
-      const dbData = this.transformToDb(data);
-      console.log('[InvestigationRepository] UPDATE - transformed to DB format:', dbData);
-      
-      // Update using investigation_id instead of id
-      const query = `UPDATE ${this.tableName} SET ${Object.keys(dbData).map(key => `${key} = ?`).join(', ')} WHERE investigation_id = ?`;
-      const values = [...Object.values(dbData), investigationId];
-      
-      console.log('[InvestigationRepository] UPDATE - query:', query);
-      console.log('[InvestigationRepository] UPDATE - values:', values);
-      
-      const result = await this.db.execute(query, values);
-      console.log('[InvestigationRepository] UPDATE - result:', result);
-      
-      return result;
-    } catch (error) {
-      console.error('[InvestigationRepository] UPDATE failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Override findById to use investigation_id
-   */
-  async findById(investigationId) {
-    try {
-      console.log('[InvestigationRepository] FIND_BY_ID:', investigationId);
-      
-      const results = await this.findWhere({ investigation_id: investigationId });
-      console.log('[InvestigationRepository] FIND_BY_ID - results:', results);
-      
-      if (results && results.length > 0) {
-        return this.transformFromDb(results[0]);
-      }
-      return null;
-    } catch (error) {
-      console.error('[InvestigationRepository] FIND_BY_ID failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Bulk upsert investigations for a patient
-   */
-  async bulkUpsertInvestigations(patientId, investigations) {
-    const results = [];
-    
-    for (const investigation of investigations) {
-      try {
-        // Ensure patient_id is set
-        investigation.patient_id = patientId;
-        investigation.patientId = patientId;
-        
-        const transformed = this.transformToDb(investigation);
-        
-        // Use upsert from BaseRepository
-        const result = await this.upsert(transformed, 'investigation_id');
-        results.push(this.transformFromDb(result));
-      } catch (error) {
-        console.error('[InvestigationRepo] Failed to upsert investigation:', error);
-        // Continue with other investigations even if one fails
-      }
-    }
-    
-    console.log(`[InvestigationRepo] Successfully upserted ${results.length}/${investigations.length} investigations`);
-    return results;
   }
 
   /**
    * Get investigation by ID
    */
   async getInvestigation(investigationId) {
-    const result = await this.findById(investigationId);
-    return result ? this.transformFromDb(result) : null;
+    return await this.findById(investigationId);
   }
 
   /**
@@ -249,13 +179,6 @@ export class InvestigationRepository extends BaseRepository {
   async getInvestigationsByPatient(patientId) {
     try {
       console.log('[InvestigationRepository] getInvestigationsByPatient called with patientId:', patientId);
-      console.log('[InvestigationRepository] this.findWhere type:', typeof this.findWhere);
-      
-      if (typeof this.findWhere !== 'function') {
-        console.error('[InvestigationRepository] ❌ ERROR: this.findWhere is not a function!');
-        console.error('[InvestigationRepository] Available methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this)));
-        throw new Error('findWhere method not available on InvestigationRepository');
-      }
       
       const results = await this.findWhere(
         { patient_id: patientId },
@@ -263,35 +186,18 @@ export class InvestigationRepository extends BaseRepository {
       );
       console.log('[InvestigationRepository] Found', results?.length || 0, 'raw results');
       
-      // Fix: Ensure results is an array and transformFromDb exists
       if (!Array.isArray(results)) {
         console.log('[InvestigationRepository] Results is not an array, returning empty array');
         return [];
       }
       
-      if (typeof this.transformFromDb !== 'function') {
-        console.error('[InvestigationRepository] ❌ ERROR: transformFromDb is not a function!');
-        return results; // Return raw results as fallback
-      }
-      
-      const transformed = [];
-      for (const result of results) {
-        try {
-          const transformed_item = this.transformFromDb(result);
-          if (transformed_item) {
-            transformed.push(transformed_item);
-          }
-        } catch (error) {
-          console.error('[InvestigationRepository] Error transforming result:', error);
-        }
-      }
-      
+      const transformed = results.map(result => this.transformFromDb(result)).filter(Boolean);
       console.log('[InvestigationRepository] Transformed to', transformed?.length || 0, 'investigations');
       return transformed;
     } catch (error) {
       console.error('[InvestigationRepository] ❌ Error in getInvestigationsByPatient:', error);
       console.error('[InvestigationRepository] Error stack:', error.stack);
-      throw error;
+      return [];
     }
   }
 
@@ -305,7 +211,7 @@ export class InvestigationRepository extends BaseRepository {
       ORDER BY investigation_date DESC, created_at DESC
     `;
     const results = await this.query(sql, [patientId, startDate, endDate]);
-    return results.map(result => this.transformFromDb(result));
+    return results.map(result => this.transformFromDb(result)).filter(Boolean);
   }
 
   /**
@@ -316,7 +222,7 @@ export class InvestigationRepository extends BaseRepository {
       { patient_id: patientId, status },
       'investigation_date DESC, created_at DESC'
     );
-    return results.map(result => this.transformFromDb(result));
+    return results.map(result => this.transformFromDb(result)).filter(Boolean);
   }
 
   /**
@@ -327,7 +233,7 @@ export class InvestigationRepository extends BaseRepository {
       { patient_id: patientId, category },
       'investigation_date DESC, created_at DESC'
     );
-    return results.map(result => this.transformFromDb(result));
+    return results.map(result => this.transformFromDb(result)).filter(Boolean);
   }
 
   /**
@@ -345,7 +251,7 @@ export class InvestigationRepository extends BaseRepository {
     `;
     const searchPattern = `%${query}%`;
     const results = await this.query(sql, [patientId, searchPattern, searchPattern, searchPattern]);
-    return results.map(result => this.transformFromDb(result));
+    return results.map(result => this.transformFromDb(result)).filter(Boolean);
   }
 
   /**
@@ -357,31 +263,22 @@ export class InvestigationRepository extends BaseRepository {
       throw new Error(`Investigation not found: ${investigationId}`);
     }
 
-    const updatedInvestigation = {
-      investigation_name: updates.investigation_name || updates.name || existing.investigation_name,
-      category: updates.category !== undefined ? updates.category : existing.category,
-      status: updates.status !== undefined ? updates.status : existing.status,
-      investigation_date: updates.investigation_date || updates.date || existing.investigation_date,
-      investigation_time: updates.investigation_time || updates.time || existing.investigation_time,
-      report_url: updates.report_url || updates.resultUrl || updates.printUrl || existing.report_url,
-      local_report_path: updates.local_report_path || updates.localPath || existing.local_report_path,
-      lab_name: updates.lab_name || updates.labName || existing.lab_name,
-      practitioner_name: updates.practitioner_name || updates.doctorName || existing.practitioner_name,
-      notes: updates.notes !== undefined ? updates.notes : existing.notes,
-      updated_at: getCurrentTimestamp()
+    // Merge updates with existing data
+    const merged = {
+      ...existing,
+      ...updates
     };
 
-    await this.update(investigationId, updatedInvestigation);
-    
-    const updated = await this.findById(investigationId);
-    return this.transformFromDb(updated);
+    return await this.update(investigationId, merged);
   }
 
   /**
    * Delete investigation
    */
   async deleteInvestigation(investigationId) {
-    await this.delete(investigationId);
+    const sql = `DELETE FROM ${this.tableName} WHERE investigation_id = ?`;
+    const result = await this.execute(sql, [investigationId]);
+    return result.changes > 0;
   }
 
   /**
@@ -392,40 +289,19 @@ export class InvestigationRepository extends BaseRepository {
     
     for (const investigationData of investigations) {
       try {
-        // Check if investigation already exists
-        const existingId = investigationData.investigation_id || investigationData.id;
-        let result;
+        // Ensure patient_id is set
+        investigationData.patient_id = patientId;
+        investigationData.patientId = patientId;
         
-        if (existingId) {
-          const existing = await this.getInvestigation(existingId);
-          if (existing) {
-            // Update existing
-            result = await this.updateInvestigation(existingId, {
-              ...investigationData,
-              patient_id: patientId
-            });
-          } else {
-            // Create new with specific ID
-            result = await this.createInvestigation({
-              ...investigationData,
-              patient_id: patientId,
-              investigation_id: existingId
-            });
-          }
-        } else {
-          // Create new with generated ID
-          result = await this.createInvestigation({
-            ...investigationData,
-            patient_id: patientId
-          });
-        }
-        
+        // Use upsert
+        const result = await this.upsert(investigationData, 'investigation_id');
         results.push(result);
       } catch (error) {
         console.error(`[InvestigationRepo] Failed to upsert investigation:`, error);
       }
     }
     
+    console.log(`[InvestigationRepo] Successfully upserted ${results.length}/${investigations.length} investigations`);
     return results;
   }
 
@@ -464,21 +340,20 @@ export class InvestigationRepository extends BaseRepository {
    * Get recent investigations for a patient
    */
   async getRecentInvestigations(patientId, limit = 10) {
-    const results = await this.findAll({
-      where: { patient_id: patientId },
-      orderBy: 'investigation_date DESC, created_at DESC',
+    const results = await this.findWhere(
+      { patient_id: patientId },
+      'investigation_date DESC, created_at DESC',
       limit
-    });
-    return results.map(result => this.transformFromDb(result));
+    );
+    return results.map(result => this.transformFromDb(result)).filter(Boolean);
   }
 
   /**
    * Update report download path
    */
   async updateReportPath(investigationId, localPath) {
-    await this.update(investigationId, {
-      local_report_path: localPath,
-      updated_at: getCurrentTimestamp()
+    return await this.update(investigationId, {
+      local_report_path: localPath
     });
   }
 
@@ -492,48 +367,14 @@ export class InvestigationRepository extends BaseRepository {
       ORDER BY investigation_date DESC
     `;
     const results = await this.query(sql, [patientId]);
-    return results.map(result => this.transformFromDb(result));
-  }
-
-  /**
-   * Transform database record to application format
-   */
-  transformFromDb(dbRecord) {
-    return {
-      id: dbRecord.investigation_id,
-      investigation_id: dbRecord.investigation_id,
-      patientId: dbRecord.patient_id,
-      patient_id: dbRecord.patient_id,
-      name: dbRecord.investigation_name,
-      investigation_name: dbRecord.investigation_name,
-      category: dbRecord.category,
-      status: dbRecord.status,
-      date: dbRecord.investigation_date,
-      investigation_date: dbRecord.investigation_date,
-      time: dbRecord.investigation_time,
-      investigation_time: dbRecord.investigation_time,
-      resultUrl: dbRecord.report_url,
-      printUrl: dbRecord.report_url,
-      report_url: dbRecord.report_url,
-      localPath: dbRecord.local_report_path,
-      local_report_path: dbRecord.local_report_path,
-      labName: dbRecord.lab_name,
-      lab_name: dbRecord.lab_name,
-      doctorName: dbRecord.practitioner_name,
-      practitioner_name: dbRecord.practitioner_name,
-      notes: dbRecord.notes,
-      created_at: dbRecord.created_at,
-      updated_at: dbRecord.updated_at
-    };
+    return results.map(result => this.transformFromDb(result)).filter(Boolean);
   }
 
   /**
    * Check if investigation exists (for migration)
    */
   async existsById(investigationId) {
-    const sql = `SELECT investigation_id FROM ${this.tableName} WHERE investigation_id = ? LIMIT 1`;
-    const results = await this.query(sql, [investigationId]);
-    return results.length > 0;
+    return await this.exists(investigationId);
   }
 
   /**
@@ -541,7 +382,7 @@ export class InvestigationRepository extends BaseRepository {
    */
   async clearPatientInvestigations(patientId) {
     const sql = `DELETE FROM ${this.tableName} WHERE patient_id = ?`;
-    await this.query(sql, [patientId]);
+    await this.execute(sql, [patientId]);
   }
 }
 

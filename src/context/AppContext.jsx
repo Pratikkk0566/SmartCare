@@ -2,10 +2,13 @@ import React, {createContext, useContext, useState, useEffect, useMemo} from 're
 import {AppState} from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {StorageService} from '../services/StorageService';
+import {SqliteStorageService} from '../services/SqliteStorageService';
 import {scheduleAllMedicineReminders, configurePushNotifications, setBadgeCount} from '../services/NotificationService';
 import { AppointmentApi, PatientApi, PractitionerApi, InvoiceApi, InvestigationApi, PrescriptionRepeatApi } from '../API/Api';
 import { medicationEngineService } from '../services/MedicationEngineService';
 import { todayInUtc } from '../services/MedicationSchedulingEngine';
+import { sqliteDataService } from '../services/SQLiteDataService';
+import { localAlarmManager } from '../services/LocalAlarmManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AppContext = createContext(null);
@@ -613,6 +616,29 @@ export function AppProvider({children}) {
         );
       }
 
+      // ── Initialize Offline-First Medication Alarm System ──────────────────
+      try {
+        console.log('[AppContext] Initializing medication alarm system...');
+        await sqliteDataService.init();
+        
+        // Initialize LocalAlarmManager for rich notifications
+        await localAlarmManager.init();
+        
+        // Schedule alarms for current user if logged in and has profile
+        if (cachedProfile?.patientId) {
+          try {
+            await localAlarmManager.scheduleUpcomingAlarms(cachedProfile.patientId);
+            console.log('[AppContext] ✅ Medication alarms scheduled for patient:', cachedProfile.patientId);
+          } catch (alarmError) {
+            console.error('[AppContext] ⚠️ Failed to schedule alarms (non-critical):', alarmError.message);
+            // Don't throw - alarms are non-critical for app startup
+          }
+        }
+      } catch (error) {
+        console.error('[AppContext] ❌ Failed to initialize alarm system:', error.message);
+        // Don't block app startup for alarm system issues
+      }
+
       setAppReady(true);
 
       // ── 3) Refresh from API if online ───────────────────────────────────────
@@ -849,6 +875,38 @@ export function AppProvider({children}) {
     }
   };
 
+  /**
+   * Sync active prescriptions from SQLite to medication engine
+   * This ensures medication alarms work offline using cached prescription data
+   */
+  const syncActivePrescriptionsFromSqlite = async () => {
+    try {
+      const pid = userProfile?.patientId || await AsyncStorage.getItem('patientId');
+      if (!pid) {
+        console.warn('[AppContext] No patient ID for prescription sync');
+        return { success: false, reason: 'No patientId' };
+      }
+
+      // Get active prescriptions from SQLite (Phase 4 implementation)
+      const activePrescriptions = await SqliteStorageService.getActivePrescriptions();
+      
+      if (!activePrescriptions || activePrescriptions.length === 0) {
+        console.log('[AppContext] No active prescriptions in SQLite');
+        return { success: true, count: 0 };
+      }
+
+      // Sync to medication engine
+      console.log(`[AppContext] Syncing ${activePrescriptions.length} active prescriptions to medication engine`);
+      const results = await medicationEngineService.syncPrescriptions(activePrescriptions, { patientId: pid });
+      await refreshEngineData();
+
+      return { success: true, count: activePrescriptions.length, results };
+    } catch (err) {
+      console.error('[AppContext] syncActivePrescriptionsFromSqlite error:', err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
   // Initial engine bootstrap
   useEffect(() => {
     async function initEngine() {
@@ -856,14 +914,19 @@ export function AppProvider({children}) {
         await medicationEngineService.init();
         const pid = userProfile?.patientId || '1';
         const practids = (practitioners || []).map(p => p.diaryuserid || p.practitionerId).filter(Boolean);
+        
         try {
+          // Try to fetch fresh prescriptions from API
           const prescResult = await PrescriptionRepeatApi.getAllForPatient(practids, pid, { forceRefresh: false });
           if (prescResult.success && Array.isArray(prescResult.data) && prescResult.data.length > 0) {
             await medicationEngineService.syncPrescriptions(prescResult.data, { patientId: pid });
           }
         } catch (e) {
-          // offline fallback
+          // Offline or API failure - use SQLite cached active prescriptions
+          console.log('[AppContext] API prescription fetch failed, using SQLite cache:', e.message);
+          await syncActivePrescriptionsFromSqlite();
         }
+        
         await refreshEngineData();
       } catch (e) {
         console.log('[AppContext] Engine init error:', e.message);
@@ -910,6 +973,7 @@ export function AppProvider({children}) {
   snoozeEngineDose,
   updateEngineTimingConfig,
   syncPrescriptionsToEngine,
+  syncActivePrescriptionsFromSqlite,
   // ── Network & sync state ──────────────────────────────────────────────────
   isOnline,
   profileLastUpdated,

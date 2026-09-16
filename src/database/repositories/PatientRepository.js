@@ -5,7 +5,7 @@
  */
 
 import BaseRepository from '../BaseRepository';
-import { generateId, getCurrentTimestamp } from '../Database';
+import { generateId, getCurrentTimestamp } from '../db';
 
 export class PatientRepository extends BaseRepository {
   constructor() {

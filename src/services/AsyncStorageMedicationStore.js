@@ -1,237 +1,307 @@
 /**
  * AsyncStorageMedicationStore.js
  * 
- * Persistent storage adapter for MedicationSchedulingEngine using React Native AsyncStorage.
- * Stores normalized Prescriptions, Medications, Schedules, Alarms, Events, and Timing Profiles.
+ * AsyncStorage-backed store implementation for medication scheduling system.
+ * Provides persistent storage for prescriptions, medications, schedules, alarms,
+ * timing configuration, and events.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clone } from './MedicationSchedulingEngine';
 
 const STORAGE_KEYS = {
-  PRESCRIPTIONS: '@med_engine_prescriptions_v2',
-  MEDICATIONS: '@med_engine_medications_v2',
-  SCHEDULES: '@med_engine_schedules_v2',
-  ALARMS: '@med_engine_alarms_v2',
-  EVENTS: '@med_engine_events_v2',
-  TIMING_CONFIG: '@med_engine_timing_config_v2',
+  PRESCRIPTIONS: '@medication_prescriptions',
+  MEDICATIONS: '@medications',
+  SCHEDULES: '@medication_schedules',
+  ALARMS: '@medication_alarms',
+  TIMING_CONFIG: '@medication_timing_config',
+  EVENTS: '@medication_events',
 };
 
 export class AsyncStorageMedicationStore {
   constructor() {
     this._initialized = false;
-    this._prescriptions = new Map();
-    this._medications = new Map();
-    this._schedules = new Map();
-    this._alarms = new Map();
-    this._events = [];
-    this._timingConfig = null;
   }
 
   async init() {
     if (this._initialized) return;
+    // Pre-load any necessary data or verify storage access
     try {
-      const [pStr, mStr, sStr, aStr, eStr, tStr] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.PRESCRIPTIONS),
-        AsyncStorage.getItem(STORAGE_KEYS.MEDICATIONS),
-        AsyncStorage.getItem(STORAGE_KEYS.SCHEDULES),
-        AsyncStorage.getItem(STORAGE_KEYS.ALARMS),
-        AsyncStorage.getItem(STORAGE_KEYS.EVENTS),
-        AsyncStorage.getItem(STORAGE_KEYS.TIMING_CONFIG),
-      ]);
-
-      if (pStr) {
-        const list = JSON.parse(pStr);
-        list
-          .filter(item => !String(item.prescriptionId || item.id).startsWith('RX-MOCK'))
-          .forEach(item => this._prescriptions.set(item.prescriptionId || item.id, item));
-      }
-      if (mStr) {
-        const list = JSON.parse(mStr);
-        list
-          .filter(item => !String(item.prescriptionId || '').startsWith('RX-MOCK'))
-          .forEach(item => this._medications.set(item.id, item));
-      }
-      if (sStr) {
-        const list = JSON.parse(sStr);
-        list
-          .filter(item => !String(item.prescriptionId || '').startsWith('RX-MOCK'))
-          .forEach(item => this._schedules.set(item.id, item));
-      }
-      if (aStr) {
-        const list = JSON.parse(aStr);
-        list
-          .filter(item => !String(item.prescriptionId || '').startsWith('RX-MOCK'))
-          .forEach(item => this._alarms.set(item.id || item.alarmId, item));
-      }
-      if (eStr) {
-        this._events = (JSON.parse(eStr) || []).filter(item => !String(item.prescriptionId || '').startsWith('RX-MOCK'));
-      }
-      if (tStr) {
-        this._timingConfig = JSON.parse(tStr);
-      }
+      await AsyncStorage.getAllKeys();
       this._initialized = true;
+      console.log('[AsyncStorageMedicationStore] Initialized successfully');
     } catch (error) {
-      console.warn('[AsyncStorageMedicationStore] Init error:', error);
-      this._initialized = true;
+      console.error('[AsyncStorageMedicationStore] Initialization failed:', error);
+      throw error;
     }
   }
 
-  // ── Prescriptions ────────────────────────────────────────────────────────
+  // ========== Prescription Methods ==========
+
   async savePrescription(prescription) {
-    await this.init();
-    const id = prescription.prescriptionId || prescription.id;
-    this._prescriptions.set(id, clone(prescription));
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.PRESCRIPTIONS,
-      JSON.stringify([...this._prescriptions.values()])
-    );
-    return clone(prescription);
+    const prescriptions = await this._getAllPrescriptions();
+    const index = prescriptions.findIndex(p => p.prescriptionId === prescription.prescriptionId);
+    
+    if (index >= 0) {
+      prescriptions[index] = prescription;
+    } else {
+      prescriptions.push(prescription);
+    }
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.PRESCRIPTIONS, JSON.stringify(prescriptions));
+    return prescription;
   }
 
-  async getPrescription(id) {
-    await this.init();
-    return clone(this._prescriptions.get(id));
+  async getPrescription(prescriptionId) {
+    const prescriptions = await this._getAllPrescriptions();
+    return prescriptions.find(p => p.prescriptionId === prescriptionId) || null;
   }
 
   async listPrescriptions() {
-    await this.init();
-    return [...this._prescriptions.values()].map(clone);
+    return await this._getAllPrescriptions();
   }
 
-  // ── Medications ──────────────────────────────────────────────────────────
+  async _getAllPrescriptions() {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.PRESCRIPTIONS);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error loading prescriptions:', error);
+      return [];
+    }
+  }
+
+  // ========== Medication Methods ==========
+
   async saveMedication(medication) {
-    await this.init();
-    this._medications.set(medication.id, clone(medication));
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.MEDICATIONS,
-      JSON.stringify([...this._medications.values()])
-    );
-    return clone(medication);
+    const medications = await this._getAllMedications();
+    const index = medications.findIndex(m => m.id === medication.id);
+    
+    if (index >= 0) {
+      medications[index] = medication;
+    } else {
+      medications.push(medication);
+    }
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(medications));
+    return medication;
   }
 
-  async getMedication(id) {
-    await this.init();
-    return clone(this._medications.get(id));
+  async getMedication(medicationId) {
+    const medications = await this._getAllMedications();
+    return medications.find(m => m.id === medicationId) || null;
   }
 
   async listMedications() {
-    await this.init();
-    return [...this._medications.values()].map(clone);
+    return await this._getAllMedications();
   }
 
-  async deleteMedication(id) {
-    await this.init();
-    this._medications.delete(id);
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.MEDICATIONS,
-      JSON.stringify([...this._medications.values()])
-    );
+  async _getAllMedications() {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.MEDICATIONS);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error loading medications:', error);
+      return [];
+    }
   }
 
-  // ── Schedules ────────────────────────────────────────────────────────────
+  // ========== Schedule Methods ==========
+
   async saveSchedule(schedule) {
-    await this.init();
-    this._schedules.set(schedule.id, clone(schedule));
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.SCHEDULES,
-      JSON.stringify([...this._schedules.values()])
-    );
-    return clone(schedule);
+    const schedules = await this._getAllSchedules();
+    const index = schedules.findIndex(s => s.id === schedule.id || s.scheduleId === schedule.scheduleId);
+    
+    if (index >= 0) {
+      schedules[index] = schedule;
+    } else {
+      schedules.push(schedule);
+    }
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(schedules));
+    return schedule;
   }
 
-  async getSchedule(id) {
-    await this.init();
-    return clone(this._schedules.get(id));
+  async getSchedule(scheduleId) {
+    const schedules = await this._getAllSchedules();
+    return schedules.find(s => s.id === scheduleId || s.scheduleId === scheduleId) || null;
   }
 
   async listSchedules() {
-    await this.init();
-    return [...this._schedules.values()].map(clone);
+    return await this._getAllSchedules();
   }
 
   async getSchedulesForMedication(medication) {
-    await this.init();
-    return [...this._schedules.values()]
-      .filter(
-        schedule =>
-          schedule.prescriptionId === medication.prescriptionId &&
-          schedule.medicinePrescriptionId === medication.medicinePrescriptionId &&
-          schedule.patientId === medication.patientId,
-      )
-      .map(clone);
-  }
-
-  async deleteSchedule(id) {
-    await this.init();
-    this._schedules.delete(id);
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.SCHEDULES,
-      JSON.stringify([...this._schedules.values()])
+    const schedules = await this._getAllSchedules();
+    return schedules.filter(s => 
+      s.medicinePrescriptionId === medication.medicinePrescriptionId &&
+      s.prescriptionId === medication.prescriptionId
     );
   }
 
-  // ── Alarms ───────────────────────────────────────────────────────────────
+  async _getAllSchedules() {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.SCHEDULES);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error loading schedules:', error);
+      return [];
+    }
+  }
+
+  // ========== Alarm Methods ==========
+
   async saveAlarm(alarm) {
-    await this.init();
-    const id = alarm.id || alarm.alarmId;
-    this._alarms.set(id, clone(alarm));
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.ALARMS,
-      JSON.stringify([...this._alarms.values()])
-    );
-    return clone(alarm);
+    const alarms = await this._getAllAlarms();
+    const index = alarms.findIndex(a => a.alarmId === alarm.alarmId);
+    
+    if (index >= 0) {
+      alarms[index] = alarm;
+    } else {
+      alarms.push(alarm);
+    }
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.ALARMS, JSON.stringify(alarms));
+    return alarm;
   }
 
-  async getAlarm(id) {
-    await this.init();
-    return clone(this._alarms.get(id));
+  async getAlarm(alarmId) {
+    const alarms = await this._getAllAlarms();
+    return alarms.find(a => a.alarmId === alarmId) || null;
   }
 
   async listAlarms() {
-    await this.init();
-    return [...this._alarms.values()].map(clone);
+    return await this._getAllAlarms();
   }
 
-  // ── Events ───────────────────────────────────────────────────────────────
-  async appendEvent(event) {
-    await this.init();
-    this._events.push(clone(event));
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.EVENTS,
-      JSON.stringify(this._events.slice(-500)) // retain last 500 actions
-    );
+  async _getAllAlarms() {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.ALARMS);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error loading alarms:', error);
+      return [];
+    }
   }
 
-  async listEvents() {
-    await this.init();
-    return clone(this._events);
-  }
+  // ========== Timing Configuration Methods ==========
 
-  // ── Timing Config ────────────────────────────────────────────────────────
   async saveTimingConfig(config) {
-    await this.init();
-    this._timingConfig = clone(config);
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.TIMING_CONFIG,
-      JSON.stringify(this._timingConfig)
-    );
-    return clone(this._timingConfig);
+    await AsyncStorage.setItem(STORAGE_KEYS.TIMING_CONFIG, JSON.stringify(config));
+    return config;
   }
 
   async getTimingConfig() {
-    await this.init();
-    return clone(this._timingConfig);
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.TIMING_CONFIG);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error loading timing config:', error);
+      return null;
+    }
   }
 
-  // ── Clear All ────────────────────────────────────────────────────────────
+  // ========== Event Log Methods ==========
+
+  async appendEvent(event) {
+    const events = await this._getAllEvents();
+    const timestampedEvent = {
+      ...event,
+      timestamp: event.timestamp || new Date().toISOString(),
+      id: `${event.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    };
+    events.push(timestampedEvent);
+    
+    // Keep only last 1000 events to avoid storage bloat
+    const trimmedEvents = events.slice(-1000);
+    await AsyncStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(trimmedEvents));
+    return timestampedEvent;
+  }
+
+  async listEvents(options = {}) {
+    const events = await this._getAllEvents();
+    let filtered = events;
+
+    if (options.type) {
+      filtered = filtered.filter(e => e.type === options.type);
+    }
+
+    if (options.scheduleId) {
+      filtered = filtered.filter(e => e.scheduleId === options.scheduleId);
+    }
+
+    if (options.limit) {
+      filtered = filtered.slice(-options.limit);
+    }
+
+    return filtered;
+  }
+
+  async _getAllEvents() {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.EVENTS);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error loading events:', error);
+      return [];
+    }
+  }
+
+  // ========== Utility Methods ==========
+
   async clearAll() {
-    this._prescriptions.clear();
-    this._medications.clear();
-    this._schedules.clear();
-    this._alarms.clear();
-    this._events = [];
-    this._timingConfig = null;
-    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+    try {
+      await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+      console.log('[AsyncStorageMedicationStore] All data cleared');
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error clearing data:', error);
+      throw error;
+    }
+  }
+
+  async exportData() {
+    try {
+      const data = {
+        prescriptions: await this._getAllPrescriptions(),
+        medications: await this._getAllMedications(),
+        schedules: await this._getAllSchedules(),
+        alarms: await this._getAllAlarms(),
+        timingConfig: await this.getTimingConfig(),
+        events: await this._getAllEvents(),
+        exportedAt: new Date().toISOString(),
+      };
+      return data;
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error exporting data:', error);
+      throw error;
+    }
+  }
+
+  async importData(data) {
+    try {
+      if (data.prescriptions) {
+        await AsyncStorage.setItem(STORAGE_KEYS.PRESCRIPTIONS, JSON.stringify(data.prescriptions));
+      }
+      if (data.medications) {
+        await AsyncStorage.setItem(STORAGE_KEYS.MEDICATIONS, JSON.stringify(data.medications));
+      }
+      if (data.schedules) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SCHEDULES, JSON.stringify(data.schedules));
+      }
+      if (data.alarms) {
+        await AsyncStorage.setItem(STORAGE_KEYS.ALARMS, JSON.stringify(data.alarms));
+      }
+      if (data.timingConfig) {
+        await AsyncStorage.setItem(STORAGE_KEYS.TIMING_CONFIG, JSON.stringify(data.timingConfig));
+      }
+      if (data.events) {
+        await AsyncStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(data.events));
+      }
+      console.log('[AsyncStorageMedicationStore] Data imported successfully');
+    } catch (error) {
+      console.error('[AsyncStorageMedicationStore] Error importing data:', error);
+      throw error;
+    }
   }
 }
+
+export default AsyncStorageMedicationStore;

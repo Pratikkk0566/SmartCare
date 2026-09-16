@@ -42,6 +42,7 @@ import AppointmentSuccessScreen from '../screens/Appointments/AppointmentSuccess
 // Medicine
 import MedicineScheduleScreen    from '../screens/Medicine/MedicineScheduleScreen';
 import MedicationAlarmsScreen    from '../screens/Medicine/MedicationAlarmsScreen';
+import MedicationAlarmScreen     from '../screens/Medicine/MedicationAlarmScreen';
 import PrescriptionsScreen       from '../screens/Medicine/PrescriptionsScreen';
 import PrescriptionDetailScreen  from '../screens/Medicine/PrescriptionDetailScreen';
 import CreatePrescriptionScreen  from '../screens/Medicine/CreatePrescriptionScreen';
@@ -49,6 +50,7 @@ import AddMedicinesScreen        from '../screens/Medicine/AddMedicinesScreen';
 import ReviewPrescriptionScreen  from '../screens/Medicine/ReviewPrescriptionScreen';
 import AboutMedicineScreen       from '../screens/Medicine/AboutMedicineScreen';
 import RestockMedicineScreen     from '../screens/Medicine/RestockMedicineScreen';
+import TodaysMedicineScreen      from '../screens/Medicine/TodaysMedicineScreen';
 
 // Investigations
 import InvestigationReportScreen  from '../screens/Investigations/InvestigationReportScreen';
@@ -189,7 +191,17 @@ export default function AppNavigator() {
 
         {/* Medicine */}
         <Stack.Screen name="MedicineSchedule"      component={MedicineScheduleScreen} />
-        <Stack.Screen name="MedicationAlarms"      component={MedicationAlarmsScreen} />
+        <Stack.Screen name="TodaysMedicine"       component={TodaysMedicineScreen} />
+        <Stack.Screen name="MedicationAlarms"     component={MedicationAlarmsScreen} />
+        <Stack.Screen 
+          name="MedicationAlarm" 
+          component={MedicationAlarmScreen} 
+          options={{ 
+            headerShown: false,
+            presentation: 'fullScreenModal',
+            gestureEnabled: false 
+          }} 
+        />
         <Stack.Screen name="Prescriptions"         component={PrescriptionsScreen} />
         <Stack.Screen name="PrescriptionDetail"    component={PrescriptionDetailScreen} />
         <Stack.Screen name="CreatePrescription"    component={CreatePrescriptionScreen} />

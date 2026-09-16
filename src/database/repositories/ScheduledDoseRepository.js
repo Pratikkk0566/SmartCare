@@ -3,14 +3,16 @@
  * ------------------------
  * Handles scheduled medication doses, tracking when medicines should be taken,
  * and managing dose status updates (taken, missed, skipped, etc.).
+ * 
+ * Updated for offline-first alarm system integration.
  */
 
 import { BaseRepository } from '../BaseRepository';
-import { generateId, getCurrentTimestamp } from '../Database';
+import { generateId, getCurrentTimestamp } from '../db';
 
 export class ScheduledDoseRepository extends BaseRepository {
   constructor() {
-    super('scheduled_doses');
+    super('medicine_doses'); // Updated to match existing table name
   }
 
   /**
@@ -18,27 +20,33 @@ export class ScheduledDoseRepository extends BaseRepository {
    */
   async createScheduledDose(doseData) {
     const dose = {
-      id: generateId('dose'),
+      dose_id: generateId('dose'),
       medicine_id: doseData.medicineId || doseData.medicine_id,
+      patient_id: doseData.patientId || doseData.patient_id,
       scheduled_date: doseData.scheduledDate || doseData.scheduled_date,
       scheduled_time: doseData.scheduledTime || doseData.scheduled_time,
       dose_value: parseFloat(doseData.doseValue || doseData.dose_value || 1),
       dose_unit: doseData.doseUnit || doseData.dose_unit || 'tablet',
       status: doseData.status || 'upcoming',
-      taken_time: doseData.takenTime || doseData.taken_time || null,
+      taken_at: doseData.takenAt || doseData.taken_at || null,
       notes: doseData.notes || '',
+      created_at: getCurrentTimestamp(),
+      updated_at: getCurrentTimestamp()
     };
 
+    console.log('[ScheduledDoseRepo] Creating dose:', dose);
     return this.insert(dose, false);
   }
 
   /**
-   * Generate scheduled doses for a medicine
+   * Generate scheduled doses for a medicine and create corresponding alarms
    */
-  async generateSchedulesForMedicine(medicineId, startDate, endDate, times) {
+  async generateSchedulesForMedicine(medicineId, patientId, startDate, endDate, times) {
     const doses = [];
     const start = new Date(startDate);
     const end = new Date(endDate);
+    
+    console.log('[ScheduledDoseRepo] Generating schedules for medicine:', medicineId, 'from', startDate, 'to', endDate);
     
     // Generate doses for each day in the range
     const currentDate = new Date(start);
@@ -49,6 +57,7 @@ export class ScheduledDoseRepository extends BaseRepository {
       for (const time of times) {
         const doseData = {
           medicineId,
+          patientId,
           scheduledDate: dateStr,
           scheduledTime: time,
           status: 'upcoming'
@@ -59,6 +68,8 @@ export class ScheduledDoseRepository extends BaseRepository {
       
       currentDate.setDate(currentDate.getDate() + 1);
     }
+
+    console.log('[ScheduledDoseRepo] Generated', doses.length, 'doses');
 
     // Batch insert all doses
     return this.executeTransaction(async () => {
@@ -74,25 +85,24 @@ export class ScheduledDoseRepository extends BaseRepository {
   /**
    * Get today's scheduled doses
    */
-  async getTodaysDoses(date = null) {
+  async getTodaysDoses(patientId, date = null) {
     const targetDate = date || new Date().toISOString().split('T')[0];
     
     const query = `
       SELECT 
-        sd.*,
+        md.*,
         pm.medicine_name,
         pm.medicine_type,
         pm.food_instruction,
-        p.name as prescription_name,
-        p.doctor_name
-      FROM scheduled_doses sd
-      JOIN prescription_medicines pm ON sd.medicine_id = pm.id
-      JOIN prescriptions p ON pm.prescription_id = p.id
-      WHERE sd.scheduled_date = ? AND p.status = 'active'
-      ORDER BY sd.scheduled_time ASC
+        p.prescription_id as prescription_name
+      FROM medicine_doses md
+      JOIN prescription_medicines pm ON md.medicine_id = pm.medicine_id
+      JOIN prescriptions p ON pm.prescription_id = p.prescription_id
+      WHERE md.patient_id = ? AND md.scheduled_date = ? AND pm.is_active = 1
+      ORDER BY md.scheduled_time ASC
     `;
     
-    return this.query(query, [targetDate]);
+    return this.query(query, [patientId, targetDate]);
   }
 
   /**
@@ -160,39 +170,53 @@ export class ScheduledDoseRepository extends BaseRepository {
   }
 
   /**
-   * Mark dose as taken
+   * Mark dose as taken (with alarm cancellation)
    */
   async markDoseAsTaken(doseId, takenTime = null, notes = '') {
     const updateData = {
       status: 'taken',
-      taken_time: takenTime || getCurrentTimestamp(),
-      notes: notes
+      taken_at: takenTime || getCurrentTimestamp(),
+      notes: notes,
+      updated_at: getCurrentTimestamp()
     };
 
+    console.log('[ScheduledDoseRepo] Marking dose as taken:', doseId);
+
     return this.executeTransaction(async () => {
-      const updatedDose = await this.update(doseId, updateData);
+      // Update dose status
+      const updatedDose = await this.updateDose(doseId, updateData);
       
       // Add to medication history
       await this.addToHistory(doseId, 'taken', notes);
+      
+      // Cancel any associated alarms
+      await this.cancelAlarmsForDose(doseId);
       
       return updatedDose;
     });
   }
 
   /**
-   * Mark dose as skipped
+   * Mark dose as skipped (with alarm cancellation)
    */
   async markDoseAsSkipped(doseId, notes = '') {
     const updateData = {
       status: 'skipped',
-      notes: notes
+      skipped_at: getCurrentTimestamp(),
+      notes: notes,
+      updated_at: getCurrentTimestamp()
     };
 
+    console.log('[ScheduledDoseRepo] Marking dose as skipped:', doseId);
+
     return this.executeTransaction(async () => {
-      const updatedDose = await this.update(doseId, updateData);
+      const updatedDose = await this.updateDose(doseId, updateData);
       
       // Add to medication history
       await this.addToHistory(doseId, 'skipped', notes);
+      
+      // Cancel any associated alarms
+      await this.cancelAlarmsForDose(doseId);
       
       return updatedDose;
     });
@@ -204,17 +228,46 @@ export class ScheduledDoseRepository extends BaseRepository {
   async markDoseAsMissed(doseId, notes = 'Automatically marked as missed') {
     const updateData = {
       status: 'missed',
-      notes: notes
+      notes: notes,
+      updated_at: getCurrentTimestamp()
     };
 
+    console.log('[ScheduledDoseRepo] Marking dose as missed:', doseId);
+
     return this.executeTransaction(async () => {
-      const updatedDose = await this.update(doseId, updateData);
+      const updatedDose = await this.updateDose(doseId, updateData);
       
       // Add to medication history
       await this.addToHistory(doseId, 'missed', notes);
       
       return updatedDose;
     });
+  }
+
+  /**
+   * Update dose record (helper method using dose_id)
+   */
+  async updateDose(doseId, data) {
+    const query = `UPDATE ${this.tableName} SET ${Object.keys(data).map(key => `${key} = ?`).join(', ')} WHERE dose_id = ?`;
+    const values = [...Object.values(data), doseId];
+    
+    const result = await this.db.execute(query, values);
+    console.log('[ScheduledDoseRepo] Updated dose:', doseId, result);
+    
+    return result;
+  }
+
+  /**
+   * Cancel alarms for a dose (helper method)
+   */
+  async cancelAlarmsForDose(doseId) {
+    try {
+      // This will be called by LocalAlarmManager
+      const { localAlarmManager } = require('../../services/LocalAlarmManager');
+      await localAlarmManager.cancelAlarmsForDose(doseId);
+    } catch (error) {
+      console.error('[ScheduledDoseRepo] Failed to cancel alarms for dose:', doseId, error);
+    }
   }
 
   /**
@@ -314,27 +367,37 @@ export class ScheduledDoseRepository extends BaseRepository {
    * Add entry to medication history
    */
   async addToHistory(doseId, action, notes = '') {
-    const dose = await this.findById(doseId);
+    const dose = await this.findDoseById(doseId);
     if (!dose) return null;
 
     const historyEntry = {
       dose_id: doseId,
       medicine_id: dose.medicine_id,
+      patient_id: dose.patient_id,
       action: action,
       timestamp: getCurrentTimestamp(),
       notes: notes
     };
 
     return this.execute(`
-      INSERT INTO medication_history (dose_id, medicine_id, action, timestamp, notes)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO medication_history (dose_id, medicine_id, patient_id, action, timestamp, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
     `, [
       historyEntry.dose_id,
       historyEntry.medicine_id,
+      historyEntry.patient_id,
       historyEntry.action,
       historyEntry.timestamp,
       historyEntry.notes
     ]);
+  }
+
+  /**
+   * Find dose by dose_id (helper method)
+   */
+  async findDoseById(doseId) {
+    const results = await this.findWhere('dose_id = ?', null, '1', [doseId]);
+    return results.length > 0 ? results[0] : null;
   }
 
   /**

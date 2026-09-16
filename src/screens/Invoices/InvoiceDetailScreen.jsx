@@ -9,7 +9,6 @@ import {
   Alert,
   Platform,
   PermissionsAndroid,
-  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
@@ -372,17 +371,6 @@ export default function InvoiceDetailScreen({ route, navigation }) {
     }
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        title: `Invoice ${invoiceNo}`,
-        message: `SmartCare Invoice ${displayId}\nPatient: ${raw.patient_name || 'Patient'} (UHID: ${raw.uhid || '—'})\nDate: ${invoice.date || ''}\nTotal: ₹${rawAmount.toLocaleString('en-IN')}\nStatus: ${invoice.status || 'Paid'}`,
-      });
-    } catch (err) {
-      console.log('Share error:', err);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Top Header */}
@@ -622,12 +610,8 @@ export default function InvoiceDetailScreen({ route, navigation }) {
 
       {/* Bottom Floating Bar */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.8}>
-          <Text style={styles.shareBtnText}>Share</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.downloadBtn, downloading && styles.downloadBtnDisabled]}
+          style={[styles.downloadBtn, styles.downloadBtnFullWidth, downloading && styles.downloadBtnDisabled]}
           onPress={handleDownloadInvoice}
           disabled={downloading}
           activeOpacity={0.85}>
@@ -888,26 +872,12 @@ const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: colors.border,
     ...shadows.md,
-  },
-  shareBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shareBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
   },
   downloadBtn: {
     flex: 1,
@@ -919,6 +889,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0ea5a2',
     borderRadius: radius.md,
     ...shadows.sm,
+  },
+  downloadBtnFullWidth: {
+    flex: 1,
   },
   downloadBtnDisabled: {
     opacity: 0.7,
