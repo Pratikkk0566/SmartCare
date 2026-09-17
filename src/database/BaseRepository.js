@@ -5,7 +5,7 @@
  * Follows the Repository pattern to abstract database operations.
  */
 
-import { Database, generateId, getCurrentTimestamp } from './Database';
+import { getDatabase, generateId, getCurrentTimestamp } from './db';
 
 export class BaseRepository {
   constructor(tableName) {
@@ -16,35 +16,48 @@ export class BaseRepository {
    * Get database connection
    */
   async getDb() {
-    return Database.getConnection();
+    return await getDatabase();
   }
 
   /**
    * Execute a query and return results
    */
   async query(sql, params = []) {
-    return Database.query(sql, params);
+    const db = await getDatabase();
+    const result = await db.execute(sql, params);
+    return result.rows || [];
   }
 
   /**
    * Execute a query and return the first result
    */
   async queryFirst(sql, params = []) {
-    return Database.queryFirst(sql, params);
+    const results = await this.query(sql, params);
+    return results.length > 0 ? results[0] : null;
   }
 
   /**
    * Execute a statement
    */
   async execute(sql, params = []) {
-    return Database.execute(sql, params);
+    const db = await getDatabase();
+    return await db.execute(sql, params);
   }
 
   /**
    * Execute within a transaction
    */
   async executeTransaction(callback) {
-    return Database.executeTransaction(callback);
+    const db = await getDatabase();
+    await db.execute('BEGIN TRANSACTION');
+    try {
+      const result = await callback();
+      await db.execute('COMMIT');
+      return result;
+    } catch (error) {
+      await db.execute('ROLLBACK');
+      throw error;
+    }
   }
 
   /**
