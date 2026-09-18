@@ -39,7 +39,7 @@ import {
   XIcon,
   AlertCircleIcon,
 } from '../../assets/icons/Icons';
-import {MedicineDB} from '../../services/MedicationDatabaseService';
+// SQLite removed - MedicineDB pending reimplementation
 import {MedicineApi, PrescriptionMasterApi} from '../../API/Api';
 
 const MEDICINE_TYPES = [
@@ -124,29 +124,9 @@ export default function AddMedicinesScreen({navigation, route}) {
   const loadExistingMedicines = async () => {
     setIsLoadingMedicines(true);
     try {
-      const existingMedicines = await MedicineDB.getByPrescriptionId(prescriptionId);
-      
-      // Convert database format to component state format
-      const formattedMedicines = existingMedicines.map(med => ({
-        id: med.id,
-        name: med.name,
-        type: med.type,
-        unit: med.unit,
-        dose: med.dose,
-        totalQuantity: med.totalQuantity?.toString() || '',
-        frequency: med.frequency,
-        customTimes: med.times || [],
-        times: med.times || [],
-        timesPerDay: med.times?.length || 0,
-        foodInstruction: med.foodInstruction,
-        durationDays: med.durationDays?.toString() || '0',
-        remainingDoses: 0,
-        instructions: med.instructions || '',
-        needsQuantity: MEDICINE_TYPES.find(t => t.value === med.type)?.needsQuantity,
-      }));
-      
-      setMedicines(formattedMedicines);
-      console.log('[AddMedicines] Loaded existing medicines:', formattedMedicines.length);
+      // SQLite removed - medicine loading pending reimplementation
+      setMedicines([]);
+      console.warn('[AddMedicines] Medicine loading functionality disabled');
     } catch (error) {
       console.error('[AddMedicines] Error loading medicines:', error);
       Alert.alert('Error', 'Failed to load existing medicines');
@@ -493,6 +473,13 @@ export default function AddMedicinesScreen({navigation, route}) {
     setIsSaving(true);
 
     try {
+      // SQLite removed - medicine save/delete functionality pending reimplementation
+      console.warn('[AddMedicines] Medicine save functionality disabled');
+      Alert.alert('Notice', 'Medicine saving is currently unavailable. Functionality pending reimplementation.');
+      setIsSaving(false);
+      return;
+
+      /* Disabled code:
       if (isEditing) {
         // In edit mode: delete all existing medicines first, then re-create them
         const existingMedicines = await MedicineDB.getByPrescriptionId(prescriptionId);
@@ -532,6 +519,7 @@ export default function AddMedicinesScreen({navigation, route}) {
         // Go to review screen for new prescriptions
         navigation.replace('ReviewPrescription', {prescriptionId, prescriptionName});
       }
+      */
     } catch (error) {
       console.error('[AddMedicines] Error:', error);
       Alert.alert('Error', 'Failed to save medicines. Please try again.');

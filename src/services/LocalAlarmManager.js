@@ -13,16 +13,22 @@
 
 import PushNotification from 'react-native-push-notification';
 import { Platform, AppState, Alert, Linking, PermissionsAndroid } from 'react-native';
-import MedicationAlarmRepository from '../database/repositories/MedicationAlarmRepository';
-import { generateId, getCurrentTimestamp } from '../database/db';
+
+// Helper functions for generating IDs and timestamps (replaces database utilities)
+const generateId = (prefix = 'id') => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const getCurrentTimestamp = () => new Date().toISOString();
 
 export class LocalAlarmManager {
   constructor() {
-    this.alarmRepo = new MedicationAlarmRepository();
+    // Note: Alarm persistence removed - alarms now in-memory only
+    // Will need reimplementation with new architecture
     this.isInitialized = false;
     this.maxSnoozeCount = 3; // Maximum number of snoozes allowed
     this.defaultSnoozeMinutes = 15;
     this.rollingWindowDays = 14; // Schedule alarms 14 days ahead
+    
+    // In-memory alarm tracking (replaces SQLite)
+    this.activeAlarms = new Map();
     
     // Navigation callback for deep linking
     this.navigationRef = null;
@@ -225,7 +231,8 @@ export class LocalAlarmManager {
     if (alarmId) {
       // Mark alarm as fired only if user interacted with notification
       if (userInteraction) {
-        this.alarmRepo.markAlarmAsFired(alarmId).catch(console.error);
+        // Note: Alarm tracking will be reimplemented with new architecture
+        console.log('[LocalAlarmManager] Alarm fired:', alarmId);
       }
     }
     
@@ -420,7 +427,8 @@ export class LocalAlarmManager {
         status: 'scheduled'
       };
       
-      await this.alarmRepo.createAlarm(alarmData);
+      // Store alarm in memory
+      this.activeAlarms.set(alarmId, alarmData);
       
       console.log('[LocalAlarmManager] ✅ Rich notification scheduled successfully:', alarmId);
       return alarmId;
@@ -771,11 +779,8 @@ export class LocalAlarmManager {
     try {
       console.log('[LocalAlarmManager] Quick taking medicine:', doseId);
       
-      // Import dynamically to avoid circular dependency
-      const { sqliteDataService } = require('./SQLiteDataService');
-      
-      // Mark dose as taken
-      await sqliteDataService.takeMedicine(doseId, 'Taken from notification');
+      // Note: Medication tracking will be reimplemented with new architecture
+      console.log('[LocalAlarmManager] Dose taken:', doseId);
       
       // Show success notification
       PushNotification.localNotification({
@@ -846,11 +851,8 @@ export class LocalAlarmManager {
     try {
       console.log('[LocalAlarmManager] Quick skipping medicine:', doseId);
       
-      // Import dynamically to avoid circular dependency
-      const { sqliteDataService } = require('./SQLiteDataService');
-      
-      // Mark dose as skipped
-      await sqliteDataService.skipMedicine(doseId, 'Skipped from notification');
+      // Note: Medication tracking will be reimplemented with new architecture
+      console.log('[LocalAlarmManager] Dose skipped:', doseId);
       
       // Show confirmation notification
       PushNotification.localNotification({

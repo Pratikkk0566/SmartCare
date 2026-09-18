@@ -159,14 +159,8 @@ export default function ProfileScreen({navigation}) {
 
   const countActivePrescriptions = async () => {
     try {
-      const {PrescriptionDB, MedicineDB} = require('../../services/MedicationDatabaseService');
-      const local = await PrescriptionDB.getAll() || [];
-      const localEnriched = await Promise.all(
-        local.map(async (p) => {
-          const meds = await MedicineDB.getByPrescriptionId(p.id) || [];
-          return { ...p, medicines: meds };
-        })
-      );
+      // SQLite removed - local prescription counting pending reimplementation
+      const localEnriched = [];
 
       let serverEnriched = [];
       const patientId = await AsyncStorage.getItem('patientId');

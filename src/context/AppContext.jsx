@@ -2,12 +2,10 @@ import React, {createContext, useContext, useState, useEffect, useMemo} from 're
 import {AppState} from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import {StorageService} from '../services/StorageService';
-import {SqliteStorageService} from '../services/SqliteStorageService';
 import {scheduleAllMedicineReminders, configurePushNotifications, setBadgeCount} from '../services/NotificationService';
 import { AppointmentApi, PatientApi, PractitionerApi, InvoiceApi, InvestigationApi, PrescriptionRepeatApi } from '../API/Api';
 import { medicationEngineService } from '../services/MedicationEngineService';
 import { todayInUtc } from '../services/MedicationSchedulingEngine';
-import { sqliteDataService } from '../services/SQLiteDataService';
 import { localAlarmManager } from '../services/LocalAlarmManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -184,7 +182,7 @@ export function AppProvider({children}) {
             allergies:  localProfile.allergies  || [],
           };
           setUserProfile(mergedProfile);
-          await StorageService.saveProfile(mergedProfile);
+          
           setProfileLastUpdated(Date.now());
         }
       }
@@ -475,7 +473,6 @@ export function AppProvider({children}) {
           }));
           
           setInvestigations(normalizedInvestigations);
-          await StorageService.saveInvestigations(normalizedInvestigations);
           setInvestigationsLastUpdated(Date.now());
         }
       } catch (err) {
@@ -541,9 +538,11 @@ export function AppProvider({children}) {
       if (loggedIn === true || loggedIn === 'true') setIsLoggedIn(true);
 
       // ── 2) Load cached data FIRST (instant offline support) ────────────────
+      
+      // Load profile from AsyncStorage
       const cachedProfile = await StorageService.getProfile();
       if (cachedProfile && Object.keys(cachedProfile).some(k => cachedProfile[k])) {
-        console.log('[AppContext] Loaded cached profile:', cachedProfile.firstName);
+        console.log('[AppContext] Loaded cached profile from AsyncStorage:', cachedProfile.firstName);
         setUserProfile(cachedProfile);
       }
 
@@ -584,9 +583,10 @@ export function AppProvider({children}) {
         setInvoices(cachedInvoices);
       }
 
+      // Load investigations from AsyncStorage
       const cachedInvestigations = await StorageService.getInvestigations();
       if (cachedInvestigations && cachedInvestigations.length > 0) {
-        console.log('[AppContext] Loaded cached investigations:', cachedInvestigations.length);
+        console.log('[AppContext] Loaded cached investigations from AsyncStorage:', cachedInvestigations.length);
         setInvestigations(cachedInvestigations);
       }
 
@@ -614,29 +614,6 @@ export function AppProvider({children}) {
             })),
           })),
         );
-      }
-
-      // ── Initialize Offline-First Medication Alarm System ──────────────────
-      try {
-        console.log('[AppContext] Initializing medication alarm system...');
-        await sqliteDataService.init();
-        
-        // Initialize LocalAlarmManager for rich notifications
-        await localAlarmManager.init();
-        
-        // Schedule alarms for current user if logged in and has profile
-        if (cachedProfile?.patientId) {
-          try {
-            await localAlarmManager.scheduleUpcomingAlarms(cachedProfile.patientId);
-            console.log('[AppContext] ✅ Medication alarms scheduled for patient:', cachedProfile.patientId);
-          } catch (alarmError) {
-            console.error('[AppContext] ⚠️ Failed to schedule alarms (non-critical):', alarmError.message);
-            // Don't throw - alarms are non-critical for app startup
-          }
-        }
-      } catch (error) {
-        console.error('[AppContext] ❌ Failed to initialize alarm system:', error.message);
-        // Don't block app startup for alarm system issues
       }
 
       setAppReady(true);
@@ -876,10 +853,10 @@ export function AppProvider({children}) {
   };
 
   /**
-   * Sync active prescriptions from SQLite to medication engine
-   * This ensures medication alarms work offline using cached prescription data
+   * Sync active prescriptions to medication engine
+   * This ensures medication alarms work with cached prescription data
    */
-  const syncActivePrescriptionsFromSqlite = async () => {
+  const syncActivePrescriptionsFromCache = async () => {
     try {
       const pid = userProfile?.patientId || await AsyncStorage.getItem('patientId');
       if (!pid) {
@@ -887,22 +864,12 @@ export function AppProvider({children}) {
         return { success: false, reason: 'No patientId' };
       }
 
-      // Get active prescriptions from SQLite (Phase 4 implementation)
-      const activePrescriptions = await SqliteStorageService.getActivePrescriptions();
-      
-      if (!activePrescriptions || activePrescriptions.length === 0) {
-        console.log('[AppContext] No active prescriptions in SQLite');
-        return { success: true, count: 0 };
-      }
-
-      // Sync to medication engine
-      console.log(`[AppContext] Syncing ${activePrescriptions.length} active prescriptions to medication engine`);
-      const results = await medicationEngineService.syncPrescriptions(activePrescriptions, { patientId: pid });
-      await refreshEngineData();
-
-      return { success: true, count: activePrescriptions.length, results };
+      // For now, we'll rely on API-based prescription sync
+      // This function is a placeholder for future offline prescription handling
+      console.log('[AppContext] Prescription sync from cache - API-based only for now');
+      return { success: true, count: 0 };
     } catch (err) {
-      console.error('[AppContext] syncActivePrescriptionsFromSqlite error:', err.message);
+      console.error('[AppContext] syncActivePrescriptionsFromCache error:', err.message);
       return { success: false, error: err.message };
     }
   };
@@ -922,9 +889,8 @@ export function AppProvider({children}) {
             await medicationEngineService.syncPrescriptions(prescResult.data, { patientId: pid });
           }
         } catch (e) {
-          // Offline or API failure - use SQLite cached active prescriptions
-          console.log('[AppContext] API prescription fetch failed, using SQLite cache:', e.message);
-          await syncActivePrescriptionsFromSqlite();
+          // Offline or API failure - no cached prescriptions available yet
+          console.log('[AppContext] API prescription fetch failed:', e.message);
         }
         
         await refreshEngineData();
@@ -973,7 +939,7 @@ export function AppProvider({children}) {
   snoozeEngineDose,
   updateEngineTimingConfig,
   syncPrescriptionsToEngine,
-  syncActivePrescriptionsFromSqlite,
+  syncActivePrescriptionsFromCache,
   // ── Network & sync state ──────────────────────────────────────────────────
   isOnline,
   profileLastUpdated,

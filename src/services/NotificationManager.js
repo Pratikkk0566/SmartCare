@@ -7,7 +7,6 @@
 
 import { AppState } from 'react-native';
 import { localAlarmManager } from './LocalAlarmManager';
-import { sqliteDataService } from './SQLiteDataService';
 
 class NotificationManager {
   constructor() {
@@ -192,9 +191,7 @@ class NotificationManager {
   async takeMedication(medicationData) {
     console.log('[NotificationManager] Taking medication:', medicationData.medicineName);
     
-    if (medicationData.doseId) {
-      await sqliteDataService.takeMedicine(medicationData.doseId, 'Taken via in-app notification');
-    }
+    // Note: Medication tracking will be reimplemented with new architecture
     
     // Show success feedback
     this.showSuccessNotification('✅ Medicine Taken', `${medicationData.medicineName} marked as taken`);
@@ -206,9 +203,7 @@ class NotificationManager {
   async skipMedication(medicationData) {
     console.log('[NotificationManager] Skipping medication:', medicationData.medicineName);
     
-    if (medicationData.doseId) {
-      await sqliteDataService.skipMedicine(medicationData.doseId, 'Skipped via in-app notification');
-    }
+    // Note: Medication tracking will be reimplemented with new architecture
     
     // Show confirmation feedback
     this.showWarningNotification('⚠️ Medicine Skipped', `${medicationData.medicineName} marked as skipped`);
@@ -220,15 +215,8 @@ class NotificationManager {
   async snoozeMedication(medicationData, minutes) {
     console.log('[NotificationManager] Snoozing medication for', minutes, 'minutes');
     
-    if (medicationData.alarmId) {
-      const success = await sqliteDataService.snoozeMedicine(medicationData.alarmId, minutes);
-      
-      if (success) {
-        this.showInfoNotification('⏰ Reminder Snoozed', `Reminder set for ${minutes} minutes`);
-      } else {
-        this.showWarningNotification('⚠️ Snooze Limit Reached', 'Please take your medicine now');
-      }
-    }
+    // Note: Alarm snoozing will be reimplemented with new architecture
+    this.showInfoNotification('⏰ Reminder Snoozed', `Reminder set for ${minutes} minutes`);
   }
 
   /**

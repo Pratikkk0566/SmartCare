@@ -155,6 +155,8 @@ export default function OTPVerificationScreen({ navigation, route }) {
 
         if (patient && (patient.id || patient.patientId)) {
           const pid = String(patient.id || patient.patientId || '');
+          
+          // Save to AsyncStorage (for backward compatibility)
           await AsyncStorage.setItem('patientId',  pid);
           await AsyncStorage.setItem('@patientId', pid);
           await AsyncStorage.setItem('patientName', `${patient.firstname || ''} ${patient.surname || ''}`.trim());

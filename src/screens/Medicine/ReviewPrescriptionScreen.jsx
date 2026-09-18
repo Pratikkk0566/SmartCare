@@ -20,10 +20,7 @@ import {
   CalendarIcon,
   ClockIcon,
 } from '../../assets/icons/Icons';
-import {
-  PrescriptionDB,
-  MedicineDB,
-} from '../../services/MedicationDatabaseService';
+// SQLite removed - PrescriptionDB and MedicineDB pending reimplementation
 import MedicationScheduleService from '../../services/MedicationScheduleService';
 import {scheduleAllMedicineReminders} from '../../services/NotificationService';
 
@@ -41,11 +38,9 @@ export default function ReviewPrescriptionScreen({navigation, route}) {
 
   const loadData = async () => {
     try {
-      const presc = await PrescriptionDB.getById(prescriptionId);
-      const meds = await MedicineDB.getByPrescriptionId(prescriptionId);
-
-      setPrescription(presc);
-      setMedicines(meds);
+      // SQLite removed - prescription/medicine loading pending reimplementation
+      setPrescription(null);
+      setMedicines([]);
     } catch (error) {
       console.error('[ReviewPrescription] Load error:', error);
       Alert.alert('Error', 'Failed to load prescription data');
@@ -77,8 +72,8 @@ export default function ReviewPrescriptionScreen({navigation, route}) {
 
       console.log(`[ReviewPrescription] Generated ${scheduledDoses.length} doses`);
 
-      // 2. Activate prescription
-      await PrescriptionDB.activate(prescriptionId);
+      // 2. Activate prescription (SQLite removed)
+      console.warn('[ReviewPrescription] Prescription activation pending reimplementation');
 
       // 3. Schedule notifications
       console.log('[ReviewPrescription] Scheduling notifications...');

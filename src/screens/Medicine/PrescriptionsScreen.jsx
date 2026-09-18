@@ -6,7 +6,6 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {PrescriptionDB, MedicineDB} from '../../services/MedicationDatabaseService';
 import {PrescriptionRepeatApi, computePrescriptionRelevance, relevanceStyle} from '../../API/Api';
 import {ArrowBackIcon, FilterIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon, CapsuleIcon, PlusIcon, FileTextIcon, TrashIcon, EditIcon, AlertCircleIcon, CheckCircleIcon, ChevronRightIcon, ChevronDownIcon, UserIcon, HospitalIcon, PillIcon} from '../../assets/icons/Icons';
 import {useApp} from '../../context/AppContext';
@@ -102,28 +101,8 @@ export default function PrescriptionsScreen({navigation}) {
   const loadPrescriptions = useCallback(async () => {
     try {
       setLoadingLocal(true);
-      const allPrescriptions = await PrescriptionDB.getAll();
-
-      const enriched = await Promise.all(
-        allPrescriptions.map(async (presc) => {
-          const medicines = await MedicineDB.getByPrescriptionId(presc.id);
-          return {
-            ...presc,
-            medicineCount: medicines.length,
-            medicines: medicines,
-          };
-        })
-      );
-
-      // Sort local prescriptions by DATE DESC (closest/newest at top, farthest/oldest at bottom)
-      enriched.sort((a, b) => {
-        const ta = getPrescriptionTimestamp(a);
-        const tb = getPrescriptionTimestamp(b);
-        if (tb !== ta) return tb - ta;
-        return Number(b.id || 0) - Number(a.id || 0);
-      });
-
-      setLocalPrescriptions(enriched);
+      // SQLite removed - local prescription caching pending reimplementation
+      setLocalPrescriptions([]);
     } catch (error) {
       console.error('[PrescriptionsScreen] Local load error:', error);
     } finally {
@@ -428,14 +407,8 @@ export default function PrescriptionsScreen({navigation}) {
       setShowDeleteModal(false);
       setLoading(true);
       
-      // Delete all medicines associated with this prescription
-      const medicines = await MedicineDB.getByPrescriptionId(selectedPrescription.id);
-      for (const medicine of medicines) {
-        await MedicineDB.delete(medicine.id);
-      }
-      
-      // Delete the prescription
-      await PrescriptionDB.delete(selectedPrescription.id);
+      // SQLite removed - local prescription deletion pending reimplementation
+      // Only server-side prescriptions can be deleted through API
       
       // Reload prescriptions
       await loadPrescriptions();

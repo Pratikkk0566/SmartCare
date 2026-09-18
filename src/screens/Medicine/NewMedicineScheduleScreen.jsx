@@ -16,7 +16,7 @@ import {
   HeartRateIcon,
   CheckCircleIcon,
 } from '../../assets/icons/Icons';
-import {ScheduledDoseDB, MedicineDB} from '../../services/MedicationDatabaseService';
+// SQLite removed - ScheduledDoseDB and MedicineDB pending reimplementation
 import MedicationScheduleService from '../../services/MedicationScheduleService';
 
 const PERIOD_ICONS = {morning: SunriseIcon, afternoon: SunIcon, evening: SunIcon, night: MoonIcon};
@@ -95,9 +95,9 @@ export default function NewMedicineScheduleScreen({navigation}) {
 
   const markDoseTaken = async (dose) => {
     try {
-      await ScheduledDoseDB.markTaken(dose.id);
-      Alert.alert('✓ Taken', `${dose.medicine.name} marked as taken`);
-      loadTodaySchedule();
+      // SQLite removed - dose marking pending reimplementation
+      console.warn('[MedicineSchedule] Dose marking functionality disabled');
+      Alert.alert('Notice', 'Dose marking is currently unavailable. Functionality pending reimplementation.');
     } catch (error) {
       console.error('[MedicineSchedule] Mark taken error:', error);
       Alert.alert('Error', 'Failed to mark as taken');
@@ -106,9 +106,9 @@ export default function NewMedicineScheduleScreen({navigation}) {
 
   const markDoseSkipped = async (dose) => {
     try {
-      await ScheduledDoseDB.markSkipped(dose.id);
-      Alert.alert('Skipped', `${dose.medicine.name} marked as skipped`);
-      loadTodaySchedule();
+      // SQLite removed - dose marking pending reimplementation
+      console.warn('[MedicineSchedule] Dose marking functionality disabled');
+      Alert.alert('Notice', 'Dose marking is currently unavailable. Functionality pending reimplementation.');
     } catch (error) {
       console.error('[MedicineSchedule] Mark skipped error:', error);
       Alert.alert('Error', 'Failed to mark as skipped');

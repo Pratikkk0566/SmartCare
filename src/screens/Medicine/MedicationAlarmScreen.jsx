@@ -3,7 +3,6 @@ import { View, StyleSheet, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 
 import MedAlarm from '../../components/MedAlarm';
-import { sqliteDataService } from '../../services/SQLiteDataService';
 import { localAlarmManager } from '../../services/LocalAlarmManager';
 
 const MedicationAlarmScreen = () => {
@@ -79,8 +78,7 @@ const MedicationAlarmScreen = () => {
     console.log('[MedicationAlarmScreen] Recording medication as taken');
 
     try {
-      // Record in SQLite medication_history
-      await sqliteDataService.takeMedicine(doseId, 'Taken via medication alarm');
+      // Note: Medication tracking will be reimplemented with new architecture
       
       // Cancel any active alarm
       if (alarmId) {
@@ -162,8 +160,7 @@ const MedicationAlarmScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Record in SQLite medication_history
-              await sqliteDataService.skipMedicine(doseId, 'Skipped via medication alarm');
+              // Note: Medication tracking will be reimplemented with new architecture
               
               // Cancel any active alarm
               if (alarmId) {

@@ -11,9 +11,6 @@ import {InvestigationApi} from '../../API/Api';
 import {enrichInvestigationsWithDates} from '../../utils/investigationEnrichment';
 import SearchBar from '../../components/common/SearchBar';
 import StatusChip from '../../components/common/StatusChip';
-// ── SQLITE INTEGRATION ──────────────────────────────────────────────────────
-import { useSQLiteData } from '../../hooks/useSQLiteData';
-// ────────────────────────────────────────────────────────────────────────────
 import {
   ArrowBackIcon, FilterIcon, ShieldIcon, FlaskIcon,
   PlusIcon, ClockIcon, CheckCircleIcon, ArrowRightIcon,
@@ -81,19 +78,7 @@ function splitDateTime(dt = '') {
 }
 
 export default function InvestigationsScreen({navigation}) {
-  const {testRequests, isOnline, refreshAllData, appReady, userProfile} = useApp();
-  
-  // ── SQLITE INTEGRATION ──────────────────────────────────────────────────
-  const {
-    getInvestigations,
-    saveInvestigations,
-    searchInvestigations,
-    getInvestigationsByCategory,
-    getInvestigationsByDateRange,
-    getProfile,
-    isInitialized,
-  } = useSQLiteData();
-  // ────────────────────────────────────────────────────────────────────────
+  const {testRequests, isOnline, refreshAllData, appReady, userProfile, investigations} = useApp();
   
   const [filter, setFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All Time');
@@ -101,77 +86,19 @@ export default function InvestigationsScreen({navigation}) {
   const [query, setQuery] = useState('');
   const [reports, setReports] = useState([]);
   
-  // Show loading while SQLite is initializing
-  const [loading, setLoading] = useState(!isInitialized);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load investigations from SQLite on screen focus
+  // Load investigations from AppContext on screen focus
   useFocusEffect(
     useCallback(() => {
-      let mounted = true;
-      
-      async function loadInvestigations() {
-        try {
-          if (!isInitialized) {
-            console.log('[InvestigationsScreen] SQLite not initialized yet');
-            return;
-          }
-          
-          if (!mounted) return;
-          
-          console.log('[InvestigationsScreen] 🔄 Starting to load investigations...');
-          
-          // Try to get from SQLite first
-          const patientId = userProfile?.patientId || userProfile?.patient_id || userProfile?.uhid;
-          const cachedInvestigations = await getInvestigations(patientId);
-          console.log('[InvestigationsScreen] 📦 Found', cachedInvestigations?.length || 0, 'cached investigations');
-          
-          if (cachedInvestigations && cachedInvestigations.length > 0) {
-            if (!mounted) return;
-            console.log('[InvestigationsScreen] ✅ OFFLINE MODE: Using cached data (', cachedInvestigations.length, 'investigations)');
-            setReports(cachedInvestigations);
-            setLoading(false);
-          } else {
-            // No cached data, try to fetch from API if we have patient ID
-            const patientId = userProfile?.patientId || userProfile?.patient_id || userProfile?.uhid;
-            if (patientId) {
-              console.log('[InvestigationsScreen] 🌐 No cached data, trying to fetch from API for patient:', patientId);
-              if (!mounted) return;
-              setLoading(true);
-              
-              try {
-                await fetchReports();
-              } catch (error) {
-                console.log('[InvestigationsScreen] ❌ API failed (no internet), but no cached data available');
-                console.log('[InvestigationsScreen] 📱 User needs internet connection for first-time setup');
-                if (!mounted) return;
-                setLoading(false);
-                // Show message to user that they need internet for first setup
-              }
-            } else {
-              console.log('[InvestigationsScreen] ⚠️ No patient ID available, cannot fetch from API');
-              if (!mounted) return;
-              setLoading(false);
-            }
-          }
-        } catch (error) {
-          console.error('[InvestigationsScreen] ❌ ERROR in loadInvestigations:', error);
-          if (mounted) setLoading(false);
-        }
+      // Use investigations from AppContext (loaded from AsyncStorage)
+      if (investigations && investigations.length > 0) {
+        console.log('[InvestigationsScreen] Loaded', investigations.length, 'investigations from AppContext');
+        setReports(investigations);
       }
-      
-      loadInvestigations();
-      
-      return () => {
-        mounted = false;
-      };
-    }, [isInitialized, userProfile?.patientId])  // Add userProfile.patientId dependency
+    }, [investigations])
   );
-
-  // Update loading state based on SQLite status
-  useEffect(() => {
-    setLoading(!isInitialized);
-  }, [isInitialized]);
 
   // Full re-fetch — only called on explicit pull-to-refresh
   const fetchReports = async () => {
@@ -306,17 +233,6 @@ export default function InvestigationsScreen({navigation}) {
       mapped.sort((a, b) => toTimestamp(b.date) - toTimestamp(a.date));
       setReports(mapped);
       
-      // ── SAVE TO SQLITE FOR OFFLINE CACHING ─────────────────────────
-      try {
-        console.log('[InvestigationsScreen] � Saving', mapped.length, 'investigations to SQLite...');
-        await saveInvestigations(mapped, patientId);
-        console.log('[InvestigationsScreen] ✅ Saved investigations to SQLite successfully');
-      } catch (error) {
-        console.error('[InvestigationsScreen] ❌ Failed to save to SQLite:', error);
-        // Continue anyway - at least the data is displayed
-      }
-      // ──────────────────────────────────────────────────────────────────
-      
       // Enrich reports with dates from print API in background
       console.log('[InvestigationsScreen] Starting background enrichment...');
       // Use patientId as clientId (they're the same in this system)
@@ -327,20 +243,6 @@ export default function InvestigationsScreen({navigation}) {
         enrichInvestigationsWithDates(mapped, clientId, async (enrichedReports) => {
           console.log('[InvestigationsScreen] Received enriched reports update:', enrichedReports.length);
           setReports(enrichedReports);
-          
-          // Save enriched reports back to SQLite
-          try {
-            console.log('[InvestigationsScreen] 📦 SAVING ENRICHED REPORTS: Now saving', enrichedReports.length, 'enriched reports with detailed content to SQLite...');
-            await saveInvestigations(enrichedReports, patientId);
-            console.log('[InvestigationsScreen] ✅ SUCCESS: Saved enriched investigations with full details to SQLite for offline access!');
-            
-            // Verify the enriched save
-            const verification = await getInvestigations(patientId);
-            console.log('[InvestigationsScreen] 🔍 VERIFICATION: SQLite now contains', verification?.length || 0, 'enriched investigations');
-          } catch (error) {
-            console.error('[InvestigationsScreen] ❌ CRITICAL: Failed to save enriched reports to SQLite:', error);
-            console.error('[InvestigationsScreen] This means offline report details will not work!');
-          }
         }).catch(err => {
           console.error('[InvestigationsScreen] Enrichment error:', err);
         });

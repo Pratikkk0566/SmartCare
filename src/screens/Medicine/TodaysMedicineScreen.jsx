@@ -24,7 +24,6 @@ import { spacing } from '../../theme/spacing';
 import { shadows } from '../../theme/shadows';
 import { radius } from '../../theme/radius';
 import { useApp } from '../../context/AppContext';
-import { sqliteDataService } from '../../services/SQLiteDataService';
 import { localAlarmManager } from '../../services/LocalAlarmManager';
 import { notificationManager } from '../../services/NotificationManager';
 
@@ -70,16 +69,12 @@ export default function TodaysMedicineScreen({ navigation }) {
 
       console.log('[TodaysMedicine] Loading schedule for patient:', patientId);
 
-      // Get today's schedule with alarm information
-      const todaysSchedule = await sqliteDataService.getTodaysScheduleWithAlarms(patientId);
+      // Note: Medication schedule functionality will be reimplemented with new architecture
+      // For now, show empty schedule
+      setSchedule([]);
+      setAdherenceStats(null);
       
-      // Get adherence statistics
-      const stats = await sqliteDataService.getMedicationAdherence(patientId);
-      
-      setSchedule(todaysSchedule || []);
-      setAdherenceStats(stats);
-      
-      console.log('[TodaysMedicine] Loaded', todaysSchedule?.length || 0, 'scheduled doses');
+      console.log('[TodaysMedicine] Schedule functionality pending reimplementation');
       
     } catch (error) {
       console.error('[TodaysMedicine] Failed to load schedule:', error);
@@ -97,16 +92,8 @@ export default function TodaysMedicineScreen({ navigation }) {
     try {
       console.log('[TodaysMedicine] Taking medicine:', dose.medicine_name);
       
-      await sqliteDataService.takeMedicine(dose.dose_id, 'Taken via app');
-      
-      // Reload schedule to reflect changes
-      await loadTodaysSchedule();
-      
-      Alert.alert(
-        'Medicine Taken ✅',
-        `${dose.medicine_name} marked as taken`,
-        [{ text: 'OK' }]
-      );
+      // Note: Medicine tracking will be reimplemented with new architecture
+      Alert.alert('Info', 'Medicine tracking functionality pending reimplementation');
       
     } catch (error) {
       console.error('[TodaysMedicine] Failed to take medicine:', error);
@@ -130,12 +117,8 @@ export default function TodaysMedicineScreen({ navigation }) {
             try {
               console.log('[TodaysMedicine] Skipping medicine:', dose.medicine_name);
               
-              await sqliteDataService.skipMedicine(dose.dose_id, 'Skipped via app');
-              
-              // Reload schedule
-              await loadTodaysSchedule();
-              
-              Alert.alert('Medicine Skipped', `${dose.medicine_name} marked as skipped`);
+              // Note: Medicine tracking will be reimplemented with new architecture
+              Alert.alert('Info', 'Medicine tracking functionality pending reimplementation');
               
             } catch (error) {
               console.error('[TodaysMedicine] Failed to skip medicine:', error);
@@ -180,14 +163,8 @@ export default function TodaysMedicineScreen({ navigation }) {
     try {
       console.log('[TodaysMedicine] Snoozing alarm:', alarmId, 'for', minutes, 'minutes');
       
-      const success = await sqliteDataService.snoozeMedicine(alarmId, minutes);
-      
-      if (success) {
-        await loadTodaysSchedule();
-        Alert.alert('Alarm Snoozed', `Reminder set for ${minutes} minutes`);
-      } else {
-        Alert.alert('Snooze Limit', 'Maximum snooze limit reached. Please take your medicine.');
-      }
+      // Note: Alarm snoozing will be reimplemented with new architecture
+      Alert.alert('Info', 'Alarm snooze functionality pending reimplementation');
       
     } catch (error) {
       console.error('[TodaysMedicine] Failed to snooze alarm:', error);
