@@ -28,7 +28,7 @@ import {
   DocumentIcon,
 } from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
-import { InvoiceApi } from '../../API/Api';
+import { InvoiceApi, ClinicApi } from '../../API/Api';
 import { generateInvoiceHtml, mapInvoiceRecord } from '../../utils/invoiceHtmlGenerator';
 
 // Converts binary string / stream into safe base64 without InvalidCharacterError
@@ -70,6 +70,58 @@ function toBase64(str) {
   return out;
 }
 
+/**
+ * Extract and format date for PDF filename
+ * Returns format: DDMmmYY (e.g., 25Jan26)
+ */
+function formatDateForFilename(dateValue) {
+  if (!dateValue) return null;
+  
+  try {
+    // Handle various date formats
+    let dateObj;
+    
+    if (dateValue instanceof Date) {
+      dateObj = dateValue;
+    } else if (typeof dateValue === 'string') {
+      // Handle common date formats
+      // ISO: 2026-01-25T10:30:00 or 2026-01-25
+      // DD-MM-YYYY: 25-01-2026
+      // DD/MM/YYYY: 25/01/2026
+      dateObj = new Date(dateValue);
+    } else if (typeof dateValue === 'number') {
+      // Unix timestamp
+      dateObj = new Date(dateValue);
+    } else {
+      return null;
+    }
+    
+    // Validate date
+    if (isNaN(dateObj.getTime())) {
+      return null;
+    }
+    
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[dateObj.getMonth()];
+    const year = String(dateObj.getFullYear()).slice(-2);
+    
+    return `${day}${month}${year}`;
+  } catch (error) {
+    console.log('[formatDateForFilename] Error parsing date:', error);
+    return null;
+  }
+}
+
+/**
+ * Extract UHID last 6 digits
+ */
+function extractUHID(uhidValue) {
+  if (!uhidValue) return '000000';
+  const uhidStr = String(uhidValue).replace(/[^0-9]/g, '');
+  return uhidStr.slice(-6).padStart(6, '0');
+}
+
 // Helper component for info rows
 function InfoRow({ icon: Icon, label, value }) {
   if (!value || value === '— / —') return null;
@@ -88,6 +140,7 @@ export default function InvoiceDetailScreen({ route, navigation }) {
   const { invoice } = route.params || {};
   const [downloading, setDownloading] = useState(false);
   const [detailedInvoice, setDetailedInvoice] = useState({});
+  const [letterheadData, setLetterheadData] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Combine tapped item data with any extra print details
@@ -106,6 +159,17 @@ export default function InvoiceDetailScreen({ route, navigation }) {
       if (!invoiceId || invoiceId === 'N/A') return;
       try {
         setLoadingDetails(true);
+        
+        // Fetch clinic letterhead (branchId = 1 hardcoded)
+        console.log('[InvoiceDetailScreen] Fetching clinic letterhead...');
+        const letterheadRes = await ClinicApi.getLetterhead();
+        if (letterheadRes?.success && letterheadRes?.data) {
+          console.log('[InvoiceDetailScreen] ✅ Letterhead fetched successfully');
+          setLetterheadData(letterheadRes.data);
+        } else {
+          console.log('[InvoiceDetailScreen] ⚠️ Letterhead fetch failed:', letterheadRes?.error);
+        }
+        
         const invoicePid = tappedRaw.patientid || tappedRaw.patientId || tappedRaw.patient_id || invoice?.patientId || invoice?.patient_id;
         const storedPid = (await AsyncStorage.getItem('patientId')) || (await AsyncStorage.getItem('clientId'));
         const patientId = Number(invoicePid || storedPid || 0);
@@ -221,12 +285,48 @@ export default function InvoiceDetailScreen({ route, navigation }) {
       }
 
       // 2. Generate XHTML string code for this specific patient
-      const htmlContent = generateInvoiceHtml(fullDetail);
+      // Build logo URL from letterhead data
+      const clinicId = (await AsyncStorage.getItem('CLINICID')) || 'aureus';
+      let logoUrl = '';
+      if (letterheadData) {
+        console.log('[InvoiceDetailScreen] Using letterhead data for PDF');
+        const letterheadRecord = Array.isArray(letterheadData?.letterheadDetails) 
+          ? letterheadData.letterheadDetails[0]
+          : Array.isArray(letterheadData)
+          ? letterheadData[0]
+          : letterheadData;
+        
+        if (letterheadRecord?.clinicLogo) {
+          const logoPath = letterheadRecord.clinicLogo;
+          logoUrl = logoPath.startsWith('http') 
+            ? logoPath 
+            : `https://saas.smartcarehis.com:8443/${logoPath}`;
+          console.log('[InvoiceDetailScreen] Logo URL:', logoUrl);
+        }
+      }
+
+      const htmlContent = generateInvoiceHtml(fullDetail, {
+        letterhead: letterheadData,
+        logoUrl: logoUrl,
+        copyLabel: 'PATIENT COPY'
+      });
       console.log('[InvoiceDetailScreen] Generated XHTML content length:', htmlContent.length);
 
-      // 3. Save Form HTML to master patient form save endpoint with unique title to prevent collisions
-      const safeInvNo = String(invoiceNo).replace(/[^a-zA-Z0-9_-]/g, '_');
-      const formTitle = `INVOICE_${patientId}_${safeInvNo}`;
+      // 3. Generate PDF filename: Bill_INV123_UHID.pdf (using invoice number instead of date)
+      // Invoice number is more reliable than date fields which can be wrong
+      const invoiceNumber = raw.invoice_sequence_number || 
+                           raw.location_Wise_Invoice_no || 
+                           raw.invoiceNumber ||
+                           raw.invoice_id ||
+                           'INV';
+      
+      // Clean invoice number (remove special chars, keep alphanumeric)
+      const cleanInvNum = String(invoiceNumber)
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .substring(0, 15);
+      
+      const uhidLast6 = extractUHID(raw.uhid || raw.patient_uhid || patientId);
+      const formTitle = `Bill_${cleanInvNum}_${uhidLast6}`;
 
       const formPayload = {
         formTitle,
@@ -234,7 +334,7 @@ export default function InvoiceDetailScreen({ route, navigation }) {
         htmlContent,
       };
 
-      console.log('[InvoiceDetailScreen] Submitting invoice form to backend save API with patientId:', patientId, 'formTitle:', formTitle);
+      console.log('[InvoiceDetailScreen] 📄 Final PDF Name:', `${formTitle}.pdf`, '(Invoice #:', cleanInvNum, ', UHID:', uhidLast6, ')');
       const saveRes = await InvoiceApi.saveInvoiceForm(patientId, formPayload);
       console.log('[InvoiceDetailScreen] Save Form API result:', JSON.stringify(saveRes));
 
@@ -242,7 +342,6 @@ export default function InvoiceDetailScreen({ route, navigation }) {
       await new Promise(resolve => setTimeout(resolve, 1200));
 
       // 4. Download document PDF from downloadDocuments API with EXACT same patientId and unique filename
-      const clinicId = (await AsyncStorage.getItem('CLINICID')) || 'aureus';
       const returnedFileName = saveRes?.data?.fileName || saveRes?.data?.data?.fileName || saveRes?.data?.data?.documentPath;
 
       const primaryDocUrl = returnedFileName
@@ -295,7 +394,7 @@ export default function InvoiceDetailScreen({ route, navigation }) {
         .replace(/[^a-zA-Z0-9-]/g, '_');
       const cleanDate = rawDate || new Date().toISOString().split('T')[0];
 
-      const pdfFileName = `Invoice_${cleanDate}_${cleanPatientName}_${safeInvNo}.pdf`;
+      const pdfFileName = `${formTitle}.pdf`;  // Use the same formTitle we created earlier
       const pdfFilePath = `${downloadDir}/${pdfFileName}`;
 
       let pdfSaved = false;

@@ -14,7 +14,7 @@ export default function App() {
         // Import and configure notifications
         const { configurePushNotifications } = await import('./src/services/NotificationService');
         
-        configurePushNotifications((notification) => {
+        configurePushNotifications((notification: any) => {
           console.log('[App] Notification received:', notification);
         });
         

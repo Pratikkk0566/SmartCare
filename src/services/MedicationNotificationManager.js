@@ -11,6 +11,10 @@ import { ALARM_STATUS } from './MedicationSchedulingEngine';
 let PushNotification = null;
 let PushNotificationIOS = null;
 
+// DISABLED - react-native-push-notification not installed
+console.warn('[MedicationNotificationManager] Push notification libraries not installed - all notification features disabled');
+
+/*
 try {
   PushNotification = require('react-native-push-notification').default;
   if (Platform.OS === 'ios') {
@@ -19,6 +23,7 @@ try {
 } catch {
   // Graceful fallback if native module isn't loaded in test environment
 }
+*/
 
 const ALARM_CHANNEL_ID = 'medicare-engine-alarms-v2';
 

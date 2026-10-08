@@ -6,8 +6,12 @@ import { Alert, Platform, Linking } from 'react-native';
 
 let PushNotification = null;
 
-// Try to load the notification library
+// DISABLED - react-native-push-notification not installed
 const initNotificationLibrary = () => {
+  console.warn('[SimpleNotificationService] Push notification library not installed - feature disabled');
+  return false;
+  
+  /*
   if (PushNotification) return true;
   
   try {
@@ -48,6 +52,7 @@ const initNotificationLibrary = () => {
     console.error('[SimpleNotificationService] Failed to load notification library:', error);
     return false;
   }
+  */
 };
 
 export const testNotification = async () => {
@@ -125,9 +130,11 @@ export const debugNotificationSystem = () => {
     version: Platform.Version,
     libraryLoaded: false,
     methods: [],
-    error: null
+    error: 'react-native-push-notification not installed'
   };
   
+  // DISABLED - library not installed
+  /*
   try {
     const module = require('react-native-push-notification');
     debug.libraryLoaded = true;
@@ -139,6 +146,7 @@ export const debugNotificationSystem = () => {
   } catch (error) {
     debug.error = error.message;
   }
+  */
   
   return debug;
 };

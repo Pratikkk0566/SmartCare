@@ -19,6 +19,7 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
+import MedicineSuccessModal from '../../components/common/MedicineSuccessModal';
 import {
   ArrowBackIcon,
   CalendarIcon,
@@ -116,6 +117,14 @@ export default function MedicineScheduleScreen({navigation}) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Success modal state
+  const [successModal, setSuccessModal] = useState({
+    visible: false,
+    medicineName: '',
+    dose: '',
+    time: '',
+  });
 
   // Modals
   const [selectedSchedule, setSelectedSchedule] = useState(null);
@@ -263,11 +272,23 @@ export default function MedicineScheduleScreen({navigation}) {
 
   // Action handlers
   const handleMarkTaken = async (schedule) => {
+    // Show success modal immediately for instant feedback
+    setSuccessModal({
+      visible: true,
+      medicineName: schedule.medicineName,
+      dose: `${schedule.doseQuantity} dose`,
+      time: schedule.scheduledTime12h || schedule.scheduledTime,
+    });
+    
     try {
-      await markEngineDoseTaken(schedule.id);
-      Alert.alert('✓ Dose Recorded', `${schedule.medicineName} (${schedule.doseQuantity} dose) marked as TAKEN.`);
+      // Update backend and refresh in background (don't wait)
+      markEngineDoseTaken(schedule.id).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Could not mark dose as taken.');
+      // Refresh to revert optimistic update on error
+      await refreshEngineData(selectedDate);
     }
   };
 
@@ -278,12 +299,19 @@ export default function MedicineScheduleScreen({navigation}) {
 
   const handleApplySnooze = async (minutes) => {
     if (!selectedSchedule) return;
+    
+    // Close modal immediately for instant feedback
+    setShowSnoozeModal(false);
+    Alert.alert('⏰ Alarm Snoozed', `Reminder set for ${minutes} minutes from now.`);
+    
     try {
-      await snoozeEngineDose(selectedSchedule.id, minutes);
-      setShowSnoozeModal(false);
-      Alert.alert('⏰ Alarm Snoozed', `Reminder set for ${minutes} minutes from now.`);
+      // Update backend and refresh in background
+      snoozeEngineDose(selectedSchedule.id, minutes).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Could not snooze alarm.');
+      await refreshEngineData(selectedDate);
     }
   };
 
@@ -297,22 +325,35 @@ export default function MedicineScheduleScreen({navigation}) {
   const handleConfirmSkip = async () => {
     if (!selectedSchedule) return;
     const finalReason = skipReason === 'Other reason' && customSkipReason ? customSkipReason : skipReason;
+    
+    // Close modal and show feedback immediately
+    setShowSkipModal(false);
+    Alert.alert('Dose Skipped', `${selectedSchedule.medicineName} marked as skipped.`);
+    
     try {
-      await markEngineDoseSkipped(selectedSchedule.id, finalReason);
-      setShowSkipModal(false);
-      Alert.alert('Dose Skipped', `${selectedSchedule.medicineName} marked as skipped.`);
+      // Update backend and refresh in background
+      markEngineDoseSkipped(selectedSchedule.id, finalReason).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Could not skip dose.');
+      await refreshEngineData(selectedDate);
     }
   };
 
   const handleSaveTimingSettings = async () => {
+    // Close modal immediately for instant feedback
+    setShowSettingsModal(false);
+    Alert.alert('✓ Settings Saved', 'Your personal medication routine has been updated.');
+    
     try {
-      await updateEngineTimingConfig(timingSettings);
-      setShowSettingsModal(false);
-      Alert.alert('✓ Settings Saved', 'Your personal medication routine has been updated.');
+      // Update backend and refresh in background
+      updateEngineTimingConfig(timingSettings).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to update timing profile.');
+      await refreshEngineData(selectedDate);
     }
   };
 
@@ -784,6 +825,15 @@ export default function MedicineScheduleScreen({navigation}) {
           </View>
         </View>
       </Modal>
+
+      {/* Success Modal */}
+      <MedicineSuccessModal
+        visible={successModal.visible}
+        medicineName={successModal.medicineName}
+        dose={successModal.dose}
+        time={successModal.time}
+        onClose={() => setSuccessModal({ visible: false, medicineName: '', dose: '', time: '' })}
+      />
     </SafeAreaView>
   );
 }

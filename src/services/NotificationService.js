@@ -1,17 +1,12 @@
 import {Platform, Alert} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// DISABLED - react-native-push-notification and @react-native-community/push-notification-ios not installed
 let PushNotification = null;
 let PushNotificationIOS = null;
 
-try {
-  PushNotification = require('react-native-push-notification').default;
-  if (Platform.OS === 'ios') {
-    PushNotificationIOS = require('@react-native-community/push-notification-ios').default;
-  }
-} catch {
-  // Library not linked yet — graceful fallback
-}
+// Libraries removed - all notification functionality disabled
+console.warn('[NotificationService] Push notification libraries not installed - all notification features disabled');
 
 const CHANNEL_ID = 'medicare-medicine-reminders';
 const SCHEDULED_NOTIFICATIONS_KEY = '@scheduled_notifications';

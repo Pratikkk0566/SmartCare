@@ -11,7 +11,7 @@
  * - Background notification handling
  */
 
-import PushNotification from 'react-native-push-notification';
+// import PushNotification from 'react-native-push-notification'; // REMOVED - not installed
 import { Platform, AppState, Alert, Linking, PermissionsAndroid } from 'react-native';
 
 // Helper functions for generating IDs and timestamps (replaces database utilities)
@@ -94,12 +94,8 @@ export class LocalAlarmManager {
       }
     } else if (Platform.OS === 'ios') {
       // iOS - PushNotification.configure handles this
-      return new Promise((resolve) => {
-        PushNotification.checkPermissions((permissions) => {
-          console.log('[LocalAlarmManager] iOS permissions:', permissions);
-          resolve(permissions.alert || permissions.badge || permissions.sound);
-        });
-      });
+      console.log('[LocalAlarmManager] iOS - push notification library not available');
+      return true; // Assume permission granted for now
     }
     
     return true;
@@ -121,6 +117,8 @@ export class LocalAlarmManager {
       }
 
       // Create notification channels (Android)
+      // DISABLED - react-native-push-notification not installed
+      /*
       PushNotification.createChannel(
         {
           channelId: "medication-reminders",
@@ -146,8 +144,12 @@ export class LocalAlarmManager {
         },
         (created) => console.log(`[LocalAlarmManager] Urgent channel created: ${created}`)
       );
+      */
+      console.log('[LocalAlarmManager] Notification channels disabled - library not installed');
 
       // Configure push notifications with enhanced handling
+      // DISABLED - react-native-push-notification not installed
+      /*
       // Check if already configured to avoid conflicts
       let isAlreadyConfigured = false;
       try {
@@ -192,6 +194,8 @@ export class LocalAlarmManager {
       } else {
         console.log('[LocalAlarmManager] Using existing PushNotification configuration');
       }
+      */
+      console.log('[LocalAlarmManager] Push notification configuration disabled - library not installed');
 
       // Listen for app state changes to handle missed dose detection
       AppState.addEventListener('change', this.handleAppStateChange);
@@ -332,6 +336,11 @@ export class LocalAlarmManager {
       
       console.log('[LocalAlarmManager] Scheduling rich notification for:', doseData.medicine_name, 'at', scheduledTime);
       
+      // DISABLED - react-native-push-notification not installed
+      // Notification scheduling would happen here
+      console.log('[LocalAlarmManager] ⚠️ Notification scheduling disabled - library not installed');
+      
+      /*
       // Determine if this is an urgent reminder (overdue)
       const isOverdue = scheduledTime < new Date();
       const channelId = isOverdue ? "urgent-medication" : "medication-reminders";
@@ -415,6 +424,7 @@ export class LocalAlarmManager {
           groupSummary: false,
         })
       });
+      */
 
       // Store alarm record in database
       const alarmData = {
@@ -523,7 +533,8 @@ export class LocalAlarmManager {
       }
       
       // Cancel current notification
-      PushNotification.cancelLocalNotifications({ id: alarm.notification_id });
+      // PushNotification.cancelLocalNotifications({ id: alarm.notification_id }); // DISABLED - library not installed
+      console.log('[LocalAlarmManager] Cancel notification disabled - library not installed');
       
       // Calculate new alarm time
       const newAlarmTime = new Date(alarm.alarm_time);
@@ -541,6 +552,8 @@ export class LocalAlarmManager {
       `;
       const doseData = await this.alarmRepo.queryFirst(doseQuery, [alarm.dose_id]);
       
+      // Schedule new notification - DISABLED
+      /*
       PushNotification.localNotificationSchedule({
         id: newNotificationId,
         title: `💊 Reminder: ${doseData.medicine_name}`,
@@ -555,6 +568,8 @@ export class LocalAlarmManager {
           action: 'take_medicine'
         }
       });
+      */
+      console.log('[LocalAlarmManager] Snooze notification disabled - library not installed');
       
       // Update alarm record
       await this.alarmRepo.update(alarmId, {
@@ -585,7 +600,8 @@ export class LocalAlarmManager {
       }
       
       // Cancel OS notification
-      PushNotification.cancelLocalNotifications({ id: alarm.notification_id });
+      // PushNotification.cancelLocalNotifications({ id: alarm.notification_id }); // DISABLED - library not installed
+      console.log('[LocalAlarmManager] Cancel alarm notification disabled - library not installed');
       
       // Update alarm status
       await this.alarmRepo.updateAlarmStatus(alarmId, 'cancelled');
@@ -606,7 +622,8 @@ export class LocalAlarmManager {
       
       for (const alarm of alarms) {
         // Cancel OS notification
-        PushNotification.cancelLocalNotifications({ id: alarm.notification_id });
+        // PushNotification.cancelLocalNotifications({ id: alarm.notification_id }); // DISABLED - library not installed
+        console.log('[LocalAlarmManager] Cancel dose alarm notification disabled - library not installed');
       }
       
       // Mark alarms as cancelled in database
@@ -642,7 +659,8 @@ export class LocalAlarmManager {
       
       for (const alarm of overdueAlarms) {
         // Cancel OS notification
-        PushNotification.cancelLocalNotifications({ id: alarm.notification_id });
+        // PushNotification.cancelLocalNotifications({ id: alarm.notification_id }); // DISABLED - library not installed
+        console.log('[LocalAlarmManager] Cancel overdue notification disabled - library not installed');
         
         // Mark alarm as expired
         await this.alarmRepo.updateAlarmStatus(alarm.alarm_id, 'expired');
@@ -715,7 +733,8 @@ export class LocalAlarmManager {
       console.log('[LocalAlarmManager] Cleaning up old alarms...');
       
       // Cancel all local notifications (fresh start)
-      PushNotification.cancelAllLocalNotifications();
+      // PushNotification.cancelAllLocalNotifications(); // DISABLED - library not installed
+      console.log('[LocalAlarmManager] Cancel all notifications disabled - library not installed');
       
       // Delete expired alarms from database
       const cutoffDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
@@ -783,6 +802,7 @@ export class LocalAlarmManager {
       console.log('[LocalAlarmManager] Dose taken:', doseId);
       
       // Show success notification
+      /*
       PushNotification.localNotification({
         title: "✅ Medicine Taken",
         message: "Successfully marked as taken",
@@ -792,6 +812,8 @@ export class LocalAlarmManager {
         autoCancel: true,
         ongoing: false,
       });
+      */
+      console.log('[LocalAlarmManager] Success notification disabled - library not installed');
       
       console.log('[LocalAlarmManager] ✅ Quick take completed');
       
@@ -799,6 +821,7 @@ export class LocalAlarmManager {
       console.error('[LocalAlarmManager] ❌ Quick take failed:', error);
       
       // Show error notification
+      /*
       PushNotification.localNotification({
         title: "❌ Failed to take medicine",
         message: "Please open the app to complete this action",
@@ -806,6 +829,8 @@ export class LocalAlarmManager {
         vibrate: true,
         priority: "high",
       });
+      */
+      console.log('[LocalAlarmManager] Error notification disabled - library not installed');
     }
   }
 
@@ -820,6 +845,7 @@ export class LocalAlarmManager {
       
       if (success) {
         // Show snooze confirmation
+        /*
         PushNotification.localNotification({
           title: "⏰ Alarm Snoozed",
           message: `Reminder set for ${this.defaultSnoozeMinutes} minutes`,
@@ -828,8 +854,11 @@ export class LocalAlarmManager {
           priority: "low",
           autoCancel: true,
         });
+        */
+        console.log('[LocalAlarmManager] Snooze confirmation notification disabled - library not installed');
       } else {
         // Show snooze limit reached
+        /*
         PushNotification.localNotification({
           title: "⚠️ Snooze Limit Reached",
           message: "Please take your medicine now",
@@ -837,6 +866,8 @@ export class LocalAlarmManager {
           vibrate: true,
           priority: "high",
         });
+        */
+        console.log('[LocalAlarmManager] Snooze limit notification disabled - library not installed');
       }
       
     } catch (error) {
@@ -855,6 +886,7 @@ export class LocalAlarmManager {
       console.log('[LocalAlarmManager] Dose skipped:', doseId);
       
       // Show confirmation notification
+      /*
       PushNotification.localNotification({
         title: "⚠️ Medicine Skipped",
         message: "Dose marked as skipped",
@@ -863,6 +895,8 @@ export class LocalAlarmManager {
         priority: "low",
         autoCancel: true,
       });
+      */
+      console.log('[LocalAlarmManager] Skip confirmation notification disabled - library not installed');
       
       console.log('[LocalAlarmManager] ✅ Quick skip completed');
       
@@ -870,6 +904,7 @@ export class LocalAlarmManager {
       console.error('[LocalAlarmManager] ❌ Quick skip failed:', error);
       
       // Show error notification
+      /*
       PushNotification.localNotification({
         title: "❌ Failed to skip medicine",
         message: "Please open the app to complete this action",
@@ -877,6 +912,8 @@ export class LocalAlarmManager {
         vibrate: true,
         priority: "high",
       });
+      */
+      console.log('[LocalAlarmManager] Skip error notification disabled - library not installed');
     }
   }
 
@@ -1016,6 +1053,8 @@ export class LocalAlarmManager {
       // Schedule immediate test notification
       const testNotificationId = generateId('test_notification');
       
+      // DISABLED - react-native-push-notification not installed
+      /*
       PushNotification.localNotification({
         id: testNotificationId,
         channelId: "medication-reminders",
@@ -1056,10 +1095,12 @@ export class LocalAlarmManager {
           timestamp: new Date().toISOString()
         }
       });
+      */
+      console.log('[LocalAlarmManager] Test notifications disabled - library not installed');
 
       Alert.alert(
-        'Test Alarms Scheduled',
-        'You should see:\n• An immediate test notification\n• Another notification in 10 seconds\n\nIf you don\'t see them, check your notification settings.',
+        'Test Alarms Disabled',
+        'Push notification library is not installed. Test alarms cannot be scheduled.',
         [{ text: 'OK' }]
       );
 

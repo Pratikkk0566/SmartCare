@@ -100,6 +100,20 @@ export default function InvestigationsScreen({navigation}) {
     }, [investigations])
   );
 
+  // Fetch investigations on initial mount
+  useEffect(() => {
+    console.log('[InvestigationsScreen] Component mounted, checking if we need to fetch data');
+    
+    // If no data in context, fetch from API
+    if (!investigations || investigations.length === 0) {
+      console.log('[InvestigationsScreen] No cached data found, fetching from API...');
+      fetchReports();
+    } else {
+      console.log('[InvestigationsScreen] Using cached data:', investigations.length, 'items');
+      setReports(investigations);
+    }
+  }, []);
+
   // Full re-fetch — only called on explicit pull-to-refresh
   const fetchReports = async () => {
     setRefreshing(true);

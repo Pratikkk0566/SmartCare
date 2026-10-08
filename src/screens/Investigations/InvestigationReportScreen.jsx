@@ -6,9 +6,46 @@ import {spacing} from '../../theme/spacing';
 import {shadows} from '../../theme/shadows';
 import {ArrowBackIcon, CalendarIcon, DownloadIcon, ClipboardIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
 import {useApp} from '../../context/AppContext';
-import { InvestigationApi } from '../../API/Api';
+import { InvestigationApi, ClinicApi } from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
+import { generateInvestigationHtml } from '../../utils/invoiceHtmlGenerator';
+
+/**
+ * Extract and format date for PDF filename
+ * Returns format: DDMmmYY (e.g., 25Jan26)
+ */
+function formatDateForFilename(dateValue) {
+  if (!dateValue) return null;
+  
+  try {
+    let dateObj;
+    
+    if (dateValue instanceof Date) {
+      dateObj = dateValue;
+    } else if (typeof dateValue === 'string') {
+      dateObj = new Date(dateValue);
+    } else if (typeof dateValue === 'number') {
+      dateObj = new Date(dateValue);
+    } else {
+      return null;
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      return null;
+    }
+    
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[dateObj.getMonth()];
+    const year = String(dateObj.getFullYear()).slice(-2);
+    
+    return `${day}${month}${year}`;
+  } catch (error) {
+    console.log('[formatDateForFilename] Error:', error);
+    return null;
+  }
+}
 
 export default function InvestigationReportScreen({navigation, route}) {
   const {report} = route.params;
@@ -16,6 +53,7 @@ export default function InvestigationReportScreen({navigation, route}) {
   const [downloading, setDownloading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detailedReport, setDetailedReport] = useState(null);
+  const [letterheadData, setLetterheadData] = useState(null);
   const [error, setError] = useState('');
 
   // Fetch detailed investigation report on mount
@@ -30,6 +68,16 @@ export default function InvestigationReportScreen({navigation, route}) {
       
       console.log('[InvestigationReport] 🔍 Trying to load report details...');
       console.log('[InvestigationReport] Report data:', report);
+      
+      // Fetch clinic letterhead (branchId = 1 hardcoded)
+      console.log('[InvestigationReport] Fetching clinic letterhead...');
+      const letterheadRes = await ClinicApi.getLetterhead();
+      if (letterheadRes?.success && letterheadRes?.data) {
+        console.log('[InvestigationReport] ✅ Letterhead fetched successfully');
+        setLetterheadData(letterheadRes.data);
+      } else {
+        console.log('[InvestigationReport] ⚠️ Letterhead fetch failed:', letterheadRes?.error);
+      }
       
       // Try to fetch from API
       const clientId = await AsyncStorage.getItem('clientId');
@@ -59,7 +107,7 @@ export default function InvestigationReportScreen({navigation, route}) {
     }
   };
 
-  // Download PDF from server
+  // Download PDF from server using SAME FLOW AS INVOICE GENERATION
   const handleDownloadPDF = async () => {
     try {
       setDownloading(true);
@@ -83,17 +131,16 @@ export default function InvestigationReportScreen({navigation, route}) {
 
       const clientId = await AsyncStorage.getItem('clientId');
       const patientId = await AsyncStorage.getItem('patientId');
+      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
 
-      // STEP 1: Fetch the FULL investigation detail record first.
-      // report._raw only has 4 fields (parentId, gender, patientName, investigationName) —
-      // nowhere near enough for PDF generation. The `print` endpoint returns the
-      // complete ~90-field record (parameterlist, sectionName, signatures, etc.)
+      // STEP 1: Fetch the FULL investigation detail record
+      console.log('[Investigation PDF] 📥 Fetching full report details...');
       const detailResponse = await InvestigationApi.print(clientId, {
         investigationParentId: report._raw.parentId,
         gender: report._raw.gender,
       });
 
-      console.log('📥 Detail (print) response:', JSON.stringify(detailResponse));
+      console.log('[Investigation PDF] Detail response:', JSON.stringify(detailResponse, null, 2));
 
       if (!detailResponse.success || !detailResponse.data?.data) {
         Alert.alert('Error', 'Could not load full report details for PDF generation.');
@@ -101,111 +148,166 @@ export default function InvestigationReportScreen({navigation, route}) {
         return;
       }
 
-      // Response is wrapped: { data: { investigationId, parameterlist, ... }, error, status_code }
       const fullReport = detailResponse.data.data;
 
-      const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-      const lowerClinicId = clinicId.toLowerCase();
-
-      // STEP 2: Build payload for PDF generation from the FULL detail object,
-      // not from the list item (`report`) which is missing almost everything.
-      const pdfPayload = {
-        ...fullReport, // all real report fields: parameterlist, sectionName, etc.
-        Website: fullReport.Website || fullReport.website || (lowerClinicId === 'aureus' ? "aureushospital.com" : "smartcarehis.com"),
-        clinicAddress: fullReport.clinicAddress || "Nagpur",
-        clinicEmail: fullReport.clinicEmail || (lowerClinicId === 'aureus' ? "info@aureus.in" : `info@${lowerClinicId}.in`),
-        clinicName: fullReport.clinicName || (lowerClinicId === 'aureus' ? "Aureus Hospital" : "SmartCare Hospital"),
-        phoneNo: fullReport.phoneNo || "0223-2820300",
-        imagePath: fullReport.imagePath || `https://saas.smartcarehis.com:8443/HISDATA/liveData/locationImage/${lowerClinicId}.jpg`,
-        qrCodePath: fullReport.qrCodePath || "",
-        isChild: fullReport.isChild || false,
-        paymentUpId: fullReport.paymentUpId || "",
-        payee: fullReport.payee || "Self",
-        patientName: fullReport.patientName || user?.name || '',
-        gender: fullReport.gender || user?.gender || 'Male',
-        age: fullReport.age || user?.age || '',
-        patientAge: fullReport.patientAge || fullReport.age || user?.age || '',
-      };
-
-      console.log('📥 Calling generateInvReportPDF API with payload:', JSON.stringify(pdfPayload, null, 2));
-
-      const pdfResponse = await InvestigationApi.generateInvReportPDF(clientId, pdfPayload);
-
-      console.log('📥 PDF Response:', pdfResponse);
-
-      if (pdfResponse.success && pdfResponse.data) {
-        // Use Downloads directory for all platforms and versions
-        let downloadDir = `${RNFS.DownloadDirectoryPath}/SmartCare/Investigation`;
-
-        // Ensure directory exists with better error handling
-        try {
-          await RNFS.mkdir(downloadDir, {
-            NSURLIsExcludedFromBackupKey: false // iOS: allow iCloud backup
-          });
-          console.log('📁 Created directory:', downloadDir);
-        } catch (err) {
-          if (!err.message.includes('already exists')) {
-            console.log('📁 Directory creation error:', err);
-            // Fallback to Downloads root directory
-            downloadDir = RNFS.DownloadDirectoryPath;
-          }
-        }
-
-        // Generate filename with timestamp and patient name
-        const timestamp = new Date().getTime();
-        const patientName = (report.patientName || 'Report').replace(/[^a-zA-Z0-9]/g, '_');
-        const fileName = `Investigation_${patientName}_${timestamp}.pdf`;
-        const filePath = `${downloadDir}/${fileName}`;
-
-        console.log('📥 Saving PDF to:', filePath);
-
-        // Download the PDF from URL or save base64 data
-        if (pdfResponse.data.pdfUrl) {
-          // Download from URL
-          const downloadResult = await RNFS.downloadFile({
-            fromUrl: pdfResponse.data.pdfUrl,
-            toFile: filePath,
-            background: true,
-            discretionary: true,
-            progress: (res) => {
-              const progress = (res.bytesWritten / res.contentLength) * 100;
-              console.log(`Download progress: ${progress.toFixed(2)}%`);
-            }
-          }).promise;
-
-          if (downloadResult.statusCode === 200) {
-            Alert.alert(
-              'Download Complete',
-              `PDF saved to:\nInternal Storage > Download > SmartCare > Investigation\n\nFile: ${fileName}`,
-              [
-                { text: 'OK', style: 'default' }
-              ]
-            );
-          } else {
-            throw new Error('Download failed with status: ' + downloadResult.statusCode);
-          }
-        } else if (pdfResponse.data.pdfData || pdfResponse.data.base64) {
-          // Save base64 PDF data
-          const base64Data = pdfResponse.data.pdfData || pdfResponse.data.base64;
-          await RNFS.writeFile(filePath, base64Data, 'base64');
-          
-          Alert.alert(
-            'Download Complete',
-            `PDF saved to:\nInternal Storage > Download > SmartCare > Investigation\n\nFile: ${fileName}`,
-            [
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        } else {
-          // Fallback: API might return PDF buffer or other format
-          Alert.alert('Success', 'PDF has been generated. Please check your downloads folder.');
+      // STEP 2: Generate HTML locally using generateInvestigationHtml (SAME AS INVOICE)
+      console.log('[Investigation PDF] 🎨 Generating HTML locally...');
+      
+      // Build logo URL from letterhead data (clinicId already declared above)
+      let logoUrl = '';
+      if (letterheadData) {
+        console.log('[Investigation PDF] Letterhead data received:', JSON.stringify(letterheadData).slice(0, 300));
+        
+        // Extract letterhead record (can be array or object)
+        const letterheadRecord = Array.isArray(letterheadData?.letterheadDetails) 
+          ? letterheadData.letterheadDetails[0]
+          : Array.isArray(letterheadData)
+          ? letterheadData[0]
+          : letterheadData;
+        
+        console.log('[Investigation PDF] Extracted letterhead record:', {
+          hospname: letterheadRecord?.hospname,
+          subtitle: letterheadRecord?.subtitle,
+          address: letterheadRecord?.address,
+          city: letterheadRecord?.city,
+          clinicLogo: letterheadRecord?.clinicLogo
+        });
+        
+        if (letterheadRecord?.clinicLogo) {
+          // Convert relative path to absolute URL
+          const logoPath = letterheadRecord.clinicLogo;
+          logoUrl = logoPath.startsWith('http') 
+            ? logoPath 
+            : `https://saas.smartcarehis.com:8443/${logoPath}`;
+          console.log('[Investigation PDF] Logo URL:', logoUrl);
         }
       } else {
-        Alert.alert('Error', pdfResponse.error || 'Failed to generate PDF');
+        console.log('[Investigation PDF] ⚠️ No letterhead data available');
       }
+      
+      const htmlContent = generateInvestigationHtml(fullReport, {
+        letterhead: letterheadData,
+        logoUrl: logoUrl,
+        copyLabel: 'PATIENT COPY'
+      });
+
+      console.log('[Investigation PDF] HTML options passed:', {
+        hasLetterhead: !!letterheadData,
+        logoUrl: logoUrl,
+        copyLabel: 'PATIENT COPY'
+      });
+
+      if (!htmlContent) {
+        Alert.alert('Error', 'Failed to generate investigation HTML.');
+        setDownloading(false);
+        return;
+      }
+
+      console.log('[Investigation PDF] ✅ HTML generated successfully, length:', htmlContent.length);
+
+      // STEP 3: Generate PDF filename: TestName_ReqID.pdf (using request ID instead of date)
+      // Request ID is more reliable than date fields
+      const requestId = fullReport.investigationrequestId || 
+                       fullReport.investigationId ||
+                       fullReport.requestNumber ||
+                       report.investigationrequestId ||
+                       report.id ||
+                       'REQ';
+      
+      // Clean request ID
+      const cleanReqId = String(requestId)
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .substring(0, 15);
+      
+      // Get short test name (e.g., CBC, HbA1c, XRay)
+      const testName = (fullReport.testName || fullReport.investigationName || report.name || 'Test')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .substring(0, 20);
+      
+      const formTitle = `${testName}_${cleanReqId}`;
+      
+      console.log('[Investigation PDF] 📄 Final PDF Name:', `${formTitle}.pdf`, '(Test:', testName, ', Req ID:', cleanReqId, ')');
+      console.log('[Investigation PDF] 💾 Saving HTML form to server...');
+      const saveResponse = await InvestigationApi.saveInvestigationForm(clientId, {
+        formTitle,
+        patientId: Number(patientId || clientId),
+        htmlContent,
+      });
+
+      console.log('[Investigation PDF] Save response:', JSON.stringify(saveResponse, null, 2));
+
+      if (!saveResponse.success) {
+        Alert.alert('Error', saveResponse.error || 'Failed to save investigation form to server.');
+        setDownloading(false);
+        return;
+      }
+
+      // STEP 4: Download PDF from server (SAME AS INVOICE downloadDocuments)
+      console.log('[Investigation PDF] 📥 Downloading PDF from server...');
+      const pdfFileName = `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${formTitle}.pdf`;
+      
+      const downloadResponse = await InvestigationApi.downloadDocuments(clientId, pdfFileName);
+
+      console.log('[Investigation PDF] Download response:', downloadResponse);
+
+      if (!downloadResponse.success || !downloadResponse.data) {
+        Alert.alert('Error', downloadResponse.error || 'Failed to download PDF from server.');
+        setDownloading(false);
+        return;
+      }
+
+      // STEP 5: Save PDF to device storage
+      let downloadDir = `${RNFS.DownloadDirectoryPath}/SmartCare/Investigation`;
+
+      try {
+        await RNFS.mkdir(downloadDir, {
+          NSURLIsExcludedFromBackupKey: false
+        });
+        console.log('[Investigation PDF] 📁 Created directory:', downloadDir);
+      } catch (err) {
+        if (!err.message.includes('already exists')) {
+          console.log('[Investigation PDF] 📁 Directory creation error:', err);
+          downloadDir = RNFS.DownloadDirectoryPath;
+        }
+      }
+
+      const patientName = (fullReport.patientName || report.patientName || 'Report').replace(/[^a-zA-Z0-9]/g, '_');
+      const fileName = `${formTitle}.pdf`;  // Use the same formTitle we created earlier
+      const filePath = `${downloadDir}/${fileName}`;
+
+      console.log('[Investigation PDF] 💾 Saving PDF to:', filePath);
+
+      // Extract base64 data from response (can be in data.base64 or directly in data)
+      let base64Data = downloadResponse.data.base64 || downloadResponse.data;
+      
+      // If it's still an object, try to stringify and check
+      if (typeof base64Data === 'object') {
+        console.log('[Investigation PDF] Response data is object, keys:', Object.keys(base64Data));
+        base64Data = base64Data.base64 || base64Data.pdfData || base64Data.data || '';
+      }
+      
+      // Remove data URI prefix if present
+      if (typeof base64Data === 'string') {
+        base64Data = base64Data.replace(/^data:application\/pdf;base64,/, '');
+      }
+
+      if (!base64Data || typeof base64Data !== 'string') {
+        Alert.alert('Error', 'Invalid PDF data received from server.');
+        setDownloading(false);
+        return;
+      }
+
+      await RNFS.writeFile(filePath, base64Data, 'base64');
+      
+      Alert.alert(
+        'Download Complete',
+        `PDF saved to:\nInternal Storage > Download > SmartCare > Investigation\n\nFile: ${fileName}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+
     } catch (error) {
-      console.error('PDF Download Error:', error);
-      Alert.alert('Error', 'Failed to download PDF. Please try again.');
+      console.error('[Investigation PDF] ERROR:', error);
+      Alert.alert('Error', `Failed to download PDF: ${error.message}`);
     } finally {
       setDownloading(false);
     }

@@ -35,7 +35,6 @@ import {
   XCircleIcon,
   BellIcon,
   PillIcon,
-  HistoryIcon,
   InfoIcon,
   AlertTriangleIcon
 } from '../../assets/icons/Icons';
@@ -324,17 +323,7 @@ export default function TodaysMedicineScreen({ navigation }) {
           <ArrowBackIcon size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>Today's Medicines</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('MedicationHistory')}>
-          <HistoryIcon size={24} color={colors.primary} />
-        </TouchableOpacity>
-        
-        {/* Test notification button - remove in production */}
-        <TouchableOpacity 
-          onPress={() => notificationManager.simulateMedicationReminder()}
-          style={styles.testButton}
-        >
-          <BellIcon size={20} color={colors.warning} />
-        </TouchableOpacity>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView

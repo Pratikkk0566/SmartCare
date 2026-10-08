@@ -13,6 +13,7 @@ import WaterGlassIllustration from '../../assets/illustrations/WaterGlassIllustr
 import StatusChip from '../../components/common/StatusChip';
 import SkeletonLoader from '../../components/common/SkeletonLoader';
 import TealWaveHeader from '../../components/common/TealWaveHeader';
+import MedicineSuccessModal from '../../components/common/MedicineSuccessModal';
 
 const PERIOD_ICONS  = {morning: SunriseIcon, afternoon: SunIcon, night: MoonIcon};
 const PERIOD_COLORS = {
@@ -43,6 +44,14 @@ export default function HomeScreen({navigation}) {
   } = useApp();
   // Appointments arrive asynchronously; show skeleton until first data lands
   const [apptReady, setApptReady] = React.useState(false);
+  
+  // Success modal state
+  const [successModal, setSuccessModal] = React.useState({
+    visible: false,
+    medicineName: '',
+    dose: '',
+    time: '',
+  });
   
   React.useEffect(() => {
     if (appointments.length > 0) setApptReady(true);
@@ -292,7 +301,7 @@ export default function HomeScreen({navigation}) {
           <View style={styles.sectionHeader}>
             <MedicinesIcon size={29} color="#14A098" />
             <Text style={styles.sectionTitle}>Today's Medicines</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('TodaysMedicine')}>
+            <TouchableOpacity onPress={() => navigation.navigate('MedicineSchedule')}>
               <Text style={styles.viewAll}>View all {'>'}</Text>
             </TouchableOpacity>
           </View>
@@ -427,16 +436,27 @@ export default function HomeScreen({navigation}) {
                                         <TouchableOpacity
                                           style={[styles.medActionBtn, styles.medActionPrimary]}
                                           onPress={async () => {
+                                            // Close card and show modal immediately
+                                            setExpandedMedIndex(null);
+                                            setSuccessModal({
+                                              visible: true,
+                                              medicineName: item.medicine,
+                                              dose: item.dose,
+                                              time: item.time,
+                                            });
+                                            
                                             try {
                                               if (item.isEngineDose) {
-                                                await markEngineDoseTaken(item.id);
-                                              } else {
-                                                Alert.alert('Taken', `${item.medicine} marked as taken`);
+                                                // Update backend in background (don't wait)
+                                                markEngineDoseTaken(item.id).then(() => {
+                                                  refreshEngineData();
+                                                });
                                               }
                                             } catch (e) {
                                               console.log('[HomeScreen] take dose error:', e.message);
+                                              Alert.alert('Error', 'Failed to record dose. Please try again.');
+                                              await refreshEngineData(); // Revert on error
                                             }
-                                            setExpandedMedIndex(null);
                                           }}
                                           activeOpacity={0.8}>
                                           <CheckIcon size={18} color="#fff" />
@@ -447,16 +467,22 @@ export default function HomeScreen({navigation}) {
                                           <TouchableOpacity
                                             style={[styles.medActionBtnSmall, styles.medActionSecondary, {flex: 1}]}
                                             onPress={async () => {
+                                              // Close card immediately
+                                              setExpandedMedIndex(null);
+                                              
                                               try {
                                                 if (item.isEngineDose) {
-                                                  await snoozeEngineDose(item.id, 15);
+                                                  // Update backend in background
+                                                  snoozeEngineDose(item.id, 15).then(() => {
+                                                    refreshEngineData();
+                                                  });
                                                 } else {
                                                   Alert.alert('Snoozed', `${item.medicine} reminder snoozed for 15 mins`);
                                                 }
                                               } catch (e) {
                                                 console.log('[HomeScreen] snooze error:', e.message);
+                                                await refreshEngineData(); // Revert on error
                                               }
-                                              setExpandedMedIndex(null);
                                             }}
                                             activeOpacity={0.8}>
                                             <ClockIcon size={16} color={colors.primary} />
@@ -466,16 +492,22 @@ export default function HomeScreen({navigation}) {
                                           <TouchableOpacity
                                             style={[styles.medActionBtnSmall, styles.medActionSecondary, {flex: 1}]}
                                             onPress={async () => {
+                                              // Close card immediately
+                                              setExpandedMedIndex(null);
+                                              
                                               try {
                                                 if (item.isEngineDose) {
-                                                  await markEngineDoseSkipped(item.id, 'Skipped from dashboard');
+                                                  // Update backend in background
+                                                  markEngineDoseSkipped(item.id, 'Skipped from dashboard').then(() => {
+                                                    refreshEngineData();
+                                                  });
                                                 } else {
                                                   Alert.alert('Skipped', `${item.medicine} skipped`);
                                                 }
                                               } catch (e) {
                                                 console.log('[HomeScreen] skip error:', e.message);
+                                                await refreshEngineData(); // Revert on error
                                               }
-                                              setExpandedMedIndex(null);
                                             }}
                                             activeOpacity={0.8}>
                                             <XIcon size={16} color={colors.error} />
@@ -566,6 +598,15 @@ export default function HomeScreen({navigation}) {
         </View>
         <Text style={styles.aiFabLabel}>Ask AI</Text>
       </TouchableOpacity>
+
+      {/* Success Modal */}
+      <MedicineSuccessModal
+        visible={successModal.visible}
+        medicineName={successModal.medicineName}
+        dose={successModal.dose}
+        time={successModal.time}
+        onClose={() => setSuccessModal({ visible: false, medicineName: '', dose: '', time: '' })}
+      />
     </View>
   );
 }
