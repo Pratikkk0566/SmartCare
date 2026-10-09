@@ -113,13 +113,6 @@ const confirmLogout = async () => {
             sub="Update your name, email and more"
             onPress={() => navigation.navigate('PersonalInformation')}
           />
-          <Divider />
-          <SettingRow
-            icon={LockIcon}
-            label="App Lock"
-            sub="Biometric or PIN security"
-            onPress={() => navigation.navigate('AppLockSetup')}
-          />
         </View>
 
         {/* Notifications */}
