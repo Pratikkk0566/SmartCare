@@ -1,6 +1,6 @@
 /**
  * MedicationEngineService.js
- * 
+ *
  * High-level orchestration service for Medication Scheduling & Alarms.
  * Singleton coordinating:
  *   - MedicationSchedulingEngine
@@ -15,11 +15,13 @@ import {
   DEFAULT_SLOT_NAMES,
   todayInUtc,
   mapApiPrescription,
+  normalizeTime,
   runMedicationEngineSelfTests,
 } from './MedicationSchedulingEngine';
 import { AsyncStorageMedicationStore } from './AsyncStorageMedicationStore';
 import { MedicationNotificationManager } from './MedicationNotificationManager';
 import { PrescriptionRepeatApi } from '../API/Api';
+import { localAlarmManager } from './LocalAlarmManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class MedicationEngineService {
@@ -40,6 +42,7 @@ class MedicationEngineService {
     if (this._initialized) return;
     await this.store.init();
     const customTiming = await this.store.getTimingConfig();
+    this.engine.patientTimingProfile = customTiming || {};
     if (customTiming) {
       this.engine.timingConfig = {
         ...DEFAULT_MEDICATION_TIMING_CONFIG,
@@ -53,9 +56,14 @@ class MedicationEngineService {
   /**
    * Sync from raw or mapped prescriptions list (e.g. from local DB or server response)
    */
-  async syncPrescriptions(prescriptionsList = [], { patientId = 'PAT-1', now = new Date() } = {}) {
+  async syncPrescriptions(
+    prescriptionsList = [],
+    { patientId = 'PAT-1', now = new Date() } = {},
+  ) {
     await this.init();
-    const list = Array.isArray(prescriptionsList) ? prescriptionsList : [prescriptionsList];
+    const list = Array.isArray(prescriptionsList)
+      ? prescriptionsList
+      : [prescriptionsList];
     const results = [];
 
     for (const raw of list) {
@@ -66,27 +74,43 @@ class MedicationEngineService {
         const res = await this.engine.syncPrescription(mapped, { now });
         results.push(res);
       } catch (error) {
-        console.warn('[MedicationEngineService] Error syncing prescription:', raw?.id || raw?.prescriptionId, error.message);
+        console.warn(
+          '[MedicationEngineService] Error syncing prescription:',
+          raw?.id || raw?.prescriptionId,
+          error.message,
+        );
       }
     }
+    await this.reconcileAlarms();
     return results;
   }
 
   /**
    * Sync directly from SmartCare HIS repeat prescription API
    */
-  async syncFromHisApi({ practids = [], patientId, forceRefresh = false } = {}) {
+  async syncFromHisApi({
+    practids = [],
+    patientId,
+    forceRefresh = false,
+  } = {}) {
     await this.init();
     const pid = patientId || (await AsyncStorage.getItem('patientId'));
     if (!pid) return { success: false, reason: 'No patientId' };
 
     try {
-      const resp = await PrescriptionRepeatApi.getAllForPatient(practids, pid, { forceRefresh });
+      const resp = await PrescriptionRepeatApi.getAllForPatient(practids, pid, {
+        forceRefresh,
+      });
       if (resp.success && Array.isArray(resp.data)) {
-        const syncResults = await this.syncPrescriptions(resp.data, { patientId: pid });
+        const syncResults = await this.syncPrescriptions(resp.data, {
+          patientId: pid,
+        });
         return { success: true, count: resp.data.length, syncResults };
       }
-      return { success: false, error: resp.error || 'Failed to fetch prescriptions' };
+      return {
+        success: false,
+        error: resp.error || 'Failed to fetch prescriptions',
+      };
     } catch (error) {
       console.error('[MedicationEngineService] syncFromHisApi error:', error);
       return { success: false, error: error.message };
@@ -98,22 +122,42 @@ class MedicationEngineService {
    */
   async markTaken(scheduleId) {
     await this.init();
-    return await this.engine.markTaken(scheduleId);
+    const result = await this.engine.markTaken(scheduleId);
+    await this.reconcileAlarms();
+    return result;
   }
 
   async markSkipped(scheduleId, reason = '') {
     await this.init();
-    return await this.engine.markSkipped(scheduleId, { reason });
+    const result = await this.engine.markSkipped(scheduleId, { reason });
+    await this.reconcileAlarms();
+    return result;
   }
 
-  async snooze(scheduleId, minutes = 15) {
+  async snooze(scheduleId, minutes = 5) {
     await this.init();
-    return await this.engine.snooze(scheduleId, minutes);
+    const result = await this.engine.snooze(scheduleId, minutes);
+    await this.reconcileAlarms();
+    return result;
   }
 
   /**
    * Selectors for UI
    */
+  async reconcileAlarms() {
+    try {
+      return await localAlarmManager.rescheduleUpcomingAlarms();
+    } catch (error) {
+      console.warn(
+        '[MedicationEngineService] Native scheduling failed; retry on resume',
+        error,
+      );
+      return { scheduled: 0, error: error.message };
+    }
+  }
+  async generateSchedules(prescriptions = [], options = {}) {
+    return this.syncPrescriptions(prescriptions, options);
+  }
   async getTodaysTimeline(date = todayInUtc()) {
     await this.init();
     return await this.engine.getTodaysMedicationTimeline({ date });
@@ -134,7 +178,7 @@ class MedicationEngineService {
     const alarms = await this.store.listAlarms();
     const now = Date.now();
     return alarms
-      .filter((a) => a.status === 'SCHEDULED' && Date.parse(a.scheduledAt) > now)
+      .filter(a => a.status === 'SCHEDULED' && Date.parse(a.scheduledAt) > now)
       .sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt));
   }
 
@@ -150,27 +194,36 @@ class MedicationEngineService {
   async updateTimingConfig(configUpdates) {
     await this.init();
     const current = await this.getTimingConfig();
-    const updated = {
-      ...current,
-      ...configUpdates,
-    };
+    const validated = {};
+    for (const [slot, value] of Object.entries(configUpdates)) {
+      if (!DEFAULT_SLOT_NAMES.includes(slot)) throw new Error(`Unknown medication slot: ${slot}`);
+      validated[slot] = normalizeTime(value, `${slot} time`);
+    }
+    const updated = {...current, ...validated};
     await this.store.saveTimingConfig(updated);
     this.engine.timingConfig = updated;
+    this.engine.patientTimingProfile = updated;
 
     // Resync existing active medications to recalculate future schedules and alarms with new timings
     const activeMeds = await this.store.listMedications();
-    const activeMedsFiltered = activeMeds.filter((m) => !m.cancelled && m.remainingQuantity > 0);
+    const activeMedsFiltered = activeMeds.filter(
+      m => !m.cancelled && m.remainingQuantity > 0,
+    );
     const prescriptions = await this.store.listPrescriptions();
 
     for (const med of activeMedsFiltered) {
-      const rx = prescriptions.find((p) => p.prescriptionId === med.prescriptionId) || {
+      const rx = prescriptions.find(
+        p => p.prescriptionId === med.prescriptionId,
+      ) || {
         prescriptionId: med.prescriptionId,
         patientId: med.patientId,
         doctorId: med.doctorId,
         version: med.prescriptionVersion,
       };
-      await this.engine.syncMedicine(rx, med);
+      const source = rx.medicines?.find(m => m.medicinePrescriptionId === med.medicinePrescriptionId);
+      await this.engine.syncMedicine(rx, {...med, ...source, startDate: med.startDate});
     }
+    await this.reconcileAlarms();
     return updated;
   }
 
@@ -183,13 +236,18 @@ class MedicationEngineService {
     const startIso = startDate.toISOString().slice(0, 10);
 
     const relevant = allSchedules.filter(
-      (s) => s.scheduledDate >= startIso && s.scheduledDate <= today && s.status !== 'CANCELLED'
+      s =>
+        s.scheduledDate >= startIso &&
+        s.scheduledDate <= today &&
+        s.status !== 'CANCELLED',
     );
 
     const total = relevant.length;
-    const taken = relevant.filter((s) => s.status === 'TAKEN').length;
-    const skipped = relevant.filter((s) => s.status === 'SKIPPED').length;
-    const pending = relevant.filter((s) => s.status === 'SCHEDULED' || s.status === 'SNOOZED').length;
+    const taken = relevant.filter(s => s.status === 'TAKEN').length;
+    const skipped = relevant.filter(s => s.status === 'SKIPPED').length;
+    const pending = relevant.filter(
+      s => s.status === 'SCHEDULED' || s.status === 'SNOOZED',
+    ).length;
     const rate = total > 0 ? Math.round((taken / total) * 100) : 0;
 
     return {
@@ -207,5 +265,21 @@ class MedicationEngineService {
   }
 }
 
+// Serialize complete mutations across UI and headless callbacks.
+let mutationQueue = Promise.resolve();
+for (const name of [
+  'syncPrescriptions',
+  'markTaken',
+  'markSkipped',
+  'snooze',
+  'updateTimingConfig',
+]) {
+  const original = MedicationEngineService.prototype[name];
+  MedicationEngineService.prototype[name] = function (...args) {
+    const result = mutationQueue.then(() => original.apply(this, args));
+    mutationQueue = result.catch(() => {});
+    return result;
+  };
+}
 export const medicationEngineService = new MedicationEngineService();
 export default medicationEngineService;

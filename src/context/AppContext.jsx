@@ -806,7 +806,7 @@ export function AppProvider({children}) {
     }
   };
 
-  const snoozeEngineDose = async (scheduleId, minutes = 15) => {
+  const snoozeEngineDose = async (scheduleId, minutes = 5) => {
     try {
       const res = await medicationEngineService.snooze(scheduleId, minutes);
       await refreshEngineData();

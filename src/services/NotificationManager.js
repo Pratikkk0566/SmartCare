@@ -6,7 +6,7 @@
  */
 
 import { AppState } from 'react-native';
-import { localAlarmManager } from './LocalAlarmManager';
+import { medicationEngineService } from './MedicationEngineService';
 
 class NotificationManager {
   constructor() {
@@ -114,6 +114,10 @@ class NotificationManager {
 
     const popupData = this.popupQueue.shift();
     this.activePopup = popupData;
+    if (popupData.type !== 'medication_reminder') {
+      const {displayStandardNotification} = require('./StandardNotificationService');
+      displayStandardNotification({title:popupData.title,body:popupData.message}).catch(console.warn);
+    }
 
     console.log('[NotificationManager] Showing popup:', popupData.type);
 
@@ -125,6 +129,15 @@ class NotificationManager {
   /**
    * Hide active popup
    */
+  async dismissMedicationReminder() {
+    const data = this.activePopup?.medicationData;
+    if (data) {
+      const {localAlarmManager} = require('./LocalAlarmManager');
+      await localAlarmManager.silenceDoseAlarm(data.scheduleId || data.doseId);
+    }
+    this.hideActivePopup();
+  }
+
   hideActivePopup() {
     if (this.activePopup) {
       console.log('[NotificationManager] Hiding active popup');
@@ -182,6 +195,7 @@ class NotificationManager {
       
     } catch (error) {
       console.error('[NotificationManager] Failed to handle medication action:', error);
+      throw error;
     }
   }
 
@@ -191,7 +205,7 @@ class NotificationManager {
   async takeMedication(medicationData) {
     console.log('[NotificationManager] Taking medication:', medicationData.medicineName);
     
-    // Note: Medication tracking will be reimplemented with new architecture
+    await medicationEngineService.markTaken(medicationData.scheduleId || medicationData.doseId);
     
     // Show success feedback
     this.showSuccessNotification('✅ Medicine Taken', `${medicationData.medicineName} marked as taken`);
@@ -203,7 +217,7 @@ class NotificationManager {
   async skipMedication(medicationData) {
     console.log('[NotificationManager] Skipping medication:', medicationData.medicineName);
     
-    // Note: Medication tracking will be reimplemented with new architecture
+    await medicationEngineService.markSkipped(medicationData.scheduleId || medicationData.doseId, 'Skipped from popup');
     
     // Show confirmation feedback
     this.showWarningNotification('⚠️ Medicine Skipped', `${medicationData.medicineName} marked as skipped`);
@@ -215,7 +229,7 @@ class NotificationManager {
   async snoozeMedication(medicationData, minutes) {
     console.log('[NotificationManager] Snoozing medication for', minutes, 'minutes');
     
-    // Note: Alarm snoozing will be reimplemented with new architecture
+    await medicationEngineService.snooze(medicationData.scheduleId || medicationData.doseId, minutes || 5);
     this.showInfoNotification('⏰ Reminder Snoozed', `Reminder set for ${minutes} minutes`);
   }
 

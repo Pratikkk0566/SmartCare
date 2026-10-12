@@ -5,14 +5,13 @@
  * Auto-dismisses after a specified duration.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Animated,
-  Dimensions
+  Animated
 } from 'react-native';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -27,7 +26,6 @@ import {
   AlertTriangleIcon
 } from '../../assets/icons/Icons';
 
-const { width: screenWidth } = Dimensions.get('window');
 
 export default function SimpleNotificationPopup({
   visible,
@@ -38,6 +36,16 @@ export default function SimpleNotificationPopup({
   onDismiss
 }) {
   const [animatedValue] = useState(new Animated.Value(0));
+
+  const handleDismiss = useCallback(() => {
+    Animated.timing(animatedValue, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      onDismiss?.();
+    });
+  }, [animatedValue, onDismiss]);
 
   useEffect(() => {
     if (visible) {
@@ -63,17 +71,9 @@ export default function SimpleNotificationPopup({
         useNativeDriver: true,
       }).start();
     }
-  }, [visible, duration]);
+  }, [visible, duration, animatedValue, handleDismiss]);
 
-  const handleDismiss = () => {
-    Animated.timing(animatedValue, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      onDismiss?.();
-    });
-  };
+
 
   const getTypeConfig = () => {
     switch (type) {
@@ -175,10 +175,8 @@ export default function SimpleNotificationPopup({
             styles.progressBar,
             {
               backgroundColor: typeConfig.textColor,
-              width: animatedValue.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['0%', '100%'],
-              }),
+              width: '100%',
+              transform: [{scaleX: animatedValue}],
             }
           ]} 
         />

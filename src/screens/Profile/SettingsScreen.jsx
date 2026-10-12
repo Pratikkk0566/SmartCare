@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Switch, Alert, Modal,
+  Switch, Alert, Modal, Platform, NativeModules,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
@@ -13,6 +13,7 @@ import {
   ShieldIcon, PersonIcon, DocumentIcon, SettingsGearIcon,
 } from '../../assets/icons/Icons';
 import {useApp} from '../../context/AppContext';
+import AlarmRingtonePicker from '../../components/medication/AlarmRingtonePicker';
 import {StorageService} from '../../services/StorageService';
 
 function SectionTitle({title}) {
@@ -42,6 +43,7 @@ function Divider() {
 export default function SettingsScreen({navigation}) {
 const {setIsLoggedIn} = useApp();
 const [showLogout, setShowLogout] = useState(false);
+const [showRingtone, setShowRingtone] = useState(false);
 const [notifications,      setNotifications]      = useState(true);
 const [medicineReminders,  setMedicineReminders]  = useState(true);
 const [appointmentAlerts,  setAppointmentAlerts]  = useState(true);
@@ -93,6 +95,7 @@ const confirmLogout = async () => {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <AlarmRingtonePicker visible={showRingtone} onClose={() => setShowRingtone(false)} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -146,6 +149,9 @@ const confirmLogout = async () => {
               />
             }
           />
+          <Divider />
+          <SettingRow icon={BellIcon} label="Medication alarm ringtone" sub="Choose your reminder sound" onPress={() => setShowRingtone(true)} />
+          {Platform.OS === 'android' && Number(Platform.Version) >= 34 && NativeModules.MedicationAlarmNative ? <SettingRow icon={BellIcon} label="Fullscreen lock-screen alarms" sub="Allow medication alarms over the lock screen" onPress={() => NativeModules.MedicationAlarmNative.openFullScreenSettings().catch(e => Alert.alert('Unable to open settings', e.message))} /> : null}
           <Divider />
           <SettingRow
             icon={BellIcon}
