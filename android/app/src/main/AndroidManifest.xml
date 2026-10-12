@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
       android:name=".MainApplication"
@@ -40,6 +40,10 @@
         </intent-filter>
       </activity>
 
+      <activity android:name=".MedicationAlarmActivity" android:exported="false"
+        android:launchMode="singleTop" android:showWhenLocked="true" android:turnScreenOn="true"
+        android:excludeFromRecents="true" android:theme="@style/AppTheme"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" />
       <!-- Push notification services -->
       <receiver 
           android:name="com.dieam.reactnativepushnotification.modules.RNPushNotificationActions"

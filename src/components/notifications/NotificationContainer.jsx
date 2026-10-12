@@ -68,7 +68,7 @@ export default function NotificationContainer() {
             onTake={(data) => handleMedicationAction('take', data)}
             onSkip={(data) => handleMedicationAction('skip', data)}
             onSnooze={(data, minutes) => handleMedicationAction('snooze', data, minutes)}
-            onDismiss={hidePopup}
+            onDismiss={() => notificationManager.dismissMedicationReminder()}
           />
         );
 

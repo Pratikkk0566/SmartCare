@@ -155,22 +155,16 @@ export function normalizeTime(time, fieldName = "time") {
 
   const trimmed = time.trim();
 
-  // Support 12h formats like "08:00 AM" or "8:00 PM"
-  if (/am|pm/i.test(trimmed)) {
-    const parts = trimmed.split(/\s+/);
-    if (parts.length >= 2) {
-      const [hm, meridiem] = parts;
-      let [h, m] = hm.split(":").map(Number);
-      if (meridiem.toUpperCase() === "PM" && h < 12) h += 12;
-      if (meridiem.toUpperCase() === "AM" && h === 12) h = 0;
-      return `${String(h).padStart(2, "0")}:${String(m || 0).padStart(2, "0")}`;
-    }
+  // Strict, complete parsing: 12 AM is midnight; 12 PM is noon.
+  const twelve = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (twelve) {
+    const hours = Number(twelve[1]), minutes = Number(twelve[2]);
+    if (hours < 1 || hours > 12 || minutes > 59) throw new Error(fieldName + ' must use hours 1-12 and minutes 00-59');
+    const converted = hours % 12 + (twelve[3].toUpperCase() === 'PM' ? 12 : 0);
+    return String(converted).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
   }
-
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
-  if (!match) {
-    throw new Error(`${fieldName} must use HH:mm`);
-  }
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) throw new Error(fieldName + ' must use HH:mm or hh:mm AM/PM');
 
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
@@ -250,6 +244,23 @@ export function sum(values) {
  * - "afternoon" -> [0, 1, 0]
  * - Array: [1, 1, 1]
  */
+/** Prefer the clinical dose pattern over HIS frequency identifiers. */
+export function medicationFrequency(medicine = {}) {
+  const present = value => value != null && (typeof value !== 'string' || value.trim() !== '');
+  const clean = value => typeof value === 'string' ? value.trim() : value;
+  for (const key of ['frequencyNote', 'frequency_note', 'frequencyText']) {
+    if (present(medicine[key])) return clean(medicine[key]);
+  }
+  // HIS also sends the daily slot pattern in dose, with an empty frequencyNote.
+  // Match a complete numeric pattern so strengths such as 500 mg never become frequencies.
+  const dosePattern = String(medicine.dose ?? '').trim().replace(/[\u2010-\u2015\u2212]/g, '-');
+  if (/^\d+(?:\.\d+)?(?:\s*[-/,|]\s*\d+(?:\.\d+)?){1,3}$/.test(dosePattern)) return dosePattern;
+  for (const key of ['frequency', 'dosageFrequency', 'dosage_frequency', 'dose_frequency', 'schedule', 'timing', 'period', 'routine']) {
+    if (present(medicine[key])) return clean(medicine[key]);
+  }
+  return '1-0-1';
+}
+
 export function parseFrequency(frequency, slotNames = DEFAULT_SLOT_NAMES) {
   if (Array.isArray(frequency)) {
     return frequency.map((value, index) => {
@@ -267,11 +278,11 @@ export function parseFrequency(frequency, slotNames = DEFAULT_SLOT_NAMES) {
     });
   }
 
-  const raw = String(frequency || '').trim();
+  const raw = String(frequency || '').trim().replace(/[\u2010-\u2015\u2212]/g, '-');
   const lower = raw.toLowerCase();
 
   // 1. Explicit Numeric Pattern: e.g. "1-1-1", "1-0-1", "0-0-1", "0-1-0", "1/1/1", "1 0 1", "1-1-1-1"
-  const patternMatch = raw.match(/^(\d+)\s*[-/.,|\s]\s*(\d+)\s*[-/.,|\s]\s*(\d+)(?:\s*[-/.,|\s]\s*(\d+))?$/);
+  const patternMatch = raw.match(/^(\d+(?:\.\d+)?)\s*[-/,|\s]\s*(\d+(?:\.\d+)?)\s*[-/,|\s]\s*(\d+(?:\.\d+)?)(?:\s*[-/,|\s]\s*(\d+(?:\.\d+)?))?$/) || raw.match(/^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/);
   if (patternMatch) {
     if (patternMatch[4] !== undefined) {
       return [
@@ -290,7 +301,7 @@ export function parseFrequency(frequency, slotNames = DEFAULT_SLOT_NAMES) {
   }
 
   // 2-digit pattern: e.g. "1-1" (Morning & Night) or "1-0" (Morning) or "0-1" (Night)
-  const twoDigitMatch = raw.match(/^(\d+)\s*[-/.,|\s]\s*(\d+)$/);
+  const twoDigitMatch = raw.match(/^(\d+(?:\.\d+)?)\s*[-/,|\s]\s*(\d+(?:\.\d+)?)$/);
   if (twoDigitMatch) {
     return [
       { slot: 'MORNING', dose: Number(twoDigitMatch[1]) || 0 },
@@ -354,7 +365,8 @@ export function parseFrequency(frequency, slotNames = DEFAULT_SLOT_NAMES) {
   }
 
   // 4. Number of times per day
-  if (typeof frequency === 'number') {
+  if (typeof frequency === 'number' || /^[1-4]$/.test(raw)) {
+    frequency = Number(frequency);
     if (frequency === 1) return [{ slot: 'MORNING', dose: 1 }];
     if (frequency === 2) return [{ slot: 'MORNING', dose: 1 }, { slot: 'NIGHT', dose: 1 }];
     if (frequency === 3) return [{ slot: 'MORNING', dose: 1 }, { slot: 'AFTERNOON', dose: 1 }, { slot: 'NIGHT', dose: 1 }];
@@ -566,7 +578,7 @@ export function generateSchedules(medicine, {
 } = {}) {
   const quantityPlan = calculateQuantityPlan(
     medicine.prescribedQuantity ?? medicine.quantity ?? medicine.qty,
-    medicine.frequency,
+    medicationFrequency(medicine),
     medicine.durationDays ?? medicine.duration,
   );
 
@@ -575,7 +587,7 @@ export function generateSchedules(medicine, {
   if (quantity === 0 || medicine.cancelled) return [];
 
   const resolver = new FrequencyScheduleResolver({ timingProfile, slotNames });
-  const resolvedSlots = resolver.resolve(medicine.frequency, timingProfile);
+  const resolvedSlots = resolver.resolve(medicationFrequency(medicine), timingProfile);
   const timezoneOffset = normalizeTimezoneOffset(
     medicine.timezoneOffset || DEFAULT_TIMEZONE_OFFSET,
   );
@@ -650,16 +662,17 @@ export function generateSchedules(medicine, {
   return schedules;
 }
 
-export function makeMedicationDomainRecord(prescription, medicine, previous = {}, now = new Date()) {
+export function makeMedicationDomainRecord(prescription, medicine, previous = {}, now = new Date(), {routineTimings = {}, defaultTimingProfile = DEFAULT_MEDICATION_TIMING_CONFIG} = {}) {
   const quantityPlan = calculateQuantityPlan(
     medicine.prescribedQuantity ?? medicine.quantity ?? medicine.qty,
-    medicine.frequency,
+    medicationFrequency(medicine),
     medicine.durationDays ?? medicine.duration,
   );
   const timingProfile = resolveTimingProfile({
     doctorTimings: medicine.doctorTimings || prescription.doctorTimings,
     medicineTimings: medicine.medicineTimings,
     patientTimingProfile: medicine.patientTimingProfile,
+    defaultTimingProfile,
   });
 
   const consumedQuantity = nonNegativeNumber(
@@ -699,7 +712,7 @@ export function makeMedicationDomainRecord(prescription, medicine, previous = {}
     consumedQuantity,
     remainingQuantity,
     scheduledQuantity: previous.scheduledQuantity || 0,
-    frequency: medicine.frequency,
+    frequency: medicationFrequency(medicine),
     dailyQuantity: quantityPlan.dailyQuantity,
     medicationDurationDays: quantityPlan.expectedDurationDays,
     startDate,
@@ -707,7 +720,8 @@ export function makeMedicationDomainRecord(prescription, medicine, previous = {}
     expectedCompletionDate: expectedEnd,
     notes: medicine.notes || medicine.remark || "",
     timingInstruction: medicine.timingInstruction || medicine.foodInstruction || "After food",
-    timingProfile,
+    // Explicit routine edits override the resolved slot; unsaved slots keep prescription priority.
+    timingProfile: {...timingProfile, ...normalizeTimingProfile(routineTimings)},
     timezone: medicine.timezone || "Asia/Kolkata",
     timezoneOffset: medicine.timezoneOffset || DEFAULT_TIMEZONE_OFFSET,
     cancelled,
@@ -786,19 +800,7 @@ export function mapApiPrescription(raw, customMapper) {
         "strength",
       ], "1 tablet");
 
-      const frequency = firstDefined(rawMedicine, [
-        "frequency",
-        "frequencyNote",
-        "frequency_note",
-        "frequencyText",
-        "dosageFrequency",
-        "dosage_frequency",
-        "schedule",
-        "timing",
-        "period",
-        "routine",
-        "dose_frequency",
-      ], "1-0-1");
+      const frequency = medicationFrequency(rawMedicine);
 
       const rawDuration = firstDefined(rawMedicine, [
         "durationDays",
@@ -924,7 +926,7 @@ function normalizeMedicine(medicine, index = 0) {
       `medicines[${index}].quantity`,
     ),
     durationDays: source.durationDays ? Number(source.durationDays) : 7,
-    frequency: source.frequency || "1-0-1",
+    frequency: medicationFrequency(source),
     startDate,
     endDate,
     notes: source.notes == null ? "" : String(source.notes),
@@ -1131,6 +1133,7 @@ export class MedicationSchedulingEngine {
       medicine,
       previous,
       now,
+      {routineTimings: this.patientTimingProfile, defaultTimingProfile: this.timingConfig},
     );
     await this.store.saveMedication(medication);
 
@@ -1247,35 +1250,32 @@ export class MedicationSchedulingEngine {
     // Upsert desired schedules by deterministic ID
     for (const desired of desiredSchedules) {
       const existing = await this.store.getSchedule(desired.id);
-      if (existing?.status === SCHEDULE_STATUS.TAKEN) {
-        await this.store.saveSchedule({
-          ...desired,
-          status: existing.status,
-          takenAt: existing.takenAt,
-        });
-      } else if (existing?.status === SCHEDULE_STATUS.SKIPPED) {
-        await this.store.saveSchedule({
-          ...desired,
-          status: existing.status,
-          skippedAt: existing.skippedAt,
-          skipReason: existing.skipReason,
-        });
-      } else {
-        await this.store.saveSchedule({
-          ...desired,
-          status: existing?.status || SCHEDULE_STATUS.SCHEDULED,
-        });
-        if (!existing) schedulesCreated += 1;
+      if (existing && (existing.scheduledDate < todayInUtc(now) ||
+          [SCHEDULE_STATUS.TAKEN, SCHEDULE_STATUS.SKIPPED].includes(existing.status))) {
+        continue;
       }
+      const restoreReconciledDose = existing?.status === SCHEDULE_STATUS.CANCELLED &&
+        existing.cancelReason === 'PRESCRIPTION_RECONCILIATION';
+      await this.store.saveSchedule({
+        ...existing,
+        ...desired,
+        status: restoreReconciledDose ? SCHEDULE_STATUS.SCHEDULED : existing?.status || SCHEDULE_STATUS.SCHEDULED,
+        ...(restoreReconciledDose ? {cancelReason: null} : {}),
+      });
+      if (!existing) schedulesCreated += 1;
+      const persisted = await this.store.getSchedule(desired.id);
 
       if (
-        isFutureInstant(desired.scheduledAt, now) &&
+        isFutureInstant(persisted.snoozedUntil || persisted.scheduledAt, now) &&
         medication.status !== MEDICATION_STATUS.CANCELLED &&
         medication.status !== MEDICATION_STATUS.EXPIRED &&
         medication.remainingQuantity > 0
       ) {
-        const alarmResult = await this.upsertAlarmForSchedule(desired, now);
+        if (![SCHEDULE_STATUS.SCHEDULED, SCHEDULE_STATUS.SNOOZED].includes(persisted.status)) continue;
+        const alarmResult = await this.upsertAlarmForSchedule(persisted, now);
         if (alarmResult.created) alarmsCreated += 1;
+      } else {
+        await this.cancelAlarmForSchedule(persisted);
       }
     }
 
@@ -1318,10 +1318,10 @@ export class MedicationSchedulingEngine {
       doseQuantity: schedule.doseQuantity,
       scheduledDate: schedule.scheduledDate,
       scheduledTime: schedule.scheduledTime,
-      scheduledAt: schedule.scheduledAt,
+      scheduledAt: schedule.snoozedUntil || schedule.scheduledAt,
       timingInstruction: schedule.timingInstruction,
       notificationId,
-      status: existing?.status === ALARM_STATUS.FIRED
+      status: existing?.status === ALARM_STATUS.FIRED && existing.scheduledAt === (schedule.snoozedUntil || schedule.scheduledAt)
         ? existing.status
         : ALARM_STATUS.SCHEDULED,
       title: "💊 Medicine Reminder",
@@ -1340,6 +1340,9 @@ export class MedicationSchedulingEngine {
       updatedAt: new Date(now).toISOString(),
     };
 
+    if (existing && existing.scheduledAt !== alarm.scheduledAt) {
+      await this.notificationManager.cancel(existing.notificationId);
+    }
     await this.store.saveAlarm(alarm);
     await this.notificationManager.schedule(alarm);
     return { alarm, created: !existing };
@@ -1455,7 +1458,7 @@ export class MedicationSchedulingEngine {
     return clone(schedule);
   }
 
-  async snooze(scheduleId, minutes = 15, { now = new Date() } = {}) {
+  async snooze(scheduleId, minutes = 5, { now = new Date() } = {}) {
     const schedule = await this.store.getSchedule(scheduleId);
     if (!schedule) return null;
     const delayMinutes = positiveNumber(minutes, "snooze minutes");
@@ -1469,9 +1472,9 @@ export class MedicationSchedulingEngine {
       return clone(schedule);
     }
 
-    const currentBase = isFutureInstant(schedule.scheduledAt, now)
-      ? Date.parse(schedule.scheduledAt)
-      : new Date(now).getTime();
+    if ((schedule.snoozeCount || 0) >= 3) throw new Error("Maximum of 3 snoozes reached");
+    schedule.snoozeCount = (schedule.snoozeCount || 0) + 1;
+    const currentBase = new Date(now).getTime();
 
     const snoozedAt = new Date(currentBase + delayMinutes * 60 * 1000);
     schedule.status = SCHEDULE_STATUS.SNOOZED;
@@ -1482,6 +1485,7 @@ export class MedicationSchedulingEngine {
     const alarmId = stableId("alarm", schedule.id);
     const alarm = await this.store.getAlarm(alarmId);
     if (alarm) {
+      await this.notificationManager.cancel(alarm.notificationId);
       alarm.scheduledAt = schedule.snoozedUntil;
       alarm.status = ALARM_STATUS.SCHEDULED;
       await this.store.saveAlarm(alarm);

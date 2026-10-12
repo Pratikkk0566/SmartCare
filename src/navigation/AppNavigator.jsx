@@ -1,6 +1,9 @@
 import React from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator} from 'react-native';
-import {NavigationContainer} from '@react-navigation/native';
+import {NavigationContainer, createNavigationContainerRef} from '@react-navigation/native';
+import {localAlarmManager} from '../services/LocalAlarmManager';
+const medicationNavigationRef = createNavigationContainerRef();
+localAlarmManager.setNavigationRef(medicationNavigationRef);
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {colors} from '../theme/colors';
@@ -160,7 +163,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={medicationNavigationRef} onReady={() => localAlarmManager.flushPendingNavigation().catch(console.warn)} onStateChange={() => localAlarmManager.flushPendingNavigation().catch(console.warn)}>
       <Stack.Navigator screenOptions={{headerShown: false, animationDuration: 200}} initialRouteName="Splash">
 
         {/* Onboarding */}
