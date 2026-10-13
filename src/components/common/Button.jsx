@@ -1,19 +1,27 @@
 import React from 'react';
-import {TouchableOpacity, Text, StyleSheet, ActivityIndicator, View} from 'react-native';
+import {TouchableOpacity, Text, StyleSheet, ActivityIndicator} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {colors} from '../../theme/colors';
 import {radius} from '../../theme/radius';
 import {spacing} from '../../theme/spacing';
+import {useResponsive} from '../../theme/responsive';
 
 const Button = React.memo(function Button({title, onPress, disabled, loading, variant = 'primary', style, textStyle}) {
+  const {scale} = useResponsive();
+  const responsiveStyles = {
+    gradient: {paddingVertical: scale(spacing.base)},
+    text: {fontSize: scale(16)},
+    outline: {paddingVertical: scale(spacing.sm + 2)},
+    outlineText: {fontSize: scale(14)},
+  };
   if (variant === 'outline') {
     return (
       <TouchableOpacity
-        style={[styles.outline, disabled && styles.disabled, style]}
+        style={[styles.outline, responsiveStyles.outline, disabled && styles.disabled, style]}
         onPress={onPress}
         disabled={disabled || loading}
         activeOpacity={0.75}>
-        <Text style={[styles.outlineText, textStyle]}>{title}</Text>
+        <Text style={[styles.outlineText, responsiveStyles.outlineText, textStyle]}>{title}</Text>
       </TouchableOpacity>
     );
   }
@@ -29,10 +37,10 @@ const Button = React.memo(function Button({title, onPress, disabled, loading, va
         colors={disabled ? ['#C4B5FD', '#A78BFA'] : [colors.primary, colors.primaryDark]}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 0}}
-        style={styles.gradient}>
+        style={[styles.gradient, responsiveStyles.gradient]}>
         {loading
           ? <ActivityIndicator color="#fff" />
-          : <Text style={[styles.text, textStyle]}>{title}</Text>}
+          : <Text style={[styles.text, responsiveStyles.text, textStyle]}>{title}</Text>}
       </LinearGradient>
     </TouchableOpacity>
   );

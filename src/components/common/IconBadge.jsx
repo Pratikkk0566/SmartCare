@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { createLightBg } from '../../theme/colorHelpers';
+import {useResponsive} from '../../theme/responsive';
 
 /**
  * Reusable icon badge component
@@ -13,16 +14,19 @@ export default function IconBadge({
   iconSize = 20,
   style 
 }) {
+  const {scale} = useResponsive();
+  const scaledSize = scale(size);
+  const scaledIconSize = scale(iconSize);
   const containerStyle = {
-    width: size,
-    height: size,
-    borderRadius: size / 2,
+    width: scaledSize,
+    height: scaledSize,
+    borderRadius: scaledSize / 2,
     backgroundColor: createLightBg(color),
   };
 
   return (
     <View style={[styles.container, containerStyle, style]}>
-      <Icon size={iconSize} color={color} />
+      <Icon size={scaledIconSize} color={color} />
     </View>
   );
 }

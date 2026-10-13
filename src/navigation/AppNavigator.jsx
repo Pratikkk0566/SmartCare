@@ -10,6 +10,7 @@ import {colors} from '../theme/colors';
 import {shadows} from '../theme/shadows';
 import {HomeIcon, InvoiceIcon, InvestigationNavIcon, ProfileIcon, StethoscopeIcon} from '../assets/icons/Icons';
 import {useApp} from '../context/AppContext';
+import {useResponsive} from '../theme/responsive';
 
 // Onboarding
 import SplashScreen          from '../screens/Onboarding/SplashScreen';
@@ -91,8 +92,9 @@ const TAB_LABELS = {
 
 const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navigation}) {
   const {unreadCount} = useApp();
+  const {scale} = useResponsive();
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, {paddingTop: scale(10), paddingBottom: Platform.OS === 'ios' ? scale(50) : scale(20)}]}>
       {state.routes.map((route, index) => {
         const {options} = descriptors[route.key];
         const isFocused = state.index === index;
@@ -105,10 +107,10 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
               style={styles.fabWrapper}
               onPress={() => navigation.navigate('Appointments')}
               activeOpacity={0.85}>
-              <View style={styles.fab}>
-                <StethoscopeIcon size={28} color="#fff" />
+              <View style={[styles.fab, {width: scale(56), height: scale(56), borderRadius: scale(28)}]}>
+                <StethoscopeIcon size={scale(28)} color="#fff" />
               </View>
-              <Text style={styles.fabLabel}>Appt</Text>
+              <Text style={[styles.fabLabel, {fontSize: scale(10), marginTop: scale(4)}]}>Appt</Text>
             </TouchableOpacity>
           );
         }
@@ -123,7 +125,7 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
             onPress={() => navigation.navigate(route.name)}
             activeOpacity={0.7}>
             <View style={styles.iconWrap}>
-              {Icon && <Icon size={26} color={isFocused ? colors.primary : colors.textMuted} />}
+              {Icon && <Icon size={scale(26)} color={isFocused ? colors.primary : colors.textMuted} />}
               {showBadge && <TabBadge count={unreadCount} />}
             </View>
             <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>

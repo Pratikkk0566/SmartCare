@@ -1,7 +1,7 @@
 import React, {useState, useCallback, useEffect} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform, Dimensions, RefreshControl, ActivityIndicator,
+  StyleSheet, Alert, RefreshControl, ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
@@ -10,6 +10,7 @@ import Svg, {Path, Defs, LinearGradient as SvgLinearGradient, Stop} from 'react-
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
+import {clamp, getWidthScale} from '../../theme/responsive';
 import {useApp} from '../../context/AppContext';
 import {
   InvoiceApi, AppointmentApi, InvestigationApi, PatientApi, HospitalApi, CLINIC_OPTIONS,
@@ -23,16 +24,13 @@ import {
   ScaleIcon, RulerIcon, HospitalBuildingIcon,
 } from '../../assets/icons/Icons';
 
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
-const HERO_HEIGHT = 300;
-
 // ─── Wave Background Component ────────────────────────────────────────────
 // Teal gradient base with soft cyan waves that sweep diagonally across
 // the lower half, then a gentle white swoosh that curves up before meeting
 // the stats card.
-function WaveBackground() {
-  const w = SCREEN_WIDTH;
-  const h = HERO_HEIGHT;
+function WaveBackground({height}) {
+  const {width: w} = useWindowDimensions();
+  const h = height;
 
   return (
     <View style={styles.waveContainer}>
@@ -135,6 +133,8 @@ function Section({title, Icon, iconColor, children}) {
 }
 
 export default function ProfileScreen({navigation}) {
+  const {width: screenWidth} = useWindowDimensions();
+  const heroHeight = clamp(300 * getWidthScale(screenWidth), 270, 336);
   const {
     userProfile: cachedProfile, 
     appointments: cachedAppointments, 
@@ -423,8 +423,8 @@ export default function ProfileScreen({navigation}) {
         }>
 
         {/* ── HERO WITH GREEN BACKGROUND ─────────────────────────────────────────── */}
-        <View style={styles.hero}>
-          <WaveBackground />
+        <View style={[styles.hero, {height: heroHeight}]}>
+          <WaveBackground height={heroHeight} />
 
           <SafeAreaView edges={['top']} style={styles.heroContent}>
             {/* Top bar */}
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
 
   // ── Hero with wavy green background ──────────────────────────────────────────────
   hero: {
-    height: HERO_HEIGHT,
+    height: 300,
     position: 'relative',
     backgroundColor: '#0ea5a2',
   },
