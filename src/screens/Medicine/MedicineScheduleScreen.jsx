@@ -19,6 +19,9 @@ import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
 import {useApp} from '../../context/AppContext';
+import RoutineTimeInput from '../../components/medication/RoutineTimeInput';
+import AlarmRingtonePicker from '../../components/medication/AlarmRingtonePicker';
+import MedicineSuccessModal from '../../components/common/MedicineSuccessModal';
 import {
   ArrowBackIcon,
   CalendarIcon,
@@ -42,7 +45,7 @@ import {
   CheckIcon,
   LockIcon,
 } from '../../assets/icons/Icons';
-import {todayInUtc, formatTime12h, addDays} from '../../services/MedicationSchedulingEngine';
+import {todayInUtc, formatTime12h, addDays, normalizeTime} from '../../services/MedicationSchedulingEngine';
 
 const SLOT_CONFIG = {
   MORNING: {
@@ -80,6 +83,7 @@ const SLOT_CONFIG = {
 };
 
 const SNOOZE_OPTIONS = [
+  {label: '5 Minutes', value: 5},
   {label: '10 Minutes', value: 10},
   {label: '15 Minutes', value: 15},
   {label: '30 Minutes', value: 30},
@@ -117,26 +121,36 @@ export default function MedicineScheduleScreen({navigation}) {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Success modal state
+  const [successModal, setSuccessModal] = useState({
+    visible: false,
+    medicineName: '',
+    dose: '',
+    time: '',
+  });
+
   // Modals
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [showSnoozeModal, setShowSnoozeModal] = useState(false);
   const [showSkipModal, setShowSkipModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [savingTiming, setSavingTiming] = useState(false);
+  const [showRingtonePicker, setShowRingtonePicker] = useState(false);
   const [showAlarmsListModal, setShowAlarmsListModal] = useState(false);
   const [skipReason, setSkipReason] = useState(SKIP_REASONS[0]);
   const [customSkipReason, setCustomSkipReason] = useState('');
 
   // Editable Timing Settings
   const [timingSettings, setTimingSettings] = useState({
-    MORNING: engineTimingConfig?.MORNING || '08:00',
-    AFTERNOON: engineTimingConfig?.AFTERNOON || '14:00',
-    EVENING: engineTimingConfig?.EVENING || '20:00',
-    NIGHT: engineTimingConfig?.NIGHT || '22:00',
+    MORNING: formatTime12h(engineTimingConfig?.MORNING || '08:00'),
+    AFTERNOON: formatTime12h(engineTimingConfig?.AFTERNOON || '14:00'),
+    EVENING: formatTime12h(engineTimingConfig?.EVENING || '20:00'),
+    NIGHT: formatTime12h(engineTimingConfig?.NIGHT || '22:00'),
   });
 
   useEffect(() => {
     if (engineTimingConfig) {
-      setTimingSettings(engineTimingConfig);
+      setTimingSettings(Object.fromEntries(Object.entries(engineTimingConfig).map(([slot,time]) => [slot,formatTime12h(time)])));
     }
   }, [engineTimingConfig]);
 
@@ -263,11 +277,23 @@ export default function MedicineScheduleScreen({navigation}) {
 
   // Action handlers
   const handleMarkTaken = async (schedule) => {
+    // Show success modal immediately for instant feedback
+    setSuccessModal({
+      visible: true,
+      medicineName: schedule.medicineName,
+      dose: `${schedule.doseQuantity} dose`,
+      time: schedule.scheduledTime12h || schedule.scheduledTime,
+    });
+    
     try {
-      await markEngineDoseTaken(schedule.id);
-      Alert.alert('✓ Dose Recorded', `${schedule.medicineName} (${schedule.doseQuantity} dose) marked as TAKEN.`);
+      // Update backend and refresh in background (don't wait)
+      markEngineDoseTaken(schedule.id).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Could not mark dose as taken.');
+      // Refresh to revert optimistic update on error
+      await refreshEngineData(selectedDate);
     }
   };
 
@@ -278,12 +304,19 @@ export default function MedicineScheduleScreen({navigation}) {
 
   const handleApplySnooze = async (minutes) => {
     if (!selectedSchedule) return;
+    
+    // Close modal immediately for instant feedback
+    setShowSnoozeModal(false);
+    Alert.alert('⏰ Alarm Snoozed', `Reminder set for ${minutes} minutes from now.`);
+    
     try {
-      await snoozeEngineDose(selectedSchedule.id, minutes);
-      setShowSnoozeModal(false);
-      Alert.alert('⏰ Alarm Snoozed', `Reminder set for ${minutes} minutes from now.`);
+      // Update backend and refresh in background
+      snoozeEngineDose(selectedSchedule.id, minutes).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Could not snooze alarm.');
+      await refreshEngineData(selectedDate);
     }
   };
 
@@ -297,27 +330,45 @@ export default function MedicineScheduleScreen({navigation}) {
   const handleConfirmSkip = async () => {
     if (!selectedSchedule) return;
     const finalReason = skipReason === 'Other reason' && customSkipReason ? customSkipReason : skipReason;
+    
+    // Close modal and show feedback immediately
+    setShowSkipModal(false);
+    Alert.alert('Dose Skipped', `${selectedSchedule.medicineName} marked as skipped.`);
+    
     try {
-      await markEngineDoseSkipped(selectedSchedule.id, finalReason);
-      setShowSkipModal(false);
-      Alert.alert('Dose Skipped', `${selectedSchedule.medicineName} marked as skipped.`);
+      // Update backend and refresh in background
+      markEngineDoseSkipped(selectedSchedule.id, finalReason).then(() => {
+        refreshEngineData(selectedDate);
+      });
     } catch (err) {
       Alert.alert('Error', err.message || 'Could not skip dose.');
+      await refreshEngineData(selectedDate);
     }
   };
 
   const handleSaveTimingSettings = async () => {
+    if (savingTiming) return;
+    setSavingTiming(true);
     try {
-      await updateEngineTimingConfig(timingSettings);
+      const normalized = {};
+      for (const [slot,time] of Object.entries(timingSettings)) {
+        if (!/^\d{1,2}:\d{2} (AM|PM)$/.test(time)) throw new Error(slot + ': enter a time like 02:30 PM');
+        normalized[slot] = normalizeTime(time, slot + ' time');
+      }
+      await updateEngineTimingConfig(normalized);
+      await refreshEngineData(selectedDate);
       setShowSettingsModal(false);
-      Alert.alert('✓ Settings Saved', 'Your personal medication routine has been updated.');
+      Alert.alert('Settings Saved', 'Your medication schedule has been updated to your selected times.');
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to update timing profile.');
+    } finally {
+      setSavingTiming(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <AlarmRingtonePicker visible={showRingtonePicker} onClose={() => setShowRingtonePicker(false)} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -409,27 +460,7 @@ export default function MedicineScheduleScreen({navigation}) {
               </View>
             </View>
           </View>
-
-          {/* Next Alarm Banner */}
-          {nextUpcomingDose && (
-            <View style={styles.nextAlarmBanner}>
-              <BellIcon size={16} color="#0284C7" />
-              <View style={{flex: 1}}>
-                <Text style={styles.nextAlarmLabel}>
-                  Next Alarm: {nextUpcomingDose.medicineName} ({nextUpcomingDose.scheduledTime12h || nextUpcomingDose.scheduledTime})
-                </Text>
-                <Text style={styles.nextAlarmTiming}>
-                  {nextUpcomingDose.timingInstruction || 'Take on time with water'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.quickTakeBtn}
-                onPress={() => handleMarkTaken(nextUpcomingDose)}>
-                <Text style={styles.quickTakeText}>Take Now</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+         </View>          
 
         {/* Search Input */}
         <View style={styles.searchRow}>
@@ -717,10 +748,11 @@ export default function MedicineScheduleScreen({navigation}) {
               </View>
               <Text style={styles.modalTitle}>Medication Routine Times</Text>
               <Text style={styles.modalSubtitle}>
-                Adjust your daily schedule slots so alarms ring at your routine times.
+                Enter hours 01-12 and minutes 00-59, then choose AM or PM.
               </Text>
             </View>
 
+            <TouchableOpacity onPress={() => setShowRingtonePicker(true)} style={styles.modalSecondaryBtn}><Text style={styles.modalSecondaryText}>Change alarm ringtone</Text></TouchableOpacity>
             <ScrollView showsVerticalScrollIndicator={false}>
               {Object.keys(timingSettings).map((slotKey) => {
                 const meta = SLOT_CONFIG[slotKey] || SLOT_CONFIG.MORNING;
@@ -730,15 +762,7 @@ export default function MedicineScheduleScreen({navigation}) {
                       <Text style={styles.timingSlotLabel}>{meta.label}</Text>
                       <Text style={styles.timingSlotSub}>{meta.sublabel}</Text>
                     </View>
-                    <TextInput
-                      style={styles.timeInputBox}
-                      value={timingSettings[slotKey]}
-                      onChangeText={(val) => setTimingSettings((prev) => ({...prev, [slotKey]: val}))}
-                      placeholder="HH:mm"
-                      placeholderTextColor={colors.textMuted}
-                      maxLength={5}
-                      keyboardType="numbers-and-punctuation"
-                    />
+                    <RoutineTimeInput label={meta.label} value={timingSettings[slotKey]} disabled={savingTiming} onChange={value=>setTimingSettings(prev=>({...prev,[slotKey]:value}))}/>
                   </View>
                 );
               })}
@@ -748,8 +772,8 @@ export default function MedicineScheduleScreen({navigation}) {
               <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => setShowSettingsModal(false)}>
                 <Text style={styles.modalSecondaryText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={handleSaveTimingSettings}>
-                <Text style={styles.modalPrimaryText}>Save Schedule</Text>
+              <TouchableOpacity style={styles.modalPrimaryBtn} disabled={savingTiming} onPress={handleSaveTimingSettings}>
+                <Text style={styles.modalPrimaryText}>{savingTiming ? 'Saving...' : 'Save Schedule'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -804,6 +828,15 @@ export default function MedicineScheduleScreen({navigation}) {
           </View>
         </View>
       </Modal>
+
+      {/* Success Modal */}
+      <MedicineSuccessModal
+        visible={successModal.visible}
+        medicineName={successModal.medicineName}
+        dose={successModal.dose}
+        time={successModal.time}
+        onClose={() => setSuccessModal({ visible: false, medicineName: '', dose: '', time: '' })}
+      />
     </SafeAreaView>
   );
 }
@@ -990,17 +1023,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#0284C7',
     marginTop: 2,
-  },
-  quickTakeBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-  },
-  quickTakeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
   },
 
   // Search

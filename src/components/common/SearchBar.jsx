@@ -4,13 +4,15 @@ import {SearchIcon, FilterIcon} from '../../assets/icons/Icons';
 import {colors} from '../../theme/colors';
 import {radius} from '../../theme/radius';
 import {spacing} from '../../theme/spacing';
+import {useResponsive} from '../../theme/responsive';
 
 export default function SearchBar({value, onChangeText, placeholder, onFilterPress, style}) {
+  const {scale} = useResponsive();
   return (
     <View style={[styles.container, style]}>
-      <SearchIcon size={18} color={colors.textMuted} />
+      <SearchIcon size={scale(18)} color={colors.textMuted} />
       <TextInput
-        style={styles.input}
+        style={[styles.input, {fontSize: scale(14)}]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder || 'Search...'}
@@ -18,7 +20,7 @@ export default function SearchBar({value, onChangeText, placeholder, onFilterPre
       />
       {onFilterPress && (
         <TouchableOpacity onPress={onFilterPress} style={styles.filter}>
-          <FilterIcon size={18} color={colors.textSecondary} />
+          <FilterIcon size={scale(18)} color={colors.textSecondary} />
         </TouchableOpacity>
       )}
     </View>

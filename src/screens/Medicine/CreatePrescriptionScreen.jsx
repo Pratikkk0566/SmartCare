@@ -21,7 +21,7 @@ import {
   UserIcon,
   FileTextIcon,
 } from '../../assets/icons/Icons';
-import {PrescriptionDB} from '../../services/MedicationDatabaseService';
+// SQLite removed - PrescriptionDB pending reimplementation
 
 export default function CreatePrescriptionScreen({navigation}) {
   const [name, setName] = useState('');
@@ -39,6 +39,13 @@ export default function CreatePrescriptionScreen({navigation}) {
     setIsCreating(true);
 
     try {
+      // SQLite removed - prescription creation pending reimplementation
+      console.warn('[CreatePrescription] Prescription creation functionality disabled');
+      Alert.alert('Notice', 'Prescription creation is currently unavailable. Functionality pending reimplementation.');
+      setIsCreating(false);
+      return;
+
+      /* Disabled code:
       const prescription = await PrescriptionDB.create({
         name: name.trim(),
         doctorName: doctorName.trim(),
@@ -53,6 +60,7 @@ export default function CreatePrescriptionScreen({navigation}) {
         prescriptionId: prescription.id,
         prescriptionName: prescription.name,
       });
+      */
     } catch (error) {
       console.error('[CreatePrescription] Error:', error);
       Alert.alert('Error', 'Failed to create prescription. Please try again.');

@@ -6,7 +6,6 @@ import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {PrescriptionDB, MedicineDB} from '../../services/MedicationDatabaseService';
 import {PrescriptionRepeatApi, computePrescriptionRelevance, relevanceStyle} from '../../API/Api';
 import {ArrowBackIcon, FilterIcon, MedicinesIcon, CalendarIcon, ArrowRightIcon, SearchIcon, CapsuleIcon, PlusIcon, FileTextIcon, TrashIcon, EditIcon, AlertCircleIcon, CheckCircleIcon, ChevronRightIcon, ChevronDownIcon, UserIcon, HospitalIcon, PillIcon} from '../../assets/icons/Icons';
 import {useApp} from '../../context/AppContext';
@@ -88,7 +87,7 @@ export default function PrescriptionsScreen({navigation}) {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedPrescriptionId, setExpandedPrescriptionId] = useState(null);
-  const [relevanceFilter, setRelevanceFilter] = useState('all'); // 'all' | 'active'
+  const [relevanceFilter, setRelevanceFilter] = useState('all'); // 'all' | 'active' - Show all by default
   const [dateFilter, setDateFilter] = useState('All Time');
   const [showDateFilterModal, setShowDateFilterModal] = useState(false);
 
@@ -102,28 +101,8 @@ export default function PrescriptionsScreen({navigation}) {
   const loadPrescriptions = useCallback(async () => {
     try {
       setLoadingLocal(true);
-      const allPrescriptions = await PrescriptionDB.getAll();
-
-      const enriched = await Promise.all(
-        allPrescriptions.map(async (presc) => {
-          const medicines = await MedicineDB.getByPrescriptionId(presc.id);
-          return {
-            ...presc,
-            medicineCount: medicines.length,
-            medicines: medicines,
-          };
-        })
-      );
-
-      // Sort local prescriptions by DATE DESC (closest/newest at top, farthest/oldest at bottom)
-      enriched.sort((a, b) => {
-        const ta = getPrescriptionTimestamp(a);
-        const tb = getPrescriptionTimestamp(b);
-        if (tb !== ta) return tb - ta;
-        return Number(b.id || 0) - Number(a.id || 0);
-      });
-
-      setLocalPrescriptions(enriched);
+      // SQLite removed - local prescription caching pending reimplementation
+      setLocalPrescriptions([]);
     } catch (error) {
       console.error('[PrescriptionsScreen] Local load error:', error);
     } finally {
@@ -428,14 +407,8 @@ export default function PrescriptionsScreen({navigation}) {
       setShowDeleteModal(false);
       setLoading(true);
       
-      // Delete all medicines associated with this prescription
-      const medicines = await MedicineDB.getByPrescriptionId(selectedPrescription.id);
-      for (const medicine of medicines) {
-        await MedicineDB.delete(medicine.id);
-      }
-      
-      // Delete the prescription
-      await PrescriptionDB.delete(selectedPrescription.id);
+      // SQLite removed - local prescription deletion pending reimplementation
+      // Only server-side prescriptions can be deleted through API
       
       // Reload prescriptions
       await loadPrescriptions();
@@ -472,6 +445,9 @@ export default function PrescriptionsScreen({navigation}) {
   };
 
   const getStatusLabel = (status) => {
+    if (!status || typeof status !== 'string') {
+      return 'Unknown';
+    }
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -636,7 +612,7 @@ export default function PrescriptionsScreen({navigation}) {
             </Text>
           </View>
         ) : (
-          filteredServer.map((presc) => {
+          filteredServer.map((presc, index) => {
             const { cardClass, chipBg, chipFg, chipLabel } = relevanceStyle(
               presc.relevanceLevel,
               presc.daysSinceModified
@@ -658,16 +634,19 @@ export default function PrescriptionsScreen({navigation}) {
             const handleOpen = () => {
               navigation.navigate('PrescriptionDetail', {prescription: presc});
             };
+            const prescId = presc.id || presc.prescriptionId || `server-${index}`;
             return (
               <TouchableOpacity
-                key={'srv-' + presc.id}
+                key={'srv-' + prescId}
                 style={[
                   styles.prescCard,
                   styles.prescCardServer,
                   cardStyleClass,
+                  presc.relevanceLevel === 'expired' && styles.prescCardExpired,
+                  (presc.relevanceLevel === 'active' || presc.relevanceLevel === 'expiring') && styles.prescCardActive,
                 ]}
                 onPress={handleOpen}
-                activeOpacity={0.8}
+                activeOpacity={presc.relevanceLevel === 'expired' ? 0.4 : 0.8}
               >
                 <View style={styles.prescCardContent}>
                   <View style={[styles.prescIcon, {backgroundColor: chipBg}]}>
@@ -750,15 +729,17 @@ export default function PrescriptionsScreen({navigation}) {
                 </Text>
               </View>
             ) : (
-              filteredLocal.map((presc) => {
+              filteredLocal.map((presc, index) => {
                 const isExpanded = expandedPrescriptionId === presc.id;
+                const prescId = presc.id || presc.prescriptionId || `local-${index}`;
                 return (
                   <View 
-                    key={'loc-' + presc.id}
+                    key={'loc-' + prescId}
                     style={[
                       styles.prescCard, 
-                      presc.status === 'active' && styles.prescCardActive,
                       isExpanded && styles.prescCardExpanded,
+                      (presc.relevanceLevel === 'expired' || presc.status === 'expired' || presc.status === 'completed') && styles.prescCardExpired,
+                      presc.status === 'active' && styles.prescCardActive,
                     ]}
                   >
                     <TouchableOpacity
@@ -1184,6 +1165,9 @@ const styles = StyleSheet.create({
   },
   prescCardExpanded: {
     ...shadows.lg,
+  },
+  prescCardExpired: {
+    opacity: 0.6,
   },
   prescCardContent: {
     flexDirection: 'row',

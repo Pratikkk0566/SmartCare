@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notification channel configurations for medication alarms -->
+    <string name="default_notification_channel_id">medication_reminders</string>
+    <string name="default_notification_channel_name">Medication Reminders</string>
+    <string name="default_notification_channel_description">Alerts for scheduled medication doses</string>
+    
+    <!-- High priority channel for urgent reminders -->
+    <string name="urgent_notification_channel_id">urgent_medication</string>
+    <string name="urgent_notification_channel_name">Urgent Medication</string>
+    <string name="urgent_notification_channel_description">Critical medication reminders that require immediate attention</string>
+</resources>

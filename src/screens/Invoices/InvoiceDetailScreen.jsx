@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,14 @@ import {
   Alert,
   Platform,
   PermissionsAndroid,
-  Share,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
-import {colors} from '../../theme/colors';
-import {spacing} from '../../theme/spacing';
-import {radius} from '../../theme/radius';
-import {shadows} from '../../theme/shadows';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { radius } from '../../theme/radius';
+import { shadows } from '../../theme/shadows';
 import {
   ArrowBackIcon,
   DownloadIcon,
@@ -28,9 +28,102 @@ import {
   DocumentIcon,
 } from '../../assets/icons/Icons';
 import StatusChip from '../../components/common/StatusChip';
+import { InvoiceApi, ClinicApi } from '../../API/Api';
+import { generateInvoiceHtml, mapInvoiceRecord } from '../../utils/invoiceHtmlGenerator';
+
+// Converts binary string / stream into safe base64 without InvalidCharacterError
+function toBase64(str) {
+  if (!str) return '';
+  const trimmed = String(str).replace(/^data:application\/pdf;base64,/, '').trim();
+  // If already base64 string
+  if (trimmed.startsWith('JVBERi') || /^[A-Za-z0-9+/=]+$/.test(trimmed.slice(0, 80))) {
+    return trimmed;
+  }
+
+  // Convert binary character codes into base64
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  let i = 0;
+  const len = str.length;
+  while (i < len) {
+    const c1 = str.charCodeAt(i++) & 0xff;
+    if (i === len) {
+      out += chars.charAt(c1 >> 2);
+      out += chars.charAt((c1 & 0x3) << 4);
+      out += '==';
+      break;
+    }
+    const c2 = str.charCodeAt(i++) & 0xff;
+    if (i === len) {
+      out += chars.charAt(c1 >> 2);
+      out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xf0) >> 4));
+      out += chars.charAt((c2 & 0xf) << 2);
+      out += '=';
+      break;
+    }
+    const c3 = str.charCodeAt(i++) & 0xff;
+    out += chars.charAt(c1 >> 2);
+    out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xf0) >> 4));
+    out += chars.charAt(((c2 & 0xf) << 2) | ((c3 & 0xc0) >> 6));
+    out += chars.charAt(c3 & 0x3f);
+  }
+  return out;
+}
+
+/**
+ * Extract and format date for PDF filename
+ * Returns format: DDMmmYY (e.g., 25Jan26)
+ */
+function formatDateForFilename(dateValue) {
+  if (!dateValue) return null;
+  
+  try {
+    // Handle various date formats
+    let dateObj;
+    
+    if (dateValue instanceof Date) {
+      dateObj = dateValue;
+    } else if (typeof dateValue === 'string') {
+      // Handle common date formats
+      // ISO: 2026-01-25T10:30:00 or 2026-01-25
+      // DD-MM-YYYY: 25-01-2026
+      // DD/MM/YYYY: 25/01/2026
+      dateObj = new Date(dateValue);
+    } else if (typeof dateValue === 'number') {
+      // Unix timestamp
+      dateObj = new Date(dateValue);
+    } else {
+      return null;
+    }
+    
+    // Validate date
+    if (isNaN(dateObj.getTime())) {
+      return null;
+    }
+    
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = monthNames[dateObj.getMonth()];
+    const year = String(dateObj.getFullYear()).slice(-2);
+    
+    return `${day}${month}${year}`;
+  } catch (error) {
+    console.log('[formatDateForFilename] Error parsing date:', error);
+    return null;
+  }
+}
+
+/**
+ * Extract UHID last 6 digits
+ */
+function extractUHID(uhidValue) {
+  if (!uhidValue) return '000000';
+  const uhidStr = String(uhidValue).replace(/[^0-9]/g, '');
+  return uhidStr.slice(-6).padStart(6, '0');
+}
 
 // Helper component for info rows
-function InfoRow({icon: Icon, label, value}) {
+function InfoRow({ icon: Icon, label, value }) {
   if (!value || value === '— / —') return null;
   return (
     <View style={styles.infoRow}>
@@ -43,9 +136,60 @@ function InfoRow({icon: Icon, label, value}) {
   );
 }
 
-export default function InvoiceDetailScreen({route, navigation}) {
-  const {invoice} = route.params || {};
+export default function InvoiceDetailScreen({ route, navigation }) {
+  const { invoice } = route.params || {};
   const [downloading, setDownloading] = useState(false);
+  const [detailedInvoice, setDetailedInvoice] = useState({});
+  const [letterheadData, setLetterheadData] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // Combine tapped item data with any extra print details
+  const tappedRaw = invoice?._raw || {};
+  const raw = { ...tappedRaw, ...detailedInvoice };
+
+  // Database invoice ID required by backend APIs (e.g. 2440)
+  const invoiceId = tappedRaw.invoice_id || invoice?.invoice_id || invoice?.id || raw.invoice_id || 'N/A';
+  // Human readable invoice / sequence number for display (e.g. 1078 or SCD/IP/25/0305)
+  const invoiceNo = tappedRaw.location_Wise_Invoice_no || tappedRaw.invoice_sequence_number || tappedRaw.invoice_no || invoice?.invoiceNo || invoiceId;
+  const displayId = tappedRaw.ipdAbirvationId || `#${invoiceNo}`;
+
+  // Fetch full print details on mount
+  useEffect(() => {
+    async function fetchDetails() {
+      if (!invoiceId || invoiceId === 'N/A') return;
+      try {
+        setLoadingDetails(true);
+        
+        // Fetch clinic letterhead (branchId = 1 hardcoded)
+        console.log('[InvoiceDetailScreen] Fetching clinic letterhead...');
+        const letterheadRes = await ClinicApi.getLetterhead();
+        if (letterheadRes?.success && letterheadRes?.data) {
+          console.log('[InvoiceDetailScreen] ✅ Letterhead fetched successfully');
+          setLetterheadData(letterheadRes.data);
+        } else {
+          console.log('[InvoiceDetailScreen] ⚠️ Letterhead fetch failed:', letterheadRes?.error);
+        }
+        
+        const invoicePid = tappedRaw.patientid || tappedRaw.patientId || tappedRaw.patient_id || invoice?.patientId || invoice?.patient_id;
+        const storedPid = (await AsyncStorage.getItem('patientId')) || (await AsyncStorage.getItem('clientId'));
+        const patientId = Number(invoicePid || storedPid || 0);
+
+        console.log('[InvoiceDetailScreen] Fetching print details for DB invoice_id:', invoiceId, 'patientId:', patientId);
+        const res = await InvoiceApi.getPrintDetails(patientId, invoiceId);
+        if (res?.success && res?.data) {
+          const detailData = res.data.data || res.data;
+          console.log('[InvoiceDetailScreen] Successfully loaded invoice print details for invoice:', invoiceId);
+          setDetailedInvoice(prev => ({ ...prev, ...detailData }));
+        }
+      } catch (err) {
+        console.log('[InvoiceDetailScreen] Error fetching print details:', err.message);
+      } finally {
+        setLoadingDetails(false);
+      }
+    }
+
+    fetchDetails();
+  }, [invoiceId]);
 
   if (!invoice) {
     return (
@@ -55,7 +199,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
             <ArrowBackIcon size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Invoice Details</Text>
-          <View style={{width: 40}} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No invoice details found.</Text>
@@ -64,37 +208,42 @@ export default function InvoiceDetailScreen({route, navigation}) {
     );
   }
 
-  const raw = invoice._raw || {};
-  const invoiceId = invoice.id || raw.invoice_id || raw.location_Wise_Invoice_no || 'N/A';
-  const invoiceNo = raw.location_Wise_Invoice_no || raw.invoice_no || raw.billno || invoiceId;
-  const displayId = raw.ipdAbirvationId || `#${invoiceNo}`;
-
   // Charges breakdown & payment logs
   const chargeTransactions = raw.chargeTransaction || [];
   const paymentLogs = raw.payment_log || [];
 
   // Financial values
-  const rawAmount = Number(invoice.rawAmount ?? raw.net_amount ?? raw.totalAmount ?? 0);
+  const rawAmount = Number(invoice.rawAmount ?? raw.net_amount ?? raw.totalAmount ?? raw.invoice_amount ?? 0);
   const paidAmount = Number(invoice.paidAmount ?? raw.paid_amount ?? rawAmount);
   const balance = Number(invoice.balance ?? raw.balance_amount ?? Math.max(0, rawAmount - paidAmount));
   const discountAmount = Number(raw.discount_amount ?? 0);
   const discountPercent = Number(raw.discount_percent ?? 0);
 
-  // Request storage permission on older Android versions if needed
+  // Request storage permission for Downloads directory
   const checkStoragePermission = async () => {
-    if (Platform.OS === 'android' && Platform.Version < 33) {
+    if (Platform.OS === 'android') {
+      // Android 13+ uses scoped storage for Downloads
+      if (Platform.Version >= 33) {
+        return true; // No permission needed for Downloads on Android 13+
+      }
+      
+      // For Android 10-12, check/request WRITE_EXTERNAL_STORAGE
       try {
-        const granted = await PermissionsAndroid.request(
+        const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+        if (granted) return true;
+        
+        // Request permission if not granted
+        const result = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
           {
             title: 'Storage Permission Required',
-            message: 'SmartCare needs access to save invoice PDF files to your device.',
+            message: 'SmartCare needs access to save invoice files to your Downloads folder.',
             buttonNeutral: 'Ask Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
           },
         );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
+        return result === PermissionsAndroid.RESULTS.GRANTED;
       } catch (err) {
         console.warn('Permission error:', err);
         return false;
@@ -103,7 +252,7 @@ export default function InvoiceDetailScreen({route, navigation}) {
     return true;
   };
 
-  // Download Invoice Receipt / Text File
+  // Download Invoice PDF and save to Form API
   const handleDownloadInvoice = async () => {
     try {
       setDownloading(true);
@@ -114,83 +263,210 @@ export default function InvoiceDetailScreen({route, navigation}) {
         return;
       }
 
-      const downloadDir = Platform.OS === 'android'
-        ? `${RNFS.DownloadDirectoryPath}/SmartCare/Invoices`
-        : `${RNFS.DocumentDirectoryPath}/SmartCare/Invoices`;
+      // Prioritize the invoice's own patientId over generic stored ID so we never get another patient's data
+      const invoicePid = raw.patientid || raw.patientId || raw.patient_id || invoice?.patientId || invoice?.patient_id;
+      const storedPid = (await AsyncStorage.getItem('patientId')) || (await AsyncStorage.getItem('clientId'));
+      const patientId = Number(invoicePid || storedPid || 0);
 
-      await RNFS.mkdir(downloadDir, {NSURLIsExcludedFromBackupKey: false}).catch(err =>
-        console.log('Directory exists:', err),
-      );
+      console.log('[InvoiceDetailScreen] Using verified patientId for invoice:', patientId);
 
-      const safeInvNo = String(invoiceNo).replace(/[^a-zA-Z0-9_-]/g, '_');
-      const timestamp = Date.now();
-      const fileName = `Invoice_${safeInvNo}_${timestamp}.txt`;
-      const filePath = `${downloadDir}/${fileName}`;
+      // 1. Fetch latest print details if needed
+      let fullDetail = { ...raw };
+      try {
+        console.log('[InvoiceDetailScreen] Calling getPrintDetails API with patientId:', patientId, 'invoiceId:', invoiceId);
+        const printRes = await InvoiceApi.getPrintDetails(patientId, invoiceId);
+        if (printRes?.success && printRes?.data) {
+          const detailData = printRes.data.data || printRes.data;
+          fullDetail = { ...fullDetail, ...detailData };
+          setDetailedInvoice(prev => ({ ...prev, ...detailData }));
+        }
+      } catch (err) {
+        console.log('[InvoiceDetailScreen] Could not refresh print details before download:', err.message);
+      }
 
-      const receiptContent = `
-=====================================================
-               SMARTCARE MEDICAL INVOICE
-=====================================================
-Invoice No   : ${invoiceNo}
-Encounter ID : ${displayId}
-Date & Time  : ${invoice.date || ''} ${invoice.time ? '· ' + invoice.time : ''}
-Invoice Type : ${raw.invoice_type || (raw.ipd_id ? 'IPD' : 'OPD')}
-Status       : ${invoice.status || 'Paid'}
+      // 2. Generate XHTML string code for this specific patient
+      // Build logo URL from letterhead data
+      const clinicId = (await AsyncStorage.getItem('CLINICID')) || 'aureus';
+      let logoUrl = '';
+      if (letterheadData) {
+        console.log('[InvoiceDetailScreen] Using letterhead data for PDF');
+        const letterheadRecord = Array.isArray(letterheadData?.letterheadDetails) 
+          ? letterheadData.letterheadDetails[0]
+          : Array.isArray(letterheadData)
+          ? letterheadData[0]
+          : letterheadData;
+        
+        if (letterheadRecord?.clinicLogo) {
+          const logoPath = letterheadRecord.clinicLogo;
+          logoUrl = logoPath.startsWith('http') 
+            ? logoPath 
+            : `https://saas.smartcarehis.com:8443/${logoPath}`;
+          console.log('[InvoiceDetailScreen] Logo URL:', logoUrl);
+        }
+      }
 
-PATIENT INFORMATION:
------------------------------------------------------
-Name         : ${raw.patient_name || '—'}
-UHID         : ${raw.uhid || '—'}
-Age / Gender : ${raw.age || '—'} / ${raw.gender || '—'}
-Contact      : ${raw.contact_number || '—'}
+      const htmlContent = generateInvoiceHtml(fullDetail, {
+        letterhead: letterheadData,
+        logoUrl: logoUrl,
+        copyLabel: 'PATIENT COPY'
+      });
+      console.log('[InvoiceDetailScreen] Generated XHTML content length:', htmlContent.length);
 
-FINANCIAL SUMMARY:
------------------------------------------------------
-Total Amount : ₹${rawAmount.toFixed(2)}
-Paid Amount  : ₹${paidAmount.toFixed(2)}
-Balance Due  : ₹${balance.toFixed(2)}
-Discount     : ₹${discountAmount.toFixed(2)} (${discountPercent}%)
+      // 3. Generate PDF filename: Bill_INV123_UHID.pdf (using invoice number instead of date)
+      // Invoice number is more reliable than date fields which can be wrong
+      const invoiceNumber = raw.invoice_sequence_number || 
+                           raw.location_Wise_Invoice_no || 
+                           raw.invoiceNumber ||
+                           raw.invoice_id ||
+                           'INV';
+      
+      // Clean invoice number (remove special chars, keep alphanumeric)
+      const cleanInvNum = String(invoiceNumber)
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .substring(0, 15);
+      
+      const uhidLast6 = extractUHID(raw.uhid || raw.patient_uhid || patientId);
+      const formTitle = `Bill_${cleanInvNum}_${uhidLast6}`;
 
-PAYMENT DETAILS:
------------------------------------------------------
-Payment Mode : ${invoice.paymentMode || raw.payment_mode || 'Cash'}
-Payment Date : ${raw.transaction?.payment_time?.split(' ')[0] || invoice.date || '—'}
-Payment Note : ${raw.transaction?.payment_note || 'Settled'}
+      const formPayload = {
+        formTitle,
+        patientId,
+        htmlContent,
+      };
 
-INVOICE INFORMATION:
------------------------------------------------------
-Consultant   : ${raw.counsultant || raw.doctor || '—'}
-Qualification: ${raw.counsultant_qualification || '—'}
-Referred By  : ${raw.refral_name && raw.refral_name !== '0' ? raw.refral_name : 'Direct'}
-Prepared By  : ${raw.invoice_prepared_by || '—'}
-=====================================================
-Thank you for choosing SmartCare.
-=====================================================
-      `.trim();
+      console.log('[InvoiceDetailScreen] 📄 Final PDF Name:', `${formTitle}.pdf`, '(Invoice #:', cleanInvNum, ', UHID:', uhidLast6, ')');
+      const saveRes = await InvoiceApi.saveInvoiceForm(patientId, formPayload);
+      console.log('[InvoiceDetailScreen] Save Form API result:', JSON.stringify(saveRes));
 
-      await RNFS.writeFile(filePath, receiptContent, 'utf8');
+      // Wait a moment for server to finish PDF conversion to disk
+      await new Promise(resolve => setTimeout(resolve, 1200));
 
-      Alert.alert(
-        'Download Complete',
-        `Invoice details saved to:\nDownload/SmartCare/Invoices/\n\nFile: ${fileName}`,
-        [{text: 'OK'}],
-      );
+      // 4. Download document PDF from downloadDocuments API with EXACT same patientId and unique filename
+      const returnedFileName = saveRes?.data?.fileName || saveRes?.data?.data?.fileName || saveRes?.data?.data?.documentPath;
+
+      const primaryDocUrl = returnedFileName
+        ? (returnedFileName.startsWith('http') ? returnedFileName : `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${returnedFileName}`)
+        : `https://saas.smartcarehis.com:8443/HISDATA/liveData/${clinicId}/documents/${formTitle}.pdf`;
+
+      const secondaryDocUrl = `http://192.168.1.194:9090/HISDATA/liveData/${clinicId}/documents/${formTitle}.pdf`;
+
+      console.log('[InvoiceDetailScreen] Requesting document download with patientId:', patientId, 'file:', primaryDocUrl);
+
+      let docRes = await InvoiceApi.downloadDocuments(patientId, primaryDocUrl);
+      console.log('[InvoiceDetailScreen] DownloadDocuments primary response status:', docRes?.success);
+
+      // If primary returns empty/error, attempt with the secondary direct HISDATA port
+      let rawData = docRes?.data?.base64 || docRes?.data?.pdfData || docRes?.data?.pdfBase64 || docRes?.data?.document || docRes?.data?.data || docRes?.data?.rawData || (typeof docRes?.data === 'string' ? docRes.data : null);
+
+      if (!rawData || (typeof rawData === 'string' && rawData.length < 50)) {
+        console.log('[InvoiceDetailScreen] Retrying downloadDocuments with fallback URL:', secondaryDocUrl);
+        const retryRes = await InvoiceApi.downloadDocuments(patientId, secondaryDocUrl);
+        if (retryRes?.success && retryRes?.data) {
+          docRes = retryRes;
+          rawData = docRes?.data?.base64 || docRes?.data?.pdfData || docRes?.data?.pdfBase64 || docRes?.data?.document || docRes?.data?.data || docRes?.data?.rawData || (typeof docRes?.data === 'string' ? docRes.data : null);
+        }
+      }
+
+      let downloadDir = `${RNFS.DownloadDirectoryPath}/SmartCare/Invoices`;
+
+      // Create directory with proper error handling
+      try {
+        await RNFS.mkdir(downloadDir, { NSURLIsExcludedFromBackupKey: false });
+        console.log('[InvoiceDetailScreen] Created directory:', downloadDir);
+      } catch (err) {
+        if (err.message.includes('already exists')) {
+          console.log('[InvoiceDetailScreen] Directory already exists:', downloadDir);
+        } else {
+          console.log('[InvoiceDetailScreen] Directory creation error:', err);
+          // Try fallback to Downloads root if subfolder fails
+          const fallbackDir = RNFS.DownloadDirectoryPath;
+          downloadDir = fallbackDir;
+        }
+      }
+
+      const cleanPatientName = String(raw.patient_name || raw.patientName || 'Patient')
+        .trim()
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .replace(/_+/g, '_');
+      const rawDate = String(raw.invoice_date_time || raw.invoiceDate || invoice.date || '')
+        .trim()
+        .split(' ')[0]
+        .replace(/[^a-zA-Z0-9-]/g, '_');
+      const cleanDate = rawDate || new Date().toISOString().split('T')[0];
+
+      const pdfFileName = `${formTitle}.pdf`;  // Use the same formTitle we created earlier
+      const pdfFilePath = `${downloadDir}/${pdfFileName}`;
+
+      let pdfSaved = false;
+
+      if (docRes?.success && docRes?.data) {
+        const resData = docRes.data;
+
+        // 1. Check if URL is returned
+        const pdfUrl = resData.pdfUrl || resData.fileUrl || resData.url || (typeof resData === 'string' && resData.startsWith('http') ? resData : null);
+        if (pdfUrl) {
+          console.log('[InvoiceDetailScreen] Downloading PDF from URL:', pdfUrl);
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: pdfUrl,
+            toFile: pdfFilePath,
+            background: true,
+            discretionary: true,
+          }).promise;
+
+          if (downloadResult.statusCode === 200) {
+            pdfSaved = true;
+          }
+        }
+
+        // 2. Check if base64 or raw string is returned
+        if (!pdfSaved && rawData) {
+          const base64Str = toBase64(typeof rawData === 'string' ? rawData : JSON.stringify(rawData));
+          if (base64Str && base64Str.length > 50) {
+            console.log('[InvoiceDetailScreen] Writing base64 PDF (length: ' + base64Str.length + ') to:', pdfFilePath);
+            await RNFS.writeFile(pdfFilePath, base64Str, 'base64');
+            pdfSaved = true;
+          }
+        }
+      }
+
+      // Check fallback from saveRes if downloadDocuments didn't return data
+      if (!pdfSaved && saveRes?.success && saveRes?.data) {
+        const sData = saveRes.data.data || saveRes.data;
+        const pdfUrl = sData.pdfUrl || sData.fileUrl || sData.url;
+        const pdfBase64 = sData.pdfData || sData.base64 || sData.rawData;
+
+        if (pdfUrl) {
+          const downloadResult = await RNFS.downloadFile({
+            fromUrl: pdfUrl,
+            toFile: pdfFilePath,
+            background: true,
+            discretionary: true,
+          }).promise;
+          if (downloadResult.statusCode === 200) pdfSaved = true;
+        } else if (pdfBase64) {
+          const b64 = toBase64(String(pdfBase64));
+          if (b64) {
+            await RNFS.writeFile(pdfFilePath, b64, 'base64');
+            pdfSaved = true;
+          }
+        }
+      }
+
+      if (pdfSaved) {
+        Alert.alert(
+          'Download Complete',
+          `Invoice PDF successfully downloaded!\n\nLocation: Internal Storage > Download > SmartCare > Invoices\nFile: ${pdfFileName}`,
+          [{ text: 'OK' }],
+        );
+      } else {
+        const errMsg = docRes?.error || saveRes?.error || 'Could not retrieve PDF data from server.';
+        Alert.alert('Download Issue', `Server response: ${errMsg}`);
+      }
     } catch (error) {
       console.log('[InvoiceDetailScreen] Download error:', error);
       Alert.alert('Download Error', error.message || 'Failed to save invoice.');
     } finally {
       setDownloading(false);
-    }
-  };
-
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        title: `Invoice ${invoiceNo}`,
-        message: `SmartCare Invoice ${displayId}\nPatient: ${raw.patient_name || 'Patient'} (UHID: ${raw.uhid || '—'})\nDate: ${invoice.date || ''}\nTotal: ₹${rawAmount.toLocaleString('en-IN')}\nStatus: ${invoice.status || 'Paid'}`,
-      });
-    } catch (err) {
-      console.log('Share error:', err);
     }
   };
 
@@ -215,7 +491,7 @@ Thank you for choosing SmartCare.
         </View>
 
         <TouchableOpacity
-          style={[styles.topDownloadBtn, downloading && {opacity: 0.6}]}
+          style={[styles.topDownloadBtn, downloading && { opacity: 0.6 }]}
           onPress={handleDownloadInvoice}
           disabled={downloading}
           activeOpacity={0.75}>
@@ -239,12 +515,12 @@ Thank you for choosing SmartCare.
             <View
               style={[
                 styles.typeBadge,
-                {backgroundColor: raw.invoice_type === 'IPD' ? '#FEE2E2' : '#DBEAFE'},
+                { backgroundColor: raw.invoice_type === 'IPD' ? '#FEE2E2' : '#DBEAFE' },
               ]}>
               <Text
                 style={[
                   styles.typeBadgeText,
-                  {color: raw.invoice_type === 'IPD' ? '#EF4444' : '#3B82F6'},
+                  { color: raw.invoice_type === 'IPD' ? '#EF4444' : '#3B82F6' },
                 ]}>
                 {raw.invoice_type}
               </Text>
@@ -256,13 +532,13 @@ Thank you for choosing SmartCare.
         <View style={styles.amountCard}>
           <Text style={styles.amountLabel}>Total Amount</Text>
           <Text style={styles.amountValue}>
-            {invoice.amount || `₹${rawAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}`}
+            {invoice.amount || `₹${rawAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
           </Text>
           <View style={styles.amountBreakdown}>
             <View style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>Paid Amount</Text>
-              <Text style={[styles.breakdownValue, {color: colors.success}]}>
-                ₹{paidAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+              <Text style={[styles.breakdownValue, { color: colors.success }]}>
+                ₹{paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </Text>
             </View>
             <View style={styles.breakdownRow}>
@@ -270,16 +546,16 @@ Thank you for choosing SmartCare.
               <Text
                 style={[
                   styles.breakdownValue,
-                  {color: balance > 0 ? colors.warning : colors.textMuted},
+                  { color: balance > 0 ? colors.warning : colors.textMuted },
                 ]}>
-                ₹{balance.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </Text>
             </View>
             {discountAmount > 0 && (
               <View style={styles.breakdownRow}>
                 <Text style={styles.breakdownLabel}>Discount ({discountPercent}%)</Text>
-                <Text style={[styles.breakdownValue, {color: colors.success}]}>
-                  -₹{discountAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                <Text style={[styles.breakdownValue, { color: colors.success }]}>
+                  -₹{discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </Text>
               </View>
             )}
@@ -308,14 +584,14 @@ Thank you for choosing SmartCare.
                 <View style={styles.chargeHeader}>
                   <Text style={styles.chargeName}>{charge.master_charge_name || `Charge #${idx + 1}`}</Text>
                   <Text style={styles.chargeAmount}>
-                    ₹{Number(charge.total_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                    ₹{Number(charge.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </Text>
                 </View>
                 {charge.charge_list?.map((item, i) => (
                   <View key={i} style={styles.chargeItem}>
                     <Text style={styles.chargeItemName}>• {item.chargename || 'Service'}</Text>
                     <Text style={styles.chargeItemAmount}>
-                      ₹{Number(item.charge_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})} × {item.quantity || 1}
+                      ₹{Number(item.charge_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} × {item.quantity || 1}
                     </Text>
                   </View>
                 ))}
@@ -372,7 +648,37 @@ Thank you for choosing SmartCare.
           />
         </View>
 
-        {/* 7. PAYMENT HISTORY */}
+        {/* 7. CLINICAL DETAILS (if present) */}
+        {(() => {
+          const mapped = mapInvoiceRecord(raw) || {};
+          const clinicalFields = mapped.clinical || [];
+          if (clinicalFields.length === 0) return null;
+          return (
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>CLINICAL DETAILS</Text>
+              {clinicalFields.map((f, i) => (
+                <InfoRow key={i} icon={DocumentIcon} label={f.label} value={f.value} />
+              ))}
+            </View>
+          );
+        })()}
+
+        {/* 8. ADDITIONAL DETAILS (Dynamic Fields) */}
+        {(() => {
+          const mapped = mapInvoiceRecord(raw) || {};
+          const extraFields = mapped.extra || [];
+          if (extraFields.length === 0) return null;
+          return (
+            <View style={styles.infoSection}>
+              <Text style={styles.sectionLabel}>ADDITIONAL DETAILS</Text>
+              {extraFields.map((f, i) => (
+                <InfoRow key={i} icon={DocumentIcon} label={f.label} value={f.value} />
+              ))}
+            </View>
+          );
+        })()}
+
+        {/* 9. PAYMENT HISTORY */}
         {paymentLogs.length > 1 && (
           <View style={styles.infoSection}>
             <Text style={styles.sectionLabel}>PAYMENT HISTORY</Text>
@@ -383,14 +689,14 @@ Thank you for choosing SmartCare.
                   <Text style={styles.paymentLogTime}>{log.payment_time?.split(' ')[0] || '—'}</Text>
                 </View>
                 <Text style={styles.paymentLogAmount}>
-                  ₹{Number(log.part_payment_amount || log.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                  ₹{Number(log.part_payment_amount || log.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </Text>
               </View>
             ))}
           </View>
         )}
 
-        {/* 8. Note if available */}
+        {/* 10. Note if available */}
         {raw.invoice_note && (
           <View style={styles.noteCard}>
             <Text style={styles.noteLabel}>Note</Text>
@@ -398,17 +704,13 @@ Thank you for choosing SmartCare.
           </View>
         )}
 
-        <View style={{height: 30}} />
+        <View style={{ height: 30 }} />
       </ScrollView>
 
       {/* Bottom Floating Bar */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.8}>
-          <Text style={styles.shareBtnText}>Share</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.downloadBtn, downloading && styles.downloadBtnDisabled]}
+          style={[styles.downloadBtn, styles.downloadBtnFullWidth, downloading && styles.downloadBtnDisabled]}
           onPress={handleDownloadInvoice}
           disabled={downloading}
           activeOpacity={0.85}>
@@ -669,26 +971,12 @@ const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: colors.border,
     ...shadows.md,
-  },
-  shareBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shareBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
   },
   downloadBtn: {
     flex: 1,
@@ -700,6 +988,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0ea5a2',
     borderRadius: radius.md,
     ...shadows.sm,
+  },
+  downloadBtnFullWidth: {
+    flex: 1,
   },
   downloadBtnDisabled: {
     opacity: 0.7,

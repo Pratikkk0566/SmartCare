@@ -1,7 +1,7 @@
 import React, {useState, useCallback, useEffect} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Platform, Dimensions, RefreshControl, ActivityIndicator,
+  StyleSheet, Alert, RefreshControl, ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useFocusEffect} from '@react-navigation/native';
@@ -10,6 +10,7 @@ import Svg, {Path, Defs, LinearGradient as SvgLinearGradient, Stop} from 'react-
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
+import {clamp, getWidthScale} from '../../theme/responsive';
 import {useApp} from '../../context/AppContext';
 import {
   InvoiceApi, AppointmentApi, InvestigationApi, PatientApi, HospitalApi, CLINIC_OPTIONS,
@@ -18,21 +19,18 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
-  PillIcon, HeartIcon, PersonIcon, ArrowRightIcon,
-  LockIcon, ShieldIcon, InvoiceIcon, ArrowBackIcon,
-  ScaleIcon, RulerIcon, HospitalBuildingIcon, HeartRateIcon,
+  PillIcon, PersonIcon, ArrowRightIcon,
+  InvoiceIcon, ArrowBackIcon,
+  ScaleIcon, RulerIcon, HospitalBuildingIcon,
 } from '../../assets/icons/Icons';
-
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
-const HERO_HEIGHT = 300;
 
 // ─── Wave Background Component ────────────────────────────────────────────
 // Teal gradient base with soft cyan waves that sweep diagonally across
 // the lower half, then a gentle white swoosh that curves up before meeting
 // the stats card.
-function WaveBackground() {
-  const w = SCREEN_WIDTH;
-  const h = HERO_HEIGHT;
+function WaveBackground({height}) {
+  const {width: w} = useWindowDimensions();
+  const h = height;
 
   return (
     <View style={styles.waveContainer}>
@@ -135,6 +133,8 @@ function Section({title, Icon, iconColor, children}) {
 }
 
 export default function ProfileScreen({navigation}) {
+  const {width: screenWidth} = useWindowDimensions();
+  const heroHeight = clamp(300 * getWidthScale(screenWidth), 270, 336);
   const {
     userProfile: cachedProfile, 
     appointments: cachedAppointments, 
@@ -152,21 +152,15 @@ export default function ProfileScreen({navigation}) {
   const [appointmentHistory, setAppointmentHistory] = useState(cachedHistory || []);
   const [invoices, setInvoices] = useState(cachedInvoices || []);
   const [investigations, setInvestigations] = useState(cachedInvestigations || []);
-  const [hospitalName, setHospitalName] = useState('Aureus Hospital'); // Default to Aureus
+  const [hospitalName, setHospitalName] = useState('Test Server'); // Default to Test Server
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activePrescCount, setActivePrescCount] = useState(0);
 
   const countActivePrescriptions = async () => {
     try {
-      const {PrescriptionDB, MedicineDB} = require('../../services/MedicationDatabaseService');
-      const local = await PrescriptionDB.getAll() || [];
-      const localEnriched = await Promise.all(
-        local.map(async (p) => {
-          const meds = await MedicineDB.getByPrescriptionId(p.id) || [];
-          return { ...p, medicines: meds };
-        })
-      );
+      // SQLite removed - local prescription counting pending reimplementation
+      const localEnriched = [];
 
       let serverEnriched = [];
       const patientId = await AsyncStorage.getItem('patientId');
@@ -197,11 +191,18 @@ export default function ProfileScreen({navigation}) {
   useEffect(() => {
     const loadClinicInfo = async () => {
       const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-      const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
-      if (found) {
-        setHospitalName(found.displayName);
+      
+      if (clinicId.toLowerCase() === 'aureus') {
+        setHospitalName('Test Server');
+      } else if (clinicId.toLowerCase() === 'aureus2024') {
+        setHospitalName('Aureus Hospital');
       } else {
-        setHospitalName('SmartCare Hospital');
+        const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+        if (found) {
+          setHospitalName(found.displayName);
+        } else {
+          setHospitalName('SmartCare Hospital');
+        }
       }
     };
     loadClinicInfo();
@@ -343,12 +344,29 @@ export default function ProfileScreen({navigation}) {
       // Update hospital name
       if (hospitalRes.success && hospitalRes.data) {
         const hospital = hospitalRes.data;
-        setHospitalName(hospital.hospitalName || hospital.clinicName || hospital.name || 'SmartCare Hospital');
+        const hospitalNameFromApi = hospital.hospitalName || hospital.clinicName || hospital.name;
+        
+        // Check if this is aureus or aureus2024 tenant
+        const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
+        if (clinicId.toLowerCase() === 'aureus') {
+          setHospitalName('Test Server');
+        } else if (clinicId.toLowerCase() === 'aureus2024') {
+          setHospitalName('Aureus Hospital');
+        } else {
+          setHospitalName(hospitalNameFromApi || 'SmartCare Hospital');
+        }
       } else {
         // Fallback to check clinic ID even if API fails
         const clinicId = await AsyncStorage.getItem('CLINICID') || 'aureus';
-        const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
-        setHospitalName(found ? found.displayName : 'SmartCare Hospital');
+        
+        if (clinicId.toLowerCase() === 'aureus') {
+          setHospitalName('Test Server');
+        } else if (clinicId.toLowerCase() === 'aureus2024') {
+          setHospitalName('Aureus Hospital');
+        } else {
+          const found = CLINIC_OPTIONS.find(o => o.clinicId.toLowerCase() === clinicId.toLowerCase());
+          setHospitalName(found ? found.displayName : 'SmartCare Hospital');
+        }
       }
 
       await countActivePrescriptions();
@@ -385,8 +403,7 @@ export default function ProfileScreen({navigation}) {
   const vitals = [
     {Icon: ScaleIcon,     color: '#8B5CF6', val: `${userProfile.weight ?? '--'} ${userProfile.weightUnit ?? 'kg'}`, label: 'Weight'},
     {Icon: RulerIcon,     color: '#3B82F6', val: `${userProfile.height ?? '--'} ${userProfile.heightUnit ?? 'cm'}`, label: 'Height'},
-    {Icon: HeartRateIcon, color: '#EF4444', val: userProfile.bloodGroup ?? '--',                                     label: 'Blood Group'},
-    {Icon: HospitalBuildingIcon, color: '#10B981', val: hospitalName || 'Aureus Hospital',                          label: 'Hospital'},
+    {Icon: HospitalBuildingIcon, color: '#10B981', val: hospitalName === 'Aureus Hospital' ? 'Test Server' : (hospitalName || 'Test Server'), label: 'Hospital'},
   ];
 
 
@@ -406,8 +423,8 @@ export default function ProfileScreen({navigation}) {
         }>
 
         {/* ── HERO WITH GREEN BACKGROUND ─────────────────────────────────────────── */}
-        <View style={styles.hero}>
-          <WaveBackground />
+        <View style={[styles.hero, {height: heroHeight}]}>
+          <WaveBackground height={heroHeight} />
 
           <SafeAreaView edges={['top']} style={styles.heroContent}>
             {/* Top bar */}
@@ -482,7 +499,7 @@ export default function ProfileScreen({navigation}) {
         {/* ── HEALTH SUMMARY ────────────────────────────────────── */}
         <View style={styles.vitalsCard}>
           <View style={styles.vitalsHeader}>
-            <HeartRateIcon size={16} color={colors.success} />
+            <PersonIcon size={16} color={colors.success} />
             <Text style={styles.vitalsTitle}>HEALTH SUMMARY</Text>
             <TouchableOpacity onPress={() => navigation.navigate('PersonalInformation')} activeOpacity={0.7}>
               <Text style={styles.viewDetails}>View details →</Text>
@@ -511,43 +528,11 @@ export default function ProfileScreen({navigation}) {
         <Section title="ACCOUNT" Icon={SettingsGearIcon} iconColor="#D97706">
           <MenuRow
             Icon={PersonIcon}
-            iconColor={colors.success}
-            iconBg={'#D1FAE5'}
-            label="Personal Information"
-            sub="Name, phone, date of birth"
-            onPress={() => navigation.navigate('PersonalInformation')}
-          />
-          <MenuRow
-            Icon={DocumentIcon}
-            iconColor={'#10B981'}
-            iconBg={'#D1FAE5'}
-            label="Medical History"
-            sub="Past conditions & diagnoses"
-            onPress={() => Alert.alert('Coming Soon', 'Medical history will be available soon.')}
-          />
-          <MenuRow
-            Icon={HeartIcon}
-            iconColor={'#F59E0B'}
-            iconBg={'#FEF3C7'}
-            label="Allergies"
-            sub={userProfile.allergies?.length ? userProfile.allergies.join(', ') : 'Known allergies'}
-            onPress={() => Alert.alert('Allergies', userProfile.allergies?.join(', ') || 'No allergies recorded.')}
-          />
-          <MenuRow
-            Icon={ShieldIcon}
             iconColor={'#3B82F6'}
             iconBg={'#DBEAFE'}
-            label="Insurance"
-            sub="Your insurance details"
-            onPress={() => Alert.alert('Coming Soon', 'Insurance info will be available soon.')}
-          />
-          <MenuRow
-            Icon={LockIcon}
-            iconColor={'#059669'}
-            iconBg={'#D1FAE5'}
-            label="Security"
-            sub="Password & privacy"
-            onPress={() => navigation.navigate('AppLockSetup')}
+            label="Personal Information"
+            sub="Manage your profile, contact details & preferences"
+            onPress={() => navigation.navigate('PersonalInformation')}
             last
           />
         </Section>
@@ -565,7 +550,7 @@ const styles = StyleSheet.create({
 
   // ── Hero with wavy green background ──────────────────────────────────────────────
   hero: {
-    height: HERO_HEIGHT,
+    height: 300,
     position: 'relative',
     backgroundColor: '#0ea5a2',
   },

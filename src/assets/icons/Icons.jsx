@@ -32,6 +32,7 @@ import {
   IconMoon,
   IconClock,
   IconCircleCheck,
+  IconCircleX,
   IconShield,
   IconDownload,
   IconCamera,
@@ -94,6 +95,7 @@ import {
   IconClockHour4,
   IconRepeat,
   IconAlertCircle,
+  IconAlertTriangle,
   IconX,
   IconChevronRight,
   IconEgg,
@@ -140,6 +142,7 @@ export const SunIcon = IconSun;
 export const MoonIcon = IconMoon;
 export const ClockIcon = IconClock;
 export const CheckCircleIcon = IconCircleCheck;
+export const XCircleIcon = IconCircleX;
 export const ShieldIcon = IconShield;
 export const DocumentIcon = IconFile;
 export const DownloadIcon = IconDownload;
@@ -207,6 +210,7 @@ export const ClockHour2Icon = IconClockHour2;
 export const ClockHour4Icon = IconClockHour4;
 export const RepeatIcon = IconRepeat;
 export const AlertCircleIcon = IconAlertCircle;
+export const AlertTriangleIcon = IconAlertTriangle;
 export const XIcon = IconX;
 export const ChevronLeftIcon = IconChevronLeft;
 export const ChevronRightIcon = IconChevronRight;

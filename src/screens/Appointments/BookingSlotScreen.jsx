@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Dimensions, ActivityIndicator,
+  ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
@@ -12,8 +12,6 @@ import {useApp} from '../../context/AppContext';
 import {AppointmentApi, PatientApi, HospitalApi} from '../../API/Api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ArrowBackIcon, HospitalBuildingIcon, ClockIcon} from '../../assets/icons/Icons';
-
-const {width: SW} = Dimensions.get('window');
 
 const VISIT_TYPES = [
   {id: 'clinic', label: 'In-Clinic', Icon: HospitalBuildingIcon, feeKey: 'consultationFee', desc: 'Visit in person'},
@@ -43,6 +41,8 @@ function toDisplayDate(y, m, d) {
 
 // ─── Calendar Component ───────────────────────────────────────────────────────
 function CalendarPicker({selectedISO, onSelect}) {
+  const {width} = useWindowDimensions();
+  const cellSize = Math.floor((width - spacing.base * 2 - 24) / 7);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -68,6 +68,13 @@ function CalendarPicker({selectedISO, onSelect}) {
   // Pad to complete last row
   while (cells.length % 7 !== 0) cells.push(null);
 
+  const calendarStyles = {
+    weekDay: {width: cellSize},
+    cell: {width: cellSize, height: cellSize},
+    todayCell: {borderRadius: cellSize / 2},
+    selectedCell: {borderRadius: cellSize / 2},
+  };
+
   return (
     <View style={cal.container}>
       {/* Month / year navigation */}
@@ -84,7 +91,7 @@ function CalendarPicker({selectedISO, onSelect}) {
       {/* Day-of-week headers */}
       <View style={cal.weekRow}>
         {DAY_NAMES.map(d => (
-          <Text key={d} style={cal.weekDay}>{d}</Text>
+          <Text key={d} style={[cal.weekDay, calendarStyles.weekDay]}>{d}</Text>
         ))}
       </View>
 
@@ -107,8 +114,9 @@ function CalendarPicker({selectedISO, onSelect}) {
               key={iso}
               style={[
                 cal.cell,
-                isToday    && cal.todayCell,
-                isSelected && cal.selectedCell,
+                calendarStyles.cell,
+                isToday    && [cal.todayCell, calendarStyles.todayCell],
+                isSelected && [cal.selectedCell, calendarStyles.selectedCell],
               ]}
               onPress={() => isSelectable && onSelect(iso, viewYear, viewMonth, day)}
               activeOpacity={isSelectable ? 0.7 : 1}
@@ -130,8 +138,6 @@ function CalendarPicker({selectedISO, onSelect}) {
   );
 }
 
-const CELL_SIZE = Math.floor((SW - spacing.base * 2 - 24) / 7);
-
 const cal = StyleSheet.create({
   container:   {backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.base, ...shadows.sm},
   header:      {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.base},
@@ -139,12 +145,12 @@ const cal = StyleSheet.create({
   navArrow:    {fontSize: 22, color: colors.textSecondary, fontWeight: '300'},
   monthTitle:  {fontSize: 16, fontWeight: '700', color: colors.textPrimary},
   weekRow:     {flexDirection: 'row', marginBottom: 6},
-  weekDay:     {width: CELL_SIZE, textAlign: 'center', fontSize: 12, fontWeight: '600',
+  weekDay:     {textAlign: 'center', fontSize: 12, fontWeight: '600',
                 color: colors.textSecondary, paddingVertical: 4},
   grid:        {flexDirection: 'row', flexWrap: 'wrap'},
-  cell:        {width: CELL_SIZE, height: CELL_SIZE, alignItems: 'center', justifyContent: 'center'},
-  todayCell:   {backgroundColor: '#F59E0B', borderRadius: CELL_SIZE / 2},
-  selectedCell:{backgroundColor: colors.primary, borderRadius: CELL_SIZE / 2},
+  cell:        {alignItems: 'center', justifyContent: 'center'},
+  todayCell:   {backgroundColor: '#F59E0B'},
+  selectedCell:{backgroundColor: colors.primary},
   dayText:     {fontSize: 14, fontWeight: '400', color: colors.textSecondary},
   pastText:    {color: colors.border},
   todayText:   {color: '#fff', fontWeight: '700'},
@@ -327,7 +333,13 @@ export default function BookingSlotScreen({navigation, route}) {
           </View>
           <View style={s.docInfo}>
             <Text style={s.docName}>{d.name}</Text>
-            <Text style={s.docSpec}>{d.specialty}{d.clinic ? ` · ${d.clinic}` : ''}</Text>
+            <Text style={s.docSpec}>{d.specialty}</Text>
+            {d.clinic ? (
+              <View style={s.docClinicRow}>
+                <HospitalBuildingIcon size={12} color={colors.textMuted} />
+                <Text style={s.docClinic}>{d.clinic}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={s.docFee}>₹{fee}</Text>
         </View>
@@ -383,8 +395,9 @@ export default function BookingSlotScreen({navigation, route}) {
 
 // ─── Time grid ────────────────────────────────────────────────────────────────
 function TimeGrid({slots, selected, onSelect}) {
+  const {width} = useWindowDimensions();
   const cols  = 4;
-  const slotW = (SW - spacing.base * 2 - spacing.sm * (cols - 1)) / cols;
+  const slotW = (width - spacing.base * 2 - spacing.sm * (cols - 1)) / cols;
   return (
     <View style={tg.grid}>
       {slots.map(slot => {
@@ -438,8 +451,10 @@ const s = StyleSheet.create({
   docAvatar:     {width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center'},
   docAvatarText: {fontSize: 15, fontWeight: '900'},
   docInfo:       {flex: 1},
-  docName:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary},
-  docSpec:       {fontSize: 11, color: colors.textSecondary, marginTop: 2},
+  docName:       {fontSize: 14, fontWeight: '800', color: colors.textPrimary, textTransform: 'uppercase'},
+  docSpec:       {fontSize: 11, color: colors.textSecondary, marginTop: 2, textTransform: 'uppercase'},
+  docClinicRow:  {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3},
+  docClinic:     {fontSize: 11, color: colors.textMuted},
   docFee:        {fontSize: 16, fontWeight: '900', color: colors.primary},
 
   emptySlots:     {alignItems: 'center', paddingVertical: 32, gap: 8},

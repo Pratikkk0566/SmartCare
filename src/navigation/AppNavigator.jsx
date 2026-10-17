@@ -1,12 +1,16 @@
 import React from 'react';
 import {View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator} from 'react-native';
-import {NavigationContainer} from '@react-navigation/native';
+import {NavigationContainer, createNavigationContainerRef} from '@react-navigation/native';
+import {localAlarmManager} from '../services/LocalAlarmManager';
+const medicationNavigationRef = createNavigationContainerRef();
+localAlarmManager.setNavigationRef(medicationNavigationRef);
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {colors} from '../theme/colors';
 import {shadows} from '../theme/shadows';
 import {HomeIcon, InvoiceIcon, InvestigationNavIcon, ProfileIcon, StethoscopeIcon} from '../assets/icons/Icons';
 import {useApp} from '../context/AppContext';
+import {useResponsive} from '../theme/responsive';
 
 // Onboarding
 import SplashScreen          from '../screens/Onboarding/SplashScreen';
@@ -14,8 +18,6 @@ import WelcomeScreen         from '../screens/Onboarding/WelcomeScreen';
 import LanguageSelectScreen  from '../screens/Onboarding/LanguageSelectScreen';
 import PhoneLoginScreen      from '../screens/Onboarding/PhoneLoginScreen';
 import PhoneNumberEntry      from '../screens/Onboarding/PhoneNumberEntry';
-import AadhaarLoginScreen    from '../screens/Onboarding/AadhaarLoginScreen';
-import RegisterScreen        from '../screens/Onboarding/RegisterScreen';
 import OTPVerificationScreen from '../screens/Onboarding/OTPVerificationScreen';
 import AccountCreatedScreen  from '../screens/Onboarding/AccountCreatedScreen';
 
@@ -44,6 +46,7 @@ import AppointmentSuccessScreen from '../screens/Appointments/AppointmentSuccess
 // Medicine
 import MedicineScheduleScreen    from '../screens/Medicine/MedicineScheduleScreen';
 import MedicationAlarmsScreen    from '../screens/Medicine/MedicationAlarmsScreen';
+import MedicationAlarmScreen     from '../screens/Medicine/MedicationAlarmScreen';
 import PrescriptionsScreen       from '../screens/Medicine/PrescriptionsScreen';
 import PrescriptionDetailScreen  from '../screens/Medicine/PrescriptionDetailScreen';
 import CreatePrescriptionScreen  from '../screens/Medicine/CreatePrescriptionScreen';
@@ -51,6 +54,7 @@ import AddMedicinesScreen        from '../screens/Medicine/AddMedicinesScreen';
 import ReviewPrescriptionScreen  from '../screens/Medicine/ReviewPrescriptionScreen';
 import AboutMedicineScreen       from '../screens/Medicine/AboutMedicineScreen';
 import RestockMedicineScreen     from '../screens/Medicine/RestockMedicineScreen';
+import TodaysMedicineScreen      from '../screens/Medicine/TodaysMedicineScreen';
 
 // Investigations
 import InvestigationReportScreen  from '../screens/Investigations/InvestigationReportScreen';
@@ -88,8 +92,9 @@ const TAB_LABELS = {
 
 const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navigation}) {
   const {unreadCount} = useApp();
+  const {scale} = useResponsive();
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, {paddingTop: scale(10), paddingBottom: Platform.OS === 'ios' ? scale(50) : scale(20)}]}>
       {state.routes.map((route, index) => {
         const {options} = descriptors[route.key];
         const isFocused = state.index === index;
@@ -102,10 +107,10 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
               style={styles.fabWrapper}
               onPress={() => navigation.navigate('Appointments')}
               activeOpacity={0.85}>
-              <View style={styles.fab}>
-                <StethoscopeIcon size={28} color="#fff" />
+              <View style={[styles.fab, {width: scale(56), height: scale(56), borderRadius: scale(28)}]}>
+                <StethoscopeIcon size={scale(28)} color="#fff" />
               </View>
-              <Text style={styles.fabLabel}>Appt</Text>
+              <Text style={[styles.fabLabel, {fontSize: scale(10), marginTop: scale(4)}]}>Appt</Text>
             </TouchableOpacity>
           );
         }
@@ -120,7 +125,7 @@ const CustomTabBar = React.memo(function CustomTabBar({state, descriptors, navig
             onPress={() => navigation.navigate(route.name)}
             activeOpacity={0.7}>
             <View style={styles.iconWrap}>
-              {Icon && <Icon size={26} color={isFocused ? colors.primary : colors.textMuted} />}
+              {Icon && <Icon size={scale(26)} color={isFocused ? colors.primary : colors.textMuted} />}
               {showBadge && <TabBadge count={unreadCount} />}
             </View>
             <Text style={[styles.tabLabel, isFocused && styles.tabLabelFocused]}>
@@ -160,7 +165,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={medicationNavigationRef} onReady={() => localAlarmManager.flushPendingNavigation().catch(console.warn)} onStateChange={() => localAlarmManager.flushPendingNavigation().catch(console.warn)}>
       <Stack.Navigator screenOptions={{headerShown: false, animationDuration: 200}} initialRouteName="Splash">
 
         {/* Onboarding */}
@@ -169,8 +174,6 @@ export default function AppNavigator() {
         <Stack.Screen name="LanguageSelect"   component={LanguageSelectScreen} />
         <Stack.Screen name="PhoneLogin"       component={PhoneLoginScreen} />
         <Stack.Screen name="PhoneNumberEntry" component={PhoneNumberEntry} />
-        <Stack.Screen name="AadhaarLogin"     component={AadhaarLoginScreen} />
-        <Stack.Screen name="Register"         component={RegisterScreen} />
         <Stack.Screen name="OTPVerification"  component={OTPVerificationScreen} />
         <Stack.Screen name="AccountCreated"   component={AccountCreatedScreen} />
 
@@ -193,7 +196,17 @@ export default function AppNavigator() {
 
         {/* Medicine */}
         <Stack.Screen name="MedicineSchedule"      component={MedicineScheduleScreen} />
-        <Stack.Screen name="MedicationAlarms"      component={MedicationAlarmsScreen} />
+        <Stack.Screen name="TodaysMedicine"       component={TodaysMedicineScreen} />
+        <Stack.Screen name="MedicationAlarms"     component={MedicationAlarmsScreen} />
+        <Stack.Screen 
+          name="MedicationAlarm" 
+          component={MedicationAlarmScreen} 
+          options={{ 
+            headerShown: false,
+            presentation: 'fullScreenModal',
+            gestureEnabled: false 
+          }} 
+        />
         <Stack.Screen name="Prescriptions"         component={PrescriptionsScreen} />
         <Stack.Screen name="PrescriptionDetail"    component={PrescriptionDetailScreen} />
         <Stack.Screen name="CreatePrescription"    component={CreatePrescriptionScreen} />

@@ -11,33 +11,16 @@ import {
   Alert,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import Svg, {Path, Circle} from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
 import {radius} from '../../theme/radius';
 import {shadows} from '../../theme/shadows';
-import {PhoneIcon, PersonIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
+import {PhoneIcon, HospitalBuildingIcon} from '../../assets/icons/Icons';
 import {CLINIC_OPTIONS} from '../../API/Api';
 
 const appLogo = require('../../assets/images/ic_launcher_foreground.png');
 
-function AadhaarOptionIcon() {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 60 60" fill="none">
-      <Path
-        d="M30 50 C17 50 8 41 8 30 C8 19 17 10 30 10 C43 10 52 19 52 30"
-        stroke="#D97706" strokeWidth={4} strokeLinecap="round" />
-      <Path
-        d="M30 43 C21 43 15 37 15 30 C15 23 21 17 30 17 C39 17 45 23 45 30"
-        stroke="#D97706" strokeWidth={4} strokeLinecap="round" />
-      <Path
-        d="M30 36 C25.5 36 22 33 22 30 C22 27 25.5 24 30 24 C34.5 24 38 27 38 30"
-        stroke="#D97706" strokeWidth={4} strokeLinecap="round" />
-      <Circle cx="30" cy="30" r="3.5" fill="#D97706" />
-    </Svg>
-  );
-}
 
 const OPTIONS = [
   {
@@ -48,27 +31,12 @@ const OPTIONS = [
     render: () => <PhoneIcon size={20} color={colors.primary} />,
     route: 'PhoneNumberEntry',
   },
-  {
-    key: 'aadhaar',
-    label: 'Login with Aadhaar',
-    sub: 'Login using your Aadhaar number',
-    iconStyle: 'warning',
-    render: () => <AadhaarOptionIcon />,
-    route: 'AadhaarLogin',
-  },
-  {
-    key: 'register',
-    label: 'Create Account',
-    sub: 'Sign up by creating a new account',
-    iconStyle: 'primary',
-    render: () => <PersonIcon size={20} color={colors.primary} />,
-    route: 'Register',
-  },
 ];
 
 export default function PhoneLoginScreen({navigation}) {
   const [selectedClinic, setSelectedClinic] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showClinicWarning, setShowClinicWarning] = useState(false);
 
   // Restore dynamic clinic choice on mount
   useEffect(() => {
@@ -85,17 +53,15 @@ export default function PhoneLoginScreen({navigation}) {
   const handleSelectClinic = async (clinic) => {
     setSelectedClinic(clinic);
     setShowDropdown(false);
+    setShowClinicWarning(false); // Hide warning when clinic is selected
     await AsyncStorage.setItem('CLINICID', clinic.clinicId);
     await AsyncStorage.setItem('Tenant', clinic.clinicId);
   };
 
   const handleOptionPress = (opt) => {
     if (!selectedClinic) {
-      Alert.alert(
-        'Clinic Required',
-        'Please select a clinic/hospital from the dropdown before proceeding.',
-        [{text: 'OK'}]
-      );
+      setShowClinicWarning(true);
+      setTimeout(() => setShowClinicWarning(false), 4000); // Auto-hide after 4 seconds
       return;
     }
     navigation.navigate(opt.route);
@@ -103,7 +69,7 @@ export default function PhoneLoginScreen({navigation}) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.primaryLight} />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       <View style={styles.root}>
         {/* SmartCare Logo */}
@@ -115,19 +81,37 @@ export default function PhoneLoginScreen({navigation}) {
 
         {/* Clinic Dropdown Selector */}
         <View style={styles.dropdownContainer}>
-          <Text style={styles.dropdownLabel}>SELECT YOUR CLINIC / HOSPITAL</Text>
+          <Text style={[styles.dropdownLabel, showClinicWarning && styles.dropdownLabelError]}>
+            SELECT YOUR CLINIC / HOSPITAL
+            {showClinicWarning && <Text style={styles.requiredAsterisk}> *</Text>}
+          </Text>
           <TouchableOpacity
-            style={styles.dropdownTrigger}
+            style={[
+              styles.dropdownTrigger,
+              showClinicWarning && styles.dropdownTriggerError,
+            ]}
             onPress={() => setShowDropdown(true)}
             activeOpacity={0.7}>
             <View style={styles.dropdownTriggerLeft}>
-              <HospitalBuildingIcon size={18} color={selectedClinic ? colors.primary : colors.textMuted} />
-              <Text style={[styles.dropdownTriggerText, !selectedClinic && styles.placeholder]}>
+              <HospitalBuildingIcon size={18} color={selectedClinic ? colors.primary : (showClinicWarning ? colors.error : colors.textMuted)} />
+              <Text style={[styles.dropdownTriggerText, !selectedClinic && styles.placeholder, showClinicWarning && styles.placeholderError]}>
                 {selectedClinic ? selectedClinic.displayName : 'Choose clinic...'}
               </Text>
             </View>
-            <Text style={styles.chevron}>▼</Text>
+            <Text style={[styles.chevron, showClinicWarning && styles.chevronError]}>▼</Text>
           </TouchableOpacity>
+          
+          {/* Inline Warning Message */}
+          {showClinicWarning && (
+            <View style={styles.warningBox}>
+              <View style={styles.warningContent}>
+                <Text style={styles.warningIcon}>⚠️</Text>
+                <Text style={styles.warningText}>
+                  Please select a clinic/hospital before proceeding with login
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Option Cards */}
@@ -205,7 +189,7 @@ export default function PhoneLoginScreen({navigation}) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.background,
   },
   root: {
     flex: 1,
@@ -245,6 +229,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
   },
+  dropdownLabelError: {
+    color: colors.error,
+  },
+  requiredAsterisk: {
+    color: colors.error,
+    fontSize: 12,
+  },
   dropdownTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -256,6 +247,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingVertical: 14,
     ...shadows.sm,
+  },
+  dropdownTriggerError: {
+    borderColor: colors.error,
+    borderWidth: 2,
+    backgroundColor: '#FEF2F2',
   },
   dropdownTriggerLeft: {
     flexDirection: 'row',
@@ -272,9 +268,42 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontWeight: '500',
   },
+  placeholderError: {
+    color: colors.error,
+    fontWeight: '600',
+  },
   chevron: {
     fontSize: 12,
     color: colors.textMuted,
+  },
+  chevronError: {
+    color: colors.error,
+  },
+
+  // Warning Box
+  warningBox: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginTop: spacing.xs,
+    ...shadows.sm,
+  },
+  warningContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  warningIcon: {
+    fontSize: 16,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+    lineHeight: 16,
   },
 
   // Options

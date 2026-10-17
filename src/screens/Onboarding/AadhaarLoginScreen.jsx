@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -65,54 +65,61 @@ export default function AadhaarLoginScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()} hitSlop={8}>
           <ArrowBackIcon size={22} color={colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.body}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+
           <AadhaarIllustration />
 
           <Text style={styles.title}>Login with{'\n'}Aadhaar</Text>
           <Text style={styles.subtitle}>Enter your Aadhaar number to continue</Text>
 
-          <Text style={styles.label}>Aadhaar Number</Text>
-          <TouchableOpacity style={[styles.inputRow, error && styles.inputRowError]}
-            onPress={() => inputRef.current?.focus()} activeOpacity={1}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="Enter 12-digit Aadhaar number"
-              placeholderTextColor={colors.textMuted}
-              value={aadhaar}
-              onChangeText={v => { setError(''); setAadhaar(formatAadhaar(v)); }}
-              keyboardType="phone-pad"
-              maxLength={14}
-              secureTextEntry={!showAadhaar}
-              returnKeyType="done"
-              onSubmitEditing={handleContinue}
-            />
-            <TouchableOpacity style={styles.eyeBtn}
-              onPress={() => setShowAadhaar(p => !p)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              {showAadhaar
-                ? <EyeIcon size={18} color={colors.textMuted} />
-                : <EyeOffIcon size={18} color={colors.textMuted} />}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Aadhaar Number</Text>
+            <TouchableOpacity style={[styles.inputRow, error && styles.inputRowError]}
+              onPress={() => inputRef.current?.focus()} activeOpacity={1}>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                placeholder="Enter 12-digit Aadhaar number"
+                placeholderTextColor={colors.textMuted}
+                value={aadhaar}
+                onChangeText={v => { setError(''); setAadhaar(formatAadhaar(v)); }}
+                keyboardType="phone-pad"
+                maxLength={14}
+                secureTextEntry={!showAadhaar}
+                returnKeyType="done"
+                onSubmitEditing={handleContinue}
+              />
+              <TouchableOpacity style={styles.eyeBtn}
+                onPress={() => setShowAadhaar(p => !p)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                {showAadhaar
+                  ? <EyeIcon size={18} color={colors.textMuted} />
+                  : <EyeOffIcon size={18} color={colors.textMuted} />}
+              </TouchableOpacity>
             </TouchableOpacity>
-          </TouchableOpacity>
 
-          {error.length > 0 && <Text style={styles.errorText}>{error}</Text>}
+            {error.length > 0 && <Text style={styles.errorText}>{error}</Text>}
 
-          <TouchableOpacity
-            style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
-            onPress={handleContinue} disabled={!isValid || loading} activeOpacity={0.85}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Continue</Text>}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
+              onPress={handleContinue} disabled={!isValid || loading} activeOpacity={0.85}>
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Continue</Text>}
+            </TouchableOpacity>
 
-          <View style={styles.securityNote}>
-            <LockIcon size={14} color={colors.textMuted} />
-            <Text style={styles.securityText}>Your Aadhaar details are secure{'\n'}and encrypted</Text>
+            <View style={styles.securityNote}>
+              <LockIcon size={14} color={colors.textMuted} />
+              <Text style={styles.securityText}>Your Aadhaar details are secure{'\n'}and encrypted</Text>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -122,14 +129,20 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   flex: { flex: 1 },
   back: { padding: spacing.base, paddingBottom: 0, alignSelf: 'flex-start' },
-  body: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  illustrationCircle: {
-    width: 110, height: 110, borderRadius: 55,
-    backgroundColor: '#FEF3C7',
-    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xl,
+  scrollContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing['3xl'],
+    alignItems: 'center',
   },
-  title: { fontSize: 26, fontWeight: '800', color: colors.textPrimary, textAlign: 'center', lineHeight: 34, marginBottom: spacing.sm },
-  subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl },
+  illustrationCircle: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
+  },
+  title: { fontSize: 24, fontWeight: '800', color: colors.textPrimary, textAlign: 'center', lineHeight: 32, marginBottom: spacing.xs },
+  subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg },
+  inputContainer: { width: '100%', alignItems: 'center' },
   label: { alignSelf: 'flex-start', fontSize: 13, fontWeight: '600', color: colors.textPrimary, marginBottom: 8 },
   inputRow: {
     flexDirection: 'row', alignItems: 'center', width: '100%',
@@ -143,7 +156,7 @@ const styles = StyleSheet.create({
   errorText: { alignSelf: 'flex-start', fontSize: 12, color: colors.error, marginBottom: spacing.sm, marginTop: -spacing.sm },
   btn: {
     width: '100%', backgroundColor: colors.primary, borderRadius: radius.md,
-    paddingVertical: 16, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.xl,
+    paddingVertical: 16, alignItems: 'center', marginTop: spacing.xs, marginBottom: spacing.lg,
   },
   btnDisabled: { opacity: 0.5 },
   btnText: { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },

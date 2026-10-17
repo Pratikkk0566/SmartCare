@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback,
-  StyleSheet, ActivityIndicator, Keyboard,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, ActivityIndicator, Keyboard, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Rect, Circle, Path, Polyline } from 'react-native-svg';
@@ -48,12 +48,52 @@ export default function OTPVerificationScreen({ navigation, route }) {
   const [timer, setTimer] = useState(RESEND_SECONDS);
   const [canResend, setCanResend] = useState(false);
   const inputRef = useRef(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [inputKey, setInputKey] = useState(0); // Force re-render of TextInput
 
   useEffect(() => {
     if (timer === 0) { setCanResend(true); return; }
     const id = setTimeout(() => setTimer(t => t - 1), 1000);
     return () => clearTimeout(id);
   }, [timer]);
+
+  // Keyboard visibility listeners
+  useEffect(() => {
+    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    
+    const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+
+    return () => {
+      keyboardDidShow?.remove();
+      keyboardDidHide?.remove();
+    };
+  }, []);
+
+  // Auto-focus when screen mounts or when we need to restore focus
+  useEffect(() => {
+    const focusTimeout = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+
+    return () => clearTimeout(focusTimeout);
+  }, [inputKey]); // Re-run when inputKey changes (forced re-render)
+
+  // Focus restoration when keyboard hides
+  useEffect(() => {
+    if (!keyboardVisible && otp.length < OTP_LENGTH) {
+      // Small delay to prevent immediate re-focus issues
+      const timeout = setTimeout(() => {
+        // Force recreate the TextInput by changing key
+        setInputKey(prev => prev + 1);
+      }, 100);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [keyboardVisible, otp.length]);
 
   const handleResend = async () => {
     setTimer(RESEND_SECONDS);
@@ -64,13 +104,24 @@ export default function OTPVerificationScreen({ navigation, route }) {
     if (!result.success) {
       setError(result.error || 'Failed to resend OTP.');
     }
+    // Force recreate input to ensure it's focusable
+    setInputKey(prev => prev + 1);
   };
 
   const handleOTPChange = v => {
     const digits = v.replace(/\D/g, '').slice(0, OTP_LENGTH);
     setOtp(digits);
     setError('');
-    if (digits.length === OTP_LENGTH) Keyboard.dismiss();
+  };
+
+  const handleInputPress = () => {
+    if (!keyboardVisible) {
+      // If keyboard is not visible, recreate the input to make it focusable
+      setInputKey(prev => prev + 1);
+    } else {
+      // If keyboard is visible, just try to focus
+      inputRef.current?.focus();
+    }
   };
 
   const handleVerify = useCallback(async () => {
@@ -104,6 +155,8 @@ export default function OTPVerificationScreen({ navigation, route }) {
 
         if (patient && (patient.id || patient.patientId)) {
           const pid = String(patient.id || patient.patientId || '');
+          
+          // Save to AsyncStorage (for backward compatibility)
           await AsyncStorage.setItem('patientId',  pid);
           await AsyncStorage.setItem('@patientId', pid);
           await AsyncStorage.setItem('patientName', `${patient.firstname || ''} ${patient.surname || ''}`.trim());
@@ -145,7 +198,7 @@ export default function OTPVerificationScreen({ navigation, route }) {
   // Auto-verify when all 4 digits entered
   useEffect(() => {
     if (otp.length === OTP_LENGTH) handleVerify();
-  }, [otp]); // eslint-disable-line
+  }, [otp, handleVerify]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -153,7 +206,6 @@ export default function OTPVerificationScreen({ navigation, route }) {
         <ArrowBackIcon size={22} color={colors.textPrimary} />
       </TouchableOpacity>
 
-            <TouchableWithoutFeedback onPress={() => inputRef.current?.focus()}>
       <View style={styles.body}>
         <OTPIllustration />
 
@@ -161,29 +213,25 @@ export default function OTPVerificationScreen({ navigation, route }) {
         <Text style={styles.subtitle}>We have sent a 4-digit OTP to</Text>
         <Text style={styles.phoneHighlight}>{displayPhone || phone}</Text>
 
-        {/* 4 OTP boxes backed by single hidden TextInput */}
-        <TouchableOpacity activeOpacity={1} onPress={() => inputRef.current?.focus()} style={styles.otpRow}>
-          {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-            <View key={i} style={[
-              styles.otpBox,
-              otp[i] && styles.otpBoxFilled,
-              otp.length === i && styles.otpBoxFocused,
-            ]}>
-              <Text style={styles.otpChar}>{otp[i] || ''}</Text>
-            </View>
-          ))}
-        </TouchableOpacity>
-
-        <TextInput
-          ref={inputRef}
-          style={styles.hiddenInput}
-          value={otp}
-          onChangeText={handleOTPChange}
-          keyboardType="phone-pad"
-          maxLength={OTP_LENGTH}
-          autoFocus
-          caretHidden
-        />
+        {/* Simple, reliable OTP input */}
+        <View style={styles.otpInputContainer}>
+          <TextInput
+            key={inputKey} // Force re-render when inputKey changes
+            ref={inputRef}
+            style={styles.simpleOtpInput}
+            value={otp}
+            onChangeText={handleOTPChange}
+            keyboardType="numeric"
+            maxLength={OTP_LENGTH}
+            placeholder="Enter 4-digit OTP"
+            placeholderTextColor={colors.textSecondary}
+            textAlign="center"
+            textContentType="oneTimeCode"
+            autoComplete="sms-otp"
+            returnKeyType="done"
+            autoFocus={true}
+          />
+        </View>
 
         {error.length > 0 && <Text style={styles.errorText}>{error}</Text>}
 
@@ -212,7 +260,6 @@ export default function OTPVerificationScreen({ navigation, route }) {
           <Text style={styles.termsLink}>Privacy Policy</Text>
         </Text>
       </View>
-     </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }
@@ -230,17 +277,26 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: colors.textPrimary, textAlign: 'center', marginBottom: 6 },
   subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
   phoneHighlight: { fontSize: 15, fontWeight: '700', color: colors.primary, textAlign: 'center', marginTop: 3, marginBottom: spacing.xl },
-  otpRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.base },
-  otpBox: {
-    width: 46, height: 54, borderRadius: radius.md,
-    borderWidth: 1.5, borderColor: colors.border,
-    backgroundColor: colors.background,
-    alignItems: 'center', justifyContent: 'center',
+  
+  otpInputContainer: {
+    width: '80%',
+    marginBottom: spacing.base,
   },
-  otpBoxFocused: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  otpBoxFilled: { borderColor: colors.primary, backgroundColor: colors.surface },
-  otpChar: { fontSize: 22, fontWeight: '800', color: colors.textPrimary },
-  hiddenInput: { position: 'absolute', opacity: 0, width: 1, height: 1 },
+  
+  simpleOtpInput: {
+    backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: 12,
+    textAlign: 'center',
+  },
+  
   errorText: { fontSize: 13, color: colors.error, textAlign: 'center', marginBottom: spacing.sm },
   resendRow: { marginBottom: spacing.xl },
   resendTimer: { fontSize: 13, color: colors.textSecondary },

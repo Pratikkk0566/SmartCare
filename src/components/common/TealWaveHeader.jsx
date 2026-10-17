@@ -1,17 +1,17 @@
 import React from 'react';
-import {View, StyleSheet, Dimensions} from 'react-native';
+import {View, StyleSheet, useWindowDimensions} from 'react-native';
 import Svg, {Path, Defs, LinearGradient, Stop} from 'react-native-svg';
-
-const WIDTH = Dimensions.get('window').width;
-const HEIGHT = 260;
+import {clamp, getWidthScale} from '../../theme/responsive';
 
 export default function TealWaveHeader({children}) {
+  const {width} = useWindowDimensions();
+  const height = clamp(260 * getWidthScale(width), 234, 292);
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {height}]}>
       <Svg
         width="100%"
-        height={HEIGHT}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
         style={StyleSheet.absoluteFill}>
         <Defs>
           <LinearGradient id="tealGrad" x1="0" y1="0" x2="1" y2="1">
@@ -21,24 +21,24 @@ export default function TealWaveHeader({children}) {
         </Defs>
         {/* Solid teal background block */}
         <Path
-          d={`M0,0 H${WIDTH} V${HEIGHT} H0 Z`}
+          d={`M0,0 H${width} V${height} H0 Z`}
           fill="url(#tealGrad)"
         />
         {/* Lighter translucent wave layer (back) */}
         <Path
-          d={`M0,${HEIGHT - 70}
-              C ${WIDTH * 0.25},${HEIGHT - 130} ${WIDTH * 0.5},${HEIGHT - 20} ${WIDTH * 0.75},${HEIGHT - 90}
-              C ${WIDTH * 0.9},${HEIGHT - 130} ${WIDTH},${HEIGHT - 100} ${WIDTH},${HEIGHT - 100}
-              L ${WIDTH},${HEIGHT} L 0,${HEIGHT} Z`}
+            d={`M0,${height - 70}
+              C ${width * 0.25},${height - 130} ${width * 0.5},${height - 20} ${width * 0.75},${height - 90}
+              C ${width * 0.9},${height - 130} ${width},${height - 100} ${width},${height - 100}
+              L ${width},${height} L 0,${height} Z`}
           fill="#FFFFFF"
           opacity={0.15}
         />
         {/* Main white wave (foreground, creates the curve into the page background) */}
         <Path
-          d={`M0,${HEIGHT - 40}
-              C ${WIDTH * 0.2},${HEIGHT - 100} ${WIDTH * 0.35},${HEIGHT + 10} ${WIDTH * 0.55},${HEIGHT - 50}
-              C ${WIDTH * 0.75},${HEIGHT - 110} ${WIDTH * 0.9},${HEIGHT - 10} ${WIDTH},${HEIGHT - 40}
-              L ${WIDTH},${HEIGHT} L 0,${HEIGHT} Z`}
+            d={`M0,${height - 40}
+              C ${width * 0.2},${height - 100} ${width * 0.35},${height + 10} ${width * 0.55},${height - 50}
+              C ${width * 0.75},${height - 110} ${width * 0.9},${height - 10} ${width},${height - 40}
+              L ${width},${height} L 0,${height} Z`}
           fill="#F3F5F7"
         />
       </Svg>
