@@ -101,7 +101,6 @@ export function AppProvider({children}) {
   const [appReady, setAppReady] = useState(false);
   const [isLanguageSelected, setIsLanguageSelected] = useState(false);
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
-  const [testRequests, setTestRequests] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [investigations, setInvestigations] = useState([]);
 
@@ -733,26 +732,6 @@ export function AppProvider({children}) {
     }, ...prev]);
   };
 
-  const bookTestRequest = request => {
-  const newRequest = {
-    id: `TR-${Date.now()}`,
-    bookedAt: new Date().toLocaleString('en-IN', {day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'}),
-    status: 'Approved',
-    ...request,
-  };
-  setTestRequests(prev => [newRequest, ...prev]);
-  setNotifications(prev => [{
-    id: Date.now().toString(),
-    type: 'report',
-    title: 'Test Booking Confirmed ✓',
-    message: `${request.testName} at ${request.hospitalName} on ${request.date} at ${request.time} — Auto Approved`,
-    time: 'Just now',
-    group: 'today',
-    read: false,
-  }, ...prev]);
-  return newRequest;
-};
-
   // ── Engine Medication Actions ──────────────────────────────────────────
   const refreshEngineData = async (date = todayInUtc()) => {
     try {
@@ -925,8 +904,6 @@ export function AppProvider({children}) {
   updateMedicineStatus,
   isLoggedIn,
   setIsLoggedIn,
-  testRequests,
-  bookTestRequest,
   // ── Engine State & Actions ────────────────────────────────────────────────
   engineSchedules,
   engineActiveMeds,
@@ -949,7 +926,7 @@ export function AppProvider({children}) {
   investigationsLastUpdated,
   refreshAllData,
 }), [userProfile, medicines, appointments, appointmentHistory, practitioners, invoices, investigations, isLoggedIn, selectedLanguage,
-    isOnboarded, appReady, isLanguageSelected, notifications, unreadCount, testRequests, isOnline,
+    isOnboarded, appReady, isLanguageSelected, notifications, unreadCount, isOnline,
     profileLastUpdated, appointmentsLastUpdated, practitionersLastUpdated, invoicesLastUpdated, investigationsLastUpdated,
     engineSchedules, engineActiveMeds, engineAlarms, engineStats, engineTimingConfig]);
   return (

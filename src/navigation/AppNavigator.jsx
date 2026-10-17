@@ -59,9 +59,6 @@ import TodaysMedicineScreen      from '../screens/Medicine/TodaysMedicineScreen'
 // Investigations
 import InvestigationReportScreen  from '../screens/Investigations/InvestigationReportScreen';
 import InvestigationRequestScreen from '../screens/Investigations/InvestigationRequestScreen';
-import SelectHospitalScreen       from '../screens/Investigations/SelectHospitalScreen';
-import SelectDateTimeScreen       from '../screens/Investigations/SelectDateTimeScreen';
-import BookingConfirmedScreen     from '../screens/Investigations/BookingConfirmedScreen';
 
 // Profile & security
 import AppLockSetupScreen        from '../screens/Security/AppLockSetupScreen';
@@ -221,9 +218,6 @@ export default function AppNavigator() {
         {/* Investigations */}
         <Stack.Screen name="InvestigationReport"  component={InvestigationReportScreen} />
         <Stack.Screen name="InvestigationRequest" component={InvestigationRequestScreen} />
-        <Stack.Screen name="SelectHospital"       component={SelectHospitalScreen} />
-        <Stack.Screen name="SelectDateTime"       component={SelectDateTimeScreen} />
-        <Stack.Screen name="BookingConfirmed"     component={BookingConfirmedScreen} />
 
         {/* Profile & security */}
         <Stack.Screen name="AppLockSetup"        component={AppLockSetupScreen} />

@@ -21,7 +21,7 @@ import {
   SettingsGearIcon, CameraIcon, CalendarIcon, DocumentIcon,
   PillIcon, PersonIcon, ArrowRightIcon,
   InvoiceIcon, ArrowBackIcon,
-  ScaleIcon, RulerIcon, HospitalBuildingIcon,
+  ScaleIcon, RulerIcon, HospitalBuildingIcon, BellIcon,
 } from '../../assets/icons/Icons';
 
 // ─── Wave Background Component ────────────────────────────────────────────
@@ -466,7 +466,9 @@ export default function ProfileScreen({navigation}) {
             {/* UHID */}
             {userProfile.uhid ? (
               <View style={styles.uhidBadge}>
-                <Text style={styles.uhidText}>UHID: SCD/{userProfile.uhid}</Text>
+                <Text style={styles.uhidText}>
+                  UHID: {userProfile.uhid.startsWith('SCD/') ? userProfile.uhid : `SCD/${userProfile.uhid}`}
+                </Text>
               </View>
             ) : (
               <View style={styles.uhidBadge}>
@@ -533,6 +535,19 @@ export default function ProfileScreen({navigation}) {
             label="Personal Information"
             sub="Manage your profile, contact details & preferences"
             onPress={() => navigation.navigate('PersonalInformation')}
+            last
+          />
+        </Section>
+
+        {/* ── MEDICATION SECTION ─────────────────────────────────── */}
+        <Section title="MEDICATION" Icon={BellIcon} iconColor="#8B5CF6">
+          <MenuRow
+            Icon={BellIcon}
+            iconColor={'#8B5CF6'}
+            iconBg={'#F5F3FF'}
+            label="Alarm Settings"
+            sub="Manage medication reminders & alarm preferences"
+            onPress={() => navigation.navigate('MedicationAlarms')}
             last
           />
         </Section>

@@ -78,7 +78,7 @@ function splitDateTime(dt = '') {
 }
 
 export default function InvestigationsScreen({navigation}) {
-  const {testRequests, isOnline, refreshAllData, appReady, userProfile, investigations} = useApp();
+  const {isOnline, refreshAllData, appReady, userProfile, investigations} = useApp();
   
   const [filter, setFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('All Time');
@@ -341,26 +341,6 @@ export default function InvestigationsScreen({navigation}) {
           </TouchableOpacity>
         </View>
 
-        {/* Dominant Fixed Book Investigation Button */}
-        <TouchableOpacity
-          style={styles.dominantBookCard}
-          onPress={() => navigation.navigate('InvestigationRequest')}
-          activeOpacity={0.88}>
-          <View style={styles.bookCardLeft}>
-            <View style={styles.bookCardIcon}>
-              <FlaskIcon size={20} color={colors.white} />
-            </View>
-            <View style={styles.bookCardInfo}>
-              <Text style={styles.bookCardTitle}>Book an Investigation</Text>
-              <Text style={styles.bookCardSub}>500+ Tests • Home Collection • Fast Digital Reports</Text>
-            </View>
-          </View>
-          <View style={styles.bookCardBtn}>
-            <Text style={styles.bookCardBtnText}>Book Now</Text>
-            <ArrowRightIcon size={13} color={colors.white} />
-          </View>
-        </TouchableOpacity>
-
         {/* Search */}
         <SearchBar value={query} onChangeText={setQuery} placeholder="Search by test name, date, or category" style={styles.search} />
 
@@ -395,41 +375,6 @@ export default function InvestigationsScreen({navigation}) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
         }>
-
-        {/* My Test Requests */}
-        {testRequests.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Test Requests</Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{gap: spacing.sm}}>
-              {testRequests.slice(0, 3).map(req => {
-                const IconComp = STATUS_ICON[req.status] || ClockIcon;
-                return (
-                  <View key={req.id} style={styles.requestCard}>
-                    <View style={[styles.requestIconWrap, {backgroundColor: req.status === 'Approved' ? colors.successLight : colors.warningLight}]}>
-                      <IconComp size={20} color={req.status === 'Approved' ? colors.success : colors.warning} />
-                    </View>
-                    <View style={styles.requestInfo}>
-                      <Text style={styles.requestName} numberOfLines={1}>{req.testName}</Text>
-                      <Text style={styles.requestMeta}>{req.hospitalName} · {req.date}</Text>
-                      <View style={{flexDirection:'row', alignItems:'center', gap:4}}>
-                        {req.collectionType === 'home'
-                          ? <HomeDeliveryIcon size={12} color={colors.textSecondary} />
-                          : <HospitalBuildingIcon size={12} color={colors.textSecondary} />}
-                        <Text style={styles.requestMeta}>
-                          {req.collectionType === 'home' ? 'Home Collection' : 'Visit Hospital'} · {req.time}
-                        </Text>
-                      </View>
-                    </View>
-                    <StatusChip status={req.status === 'Approved' ? 'completed' : 'pending'} label={req.status} size="xs" />
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </View> 
-        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
@@ -540,63 +485,6 @@ const styles = StyleSheet.create({
   headerCenter: {flex: 1},
   headerTitle: {fontSize: 18, fontWeight: '700', color: colors.textPrimary},
   headerSub: {fontSize: 12, color: colors.textSecondary, marginTop: 2},
-
-  // Dominant Fixed Book Card
-  dominantBookCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.md,
-    ...shadows.md,
-  },
-  bookCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flex: 1,
-    paddingRight: spacing.xs,
-  },
-  bookCardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bookCardInfo: {flex: 1},
-  bookCardTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.white,
-    letterSpacing: 0.2,
-  },
-  bookCardSub: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.85)',
-    marginTop: 1,
-  },
-  bookCardBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-  },
-  bookCardBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.white,
-  },
 
   section: {marginBottom: spacing.base},
   sectionHeader:{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, marginTop: spacing.sm},

@@ -27,7 +27,6 @@ import {
   SettingsGearIcon,
   AlertCircleIcon,
   PillIcon,
-  BoltIcon,
 } from '../../assets/icons/Icons';
 import {formatTime12h} from '../../services/MedicationSchedulingEngine';
 import {medicationEngineService} from '../../services/MedicationEngineService';
@@ -104,18 +103,6 @@ export default function MedicationAlarmsScreen({navigation}) {
     }
   };
 
-  const handleTriggerTestAlarm = async () => {
-    try {
-      await medicationEngineService.notificationManager.triggerImmediateTest({
-        title: '💊 Medication Alarm Test',
-        message: 'Your high-priority medicine notification and alarms are working properly!',
-      });
-      Alert.alert('✓ Test Triggered', 'Immediate test notification sent to your device notification tray.');
-    } catch (err) {
-      Alert.alert('Error', 'Failed to trigger test notification.');
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       {/* Header */}
@@ -127,10 +114,6 @@ export default function MedicationAlarmsScreen({navigation}) {
           <Text style={styles.headerTitle}>Medication Alarms</Text>
           <Text style={styles.headerSubtitle}>Personal Routine & Smart Reminders</Text>
         </View>
-        <TouchableOpacity style={styles.testBtn} onPress={handleTriggerTestAlarm}>
-          <BoltIcon size={18} color="#F59E0B" />
-          <Text style={styles.testBtnText}>Test</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -301,22 +284,6 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 11,
     color: colors.textMuted,
-  },
-  testBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  testBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#D97706',
   },
   scroll: {
     padding: 16,

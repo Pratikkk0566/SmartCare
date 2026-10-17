@@ -354,32 +354,42 @@ export default function HomeScreen({navigation}) {
                           {meds.map((item, medIdx) => {
                             const globalIndex = `${periodIndex}-${subGroupName}-${medIdx}`;
                             const isMedExpanded = expandedMedIndex === globalIndex;
+                            // Auto-expand if medicine is ready to take (not locked and not taken)
+                            const shouldAutoExpand = !item.isLocked && item.status !== 'taken';
+                            const showExpanded = shouldAutoExpand || isMedExpanded;
                             
                             return (
                               <View key={globalIndex}>
                                 <TouchableOpacity
-                                  style={[styles.medRowCompact, isMedExpanded && styles.medRowExpanded]}
-                                  onPress={() => setExpandedMedIndex(isMedExpanded ? null : globalIndex)}
-                                  activeOpacity={0.8}>
+                                  style={[styles.medRowCompact, showExpanded && styles.medRowExpanded]}
+                                  onPress={() => {
+                                    // Only allow toggle if medicine is locked or already taken
+                                    if (item.isLocked || item.status === 'taken') {
+                                      setExpandedMedIndex(isMedExpanded ? null : globalIndex);
+                                    }
+                                  }}
+                                  activeOpacity={0.8}
+                                  disabled={shouldAutoExpand}>
                                   <View style={styles.medInfoCompact}>
                                     <Text style={styles.medNameCompact}>
                                       <Text style={styles.medNameHighlight}>{item.medicine}</Text>
-                                      {' · '}{item.dose}
                                     </Text>
                                     {item.time && <Text style={styles.medTimeSmall}>⏰ {item.time}</Text>}
                                   </View>
                                   <StatusChip status={item.status} size="xs" />
-                                  <ChevronDownIcon 
-                                    size={16} 
-                                    color={colors.textMuted} 
-                                    style={{
-                                      transform: [{ rotate: isMedExpanded ? '180deg' : '0deg' }]
-                                    }}
-                                  />
+                                  {(item.isLocked || item.status === 'taken') && (
+                                    <ChevronDownIcon 
+                                      size={16} 
+                                      color={colors.textMuted} 
+                                      style={{
+                                        transform: [{ rotate: showExpanded ? '180deg' : '0deg' }]
+                                      }}
+                                    />
+                                  )}
                                 </TouchableOpacity>
 
                                 {/* Expanded Actions */}
-                                {isMedExpanded && (
+                                {showExpanded && (
                                   <View style={styles.medActionsCompact}>
                                     {item.isLocked ? (
                                       <TouchableOpacity
@@ -548,7 +558,7 @@ export default function HomeScreen({navigation}) {
             <Text style={styles.apptLabel}>Upcoming Appointment</Text>
             {appointments[0] ? (
               <>
-                <Text style={styles.apptTitle}>{appointments[0].type}</Text>
+                <Text style={styles.apptTitle}>{appointments[0].doctorName || appointments[0].doctor || appointments[0].type}</Text>
                 <View style={styles.apptRow}>
                   <CalendarIcon size={14} color={colors.textSecondary} />
                   <Text style={styles.apptMeta}>{appointments[0].date} • {appointments[0].time}</Text>

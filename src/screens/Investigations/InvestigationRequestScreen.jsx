@@ -1,5 +1,5 @@
 import React, {useState, useMemo} from 'react';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput} from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors} from '../../theme/colors';
 import {spacing} from '../../theme/spacing';
@@ -141,7 +141,14 @@ export default function InvestigationRequestScreen({navigation}) {
             <TouchableOpacity
               key={test.id}
               style={styles.testCard}
-              onPress={() => navigation.navigate('SelectHospital', {test})}
+              onPress={() => {
+                // Booking functionality has been disabled
+                Alert.alert(
+                  'Feature Unavailable',
+                  'Investigation booking is currently not available. Please contact the hospital directly.',
+                  [{text: 'OK'}]
+                );
+              }}
               activeOpacity={0.85}>
               <View style={[styles.testEmojiBg, {backgroundColor: test.bg}]}>
                 <TestIcon iconKey={test.iconKey} size={26} color={test.color} />
