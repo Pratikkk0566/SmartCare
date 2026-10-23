@@ -537,7 +537,7 @@ export const InvestigationApi = {
         const jsonData = await response.json();
         console.log(`[InvestigationApi] downloadDocuments JSON response:`, JSON.stringify(jsonData).slice(0, 300));
         return { success: true, data: jsonData };
-      }ffgf
+      }h
 
       // Handle PDF binary response - convert to base64
       const arrayBuffer = await response.arrayBuffer();
