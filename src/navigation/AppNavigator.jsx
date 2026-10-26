@@ -19,6 +19,7 @@ import LanguageSelectScreen  from '../screens/Onboarding/LanguageSelectScreen';
 import PhoneLoginScreen      from '../screens/Onboarding/PhoneLoginScreen';
 import PhoneNumberEntry      from '../screens/Onboarding/PhoneNumberEntry';
 import OTPVerificationScreen from '../screens/Onboarding/OTPVerificationScreen';
+import PatientSelectionScreen   from '../screens/Onboarding/PatientSelectionScreen';
 import AccountCreatedScreen  from '../screens/Onboarding/AccountCreatedScreen';
 
 // Main tabs
@@ -172,6 +173,7 @@ export default function AppNavigator() {
         <Stack.Screen name="PhoneLogin"       component={PhoneLoginScreen} />
         <Stack.Screen name="PhoneNumberEntry" component={PhoneNumberEntry} />
         <Stack.Screen name="OTPVerification"  component={OTPVerificationScreen} />
+        <Stack.Screen name="PatientSelection" component={PatientSelectionScreen} />
         <Stack.Screen name="AccountCreated"   component={AccountCreatedScreen} />
 
         {/* App */}

@@ -271,7 +271,13 @@ export default function ProfileScreen({navigation}) {
 
       // Update profile if fetched successfully - MERGE with existing data
       if (profileRes.success && profileRes.data) {
-        const profile = Array.isArray(profileRes.data) ? profileRes.data[0] : profileRes.data;
+        const profileRecords = Array.isArray(profileRes.data)
+          ? profileRes.data
+          : (profileRes.data?.patients || profileRes.data?.patientList ||
+            profileRes.data?.data || profileRes.data?.patient || [profileRes.data]);
+        const profile = (Array.isArray(profileRecords) ? profileRecords : [profileRecords])
+          .find(item => String(item?.id || item?.patientId || item?.patient_id ||
+            item?.clientId || item?.clientid || '') === String(patientId));
         if (profile && typeof profile === 'object') {
           // Only update fields that have values from the API
           const updates = {};

@@ -217,9 +217,16 @@ export default function BookingSlotScreen({navigation, route}) {
       // Store patient + clinic data so BookingConfirm doesn't need to re-fetch
       if (patientResult.success) {
         const raw = patientResult.data;
-        const pt  = Array.isArray(raw) ? raw[0] : (raw?.patient || raw);
-        if (pt?.id) {
-          await AsyncStorage.setItem('patientId',           String(pt.id));
+        const records = Array.isArray(raw)
+          ? raw
+          : (raw?.patients || raw?.patientList || raw?.data || raw?.patient || [raw]);
+        const pt = (Array.isArray(records) ? records : [records]).find(item =>
+          String(item?.id || item?.patientId || item?.patient_id ||
+            item?.clientId || item?.clientid || '') === String(patientId),
+        );
+        if (pt) {
+          const selectedId = String(pt.id || pt.patientId || pt.patient_id || pt.clientId || pt.clientid);
+          await AsyncStorage.setItem('patientId', selectedId);
           await AsyncStorage.setItem('SELCETEDPATIENTDETAILS', JSON.stringify(pt));
         }
       }

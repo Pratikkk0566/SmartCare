@@ -82,6 +82,22 @@ function pick(obj, keys, fallback = '') {
   return fallback;
 }
 
+function getPatientId(patient) {
+  return String(
+    patient?.id || patient?.patientId || patient?.patient_id ||
+    patient?.clientId || patient?.clientid || '',
+  );
+}
+
+function getPatientRecords(responseData) {
+  const records = Array.isArray(responseData)
+    ? responseData
+    : (responseData?.patients || responseData?.patientList ||
+      responseData?.data || responseData?.patient || responseData);
+  return (Array.isArray(records) ? records : [records])
+    .filter(record => record && typeof record === 'object' && getPatientId(record));
+}
+
 // Parse any date string to a comparable timestamp (returns 0 on failure)
 function toTimestamp(dateStr = '') {
   if (!dateStr) return 0;
@@ -103,6 +119,7 @@ export function AppProvider({children}) {
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [invoices, setInvoices] = useState([]);
   const [investigations, setInvestigations] = useState([]);
+  const [selectedPatient, setSelectedPatient] = useState(null);
 
   // ── Engine Medication & Alarm State ──────────────────────────────────────
   const [engineSchedules, setEngineSchedules] = useState([]);
@@ -127,11 +144,11 @@ export function AppProvider({children}) {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   // ── Refresh all data from API ─────────────────────────────────────────────
-  const refreshAllData = async () => {
+  const refreshAllData = async (patientIdOverride = '', patientDetailsOverride = null) => {
     const token      = await AsyncStorage.getItem('AUTHTOKEN');
     const mobileNo   = await AsyncStorage.getItem('mobileNumber');
     const mobileNo10 = mobileNo ? mobileNo.replace(/\D/g, '').slice(-10) : '';
-    const patientId  = await AsyncStorage.getItem('patientId');
+    const patientId  = patientIdOverride || await AsyncStorage.getItem('patientId');
 
     if (!token || !mobileNo10) return; // Not logged in
 
@@ -139,9 +156,10 @@ export function AppProvider({children}) {
     try {
       const byMobileResult = await PatientApi.getByMobile(mobileNo10);
       if (byMobileResult.success && byMobileResult.data) {
-        const p = Array.isArray(byMobileResult.data)
-          ? byMobileResult.data[0]
-          : byMobileResult.data?.patient || byMobileResult.data;
+        const patientRecords = getPatientRecords(byMobileResult.data);
+        const p = patientRecords.find(record => getPatientId(record) === String(patientId)) ||
+          patientDetailsOverride ||
+          patientRecords[0];
 
         if (p && typeof p === 'object') {
           const localProfile = await StorageService.getProfile() || {};
@@ -157,13 +175,15 @@ export function AppProvider({children}) {
             city:       p.town       || p.city       || '',
             state:      p.county     || p.state      || '',
             uhid:       p.uhid       || '',
-            patientId:  String(p.id  || p.clientId   || p.patientId || ''),
+            patientId:  getPatientId(p),
             bloodGroup: p.bloodgroup || p.bloodGroup || '',
           };
 
           if (apiProfile.patientId) {
             await AsyncStorage.setItem('patientId', apiProfile.patientId);
           }
+          await AsyncStorage.setItem('SELCETEDPATIENTDETAILS', JSON.stringify(p));
+          setSelectedPatient(p);
           const fullName = [apiProfile.firstName, apiProfile.middleName, apiProfile.lastName]
             .filter(Boolean).join(' ');
           if (fullName)        await AsyncStorage.setItem('patientName', fullName);
@@ -180,6 +200,7 @@ export function AppProvider({children}) {
             bp:         localProfile.bp         || '',
             allergies:  localProfile.allergies  || [],
           };
+
           setUserProfile(mergedProfile);
           
           setProfileLastUpdated(Date.now());
@@ -484,12 +505,42 @@ export function AppProvider({children}) {
         const prescResult = await PrescriptionRepeatApi.getAllForPatient(practids, patientId, { forceRefresh: false });
         if (prescResult.success && Array.isArray(prescResult.data) && prescResult.data.length > 0) {
           await medicationEngineService.syncPrescriptions(prescResult.data, { patientId });
-          await refreshEngineData();
+          await refreshEngineData(undefined, patientId);
         }
       } catch (err) {
         console.log('[AppContext] Prescriptions sync failed:', err?.message || String(err));
       }
     }
+  };
+
+  const selectPatient = async patient => {
+    const selectedPatientId = getPatientId(patient);
+    if (!selectedPatientId) {
+      throw new Error('Selected patient does not have a valid patient ID');
+    }
+
+    await AsyncStorage.multiSet([
+      ['patientId', selectedPatientId],
+      ['@patientId', selectedPatientId],
+      ['patientName', [
+        patient?.firstname || patient?.firstName,
+        patient?.middlename || patient?.middleName,
+        patient?.surname || patient?.lastName,
+      ].filter(Boolean).join(' ')],
+      ['uhid', String(patient?.uhid || patient?.UHID || '')],
+      ['SELCETEDPATIENTDETAILS', JSON.stringify(patient)],
+      ['IsRegister', 'true'],
+    ]);
+
+    setSelectedPatient(patient);
+    setAppointments([]);
+    setAppointmentHistory([]);
+    setInvoices([]);
+    setInvestigations([]);
+    setMedicines([]);
+    setEngineSchedules([]);
+    setEngineActiveMeds([]);
+    await refreshAllData(selectedPatientId, patient);
   };
 
   // ── Monitor network state ─────────────────────────────────────────────────
@@ -543,6 +594,14 @@ export function AppProvider({children}) {
       if (cachedProfile && Object.keys(cachedProfile).some(k => cachedProfile[k])) {
         console.log('[AppContext] Loaded cached profile from AsyncStorage:', cachedProfile.firstName);
         setUserProfile(cachedProfile);
+      }
+      const savedPatient = await AsyncStorage.getItem('SELCETEDPATIENTDETAILS');
+      if (savedPatient) {
+        try {
+          setSelectedPatient(JSON.parse(savedPatient));
+        } catch (err) {
+          console.warn('[AppContext] Ignoring invalid selected patient cache:', err.message);
+        }
       }
 
       const cachedAppointments = await StorageService.getAppointments();
@@ -733,11 +792,13 @@ export function AppProvider({children}) {
   };
 
   // ── Engine Medication Actions ──────────────────────────────────────────
-  const refreshEngineData = async (date = todayInUtc()) => {
+  const refreshEngineData = async (date = todayInUtc(), patientIdOverride = '') => {
+    const patientId = patientIdOverride || userProfile?.patientId ||
+      await AsyncStorage.getItem('patientId');
     try {
       const [timeline, active, alarms, stats, config] = await Promise.all([
-        medicationEngineService.getTodaysTimeline(date),
-        medicationEngineService.getActiveMedications(userProfile?.patientId),
+        medicationEngineService.getTodaysTimeline(date, patientId),
+        medicationEngineService.getActiveMedications(patientId),
         medicationEngineService.getUpcomingAlarms(),
         medicationEngineService.calculateAdherenceStats(7),
         medicationEngineService.getTimingConfig(),
@@ -882,6 +943,8 @@ export function AppProvider({children}) {
 
   const value = useMemo(() => ({
   userProfile,
+  selectedPatient,
+  selectPatient,
   medicines,
   appointments,
   appointmentHistory,
@@ -925,10 +988,10 @@ export function AppProvider({children}) {
   invoicesLastUpdated,
   investigationsLastUpdated,
   refreshAllData,
-}), [userProfile, medicines, appointments, appointmentHistory, practitioners, invoices, investigations, isLoggedIn, selectedLanguage,
+}), [userProfile, selectedPatient, medicines, appointments, appointmentHistory, practitioners, invoices, investigations, isLoggedIn, selectedLanguage,
     isOnboarded, appReady, isLanguageSelected, notifications, unreadCount, isOnline,
     profileLastUpdated, appointmentsLastUpdated, practitionersLastUpdated, invoicesLastUpdated, investigationsLastUpdated,
-    engineSchedules, engineActiveMeds, engineAlarms, engineStats, engineTimingConfig]);
+    engineSchedules, engineActiveMeds, engineAlarms, engineStats, engineTimingConfig, selectPatient]);
   return (
     <AppContext.Provider value={value}>
       {children}
@@ -937,4 +1000,3 @@ export function AppProvider({children}) {
 }
 
 export const useApp = () => useContext(AppContext);
-

@@ -149,12 +149,28 @@ export default function OTPVerificationScreen({ navigation, route }) {
       const patientResult = await PatientApi.getByMobile(cleanPhone);
 
       if (patientResult.success) {
-        // Server may return array or single object
-        const raw     = patientResult.data;
-        const patient = Array.isArray(raw) ? raw[0] : (raw?.patient || raw);
+        const raw = patientResult.data;
+        const patients = Array.isArray(raw)
+          ? raw
+          : (raw?.patients || raw?.patientList || raw?.data || raw?.patient || raw);
+        const patientRecords = Array.isArray(patients) ? patients : [patients];
+        const validPatients = patientRecords.filter(patient =>
+          patient && (patient.id || patient.patientId || patient.patient_id || patient.clientId || patient.clientid),
+        );
 
-        if (patient && (patient.id || patient.patientId)) {
-          const pid = String(patient.id || patient.patientId || '');
+        if (validPatients.length > 1) {
+          navigation.navigate('PatientSelection', {
+            patients: validPatients,
+            mode,
+            phone,
+            userData,
+          });
+          return;
+        }
+
+        const patient = validPatients[0];
+        if (patient) {
+          const pid = String(patient.id || patient.patientId || patient.patient_id || patient.clientId || patient.clientid || '');
           
           // Save to AsyncStorage (for backward compatibility)
           await AsyncStorage.setItem('patientId',  pid);

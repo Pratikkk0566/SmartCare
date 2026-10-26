@@ -158,9 +158,9 @@ class MedicationEngineService {
   async generateSchedules(prescriptions = [], options = {}) {
     return this.syncPrescriptions(prescriptions, options);
   }
-  async getTodaysTimeline(date = todayInUtc()) {
+  async getTodaysTimeline(date = todayInUtc(), patientId = '') {
     await this.init();
-    return await this.engine.getTodaysMedicationTimeline({ date });
+    return await this.engine.getTodaysMedicationTimeline({date, patientId});
   }
 
   async getActiveMedications(patientId) {
